@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+model Role {
+  id          String  @id @default(cuid())
+  name        String  @unique // Administrator, Staff, Member
+  description String?
+  users       User[]
+}
+
+model Member {
+  id               String    @id @default(cuid())
+  memberId         String    @unique // e.g., PB-2023-0001
+  firstName        String
+  lastName         String
+  middleName       String?
+  birthdate        DateTime?
+  gender           String?
+  mobileNumber     String?
+  email            String?   @unique
+  emergencyContact String?
+  status           String    @default("Active") // Active, Inactive, Suspended, Deleted
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  rfidCards RFIDCard[]
+  wallet    Wallet?
+  games     GamePlayer[]
+}
+
+model RFIDCard {
+  id           String   @id @default(cuid())
+  uid          String   @unique
+  memberId     String
+  member       Member   @relation(fields: [memberId], references: [id])
+  status       String   @default("Active") // Active, Deactivated, Lost
+  assignedDate DateTime @default(now())
+
+  games GamePlayer[]
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  memberId  String   @unique
+  member    Member   @relation(fields: [memberId], references: [id])
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id              String   @id @default(cuid())
+  walletId        String
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+  amount          Float
+  type            String // Reload, Game Charge, Refund, Adjustment, Bonus
+  referenceNumber String?  @unique
+  paymentMethod   String? // Cash, GCash
+  staffId         String? // ID of the user/staff who processed it
+  remarks         String?
+  timestamp       DateTime @default(now())
+
+  payment Payment?
+}
+
+model Payment {
+  id                  String            @id @default(cuid())
+  walletTransactionId String            @unique
+  walletTransaction   WalletTransaction @relation(fields: [walletTransactionId], references: [id])
+  amount              Float
+  method              String // Cash, GCash
+  status              String            @default("Completed") // Pending, Completed, Failed
+  referenceNumber     String?
+  timestamp           DateTime          @default(now())
+}
+
+model Court {
+  id           String    @id @default(cuid())
+  name         String    @unique // Court 1, Court 2
+  status       String    @default("Available") // Available, Preparing, In Game, Cooldown, Offline
+  lastActivity DateTime?
+
+  games Game[]
+}
+
+model Game {
+  id           String    @id @default(cuid())
+  courtId      String
+  court        Court     @relation(fields: [courtId], references: [id])
+  matchType    String // 1v1, 2v2
+  duration     Int // 30, 60, 90
+  status       String    @default("Completed") // Scheduled, In Progress, Completed
+  startTime    DateTime?
+  endTime      DateTime?
+  chargeAmount Float     @default(0)
+  createdAt    DateTime  @default(now())
+
+  players GamePlayer[]
+}
+
+model GamePlayer {
+  id         String    @id @default(cuid())
+  gameId     String
+  game       Game      @relation(fields: [gameId], references: [id])
+  memberId   String
+  member     Member    @relation(fields: [memberId], references: [id])
+  rfidCardId String?
+  rfidCard   RFIDCard? @relation(fields: [rfidCardId], references: [id])
+  team       String? // Team A, Team B
+}
+
+model ControllerLog {
+  id              String   @id @default(cuid())
+  status          String // Online, Offline
+  firmwareVersion String?
+  ipAddress       String?
+  temperature     Float?
+  lastSync        DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String // Login, Wallet Adjustment, RFID Assignment, Member Update, etc.
+  details   String?
+  timestamp DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String // Controller Offline, Payment Failed, Low Wallet, RFID Duplicate, Court Offline
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  location  String?
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
