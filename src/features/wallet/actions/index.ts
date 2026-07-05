@@ -1,34 +1,19 @@
-"use server";
-import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+'use server';
+import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
 
 export async function reloadWallet(data: {
   memberId: string;
   amount: number;
   referenceNumber: string;
 }) {
-  const member = await prisma.member.findUnique({
-    where: { memberId: data.memberId },
-    include: { wallet: true }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('reload_wallet', {
+    p_member_id: data.memberId,
+    p_amount: data.amount,
+    p_reference_number: data.referenceNumber,
   });
+  if (error) throw new Error(error.message);
 
-  if (!member || !member.wallet) throw new Error("Member or wallet not found");
-
-  await prisma.$transaction([
-    prisma.wallet.update({
-      where: { id: member.wallet.id },
-      data: { balance: { increment: data.amount } }
-    }),
-    prisma.walletTransaction.create({
-      data: {
-        walletId: member.wallet.id,
-        amount: data.amount,
-        type: 'Reload',
-        referenceNumber: data.referenceNumber,
-        remarks: 'Manual Top Up'
-      }
-    })
-  ]);
-
-  revalidatePath("/wallet");
+  revalidatePath('/wallet');
 }
