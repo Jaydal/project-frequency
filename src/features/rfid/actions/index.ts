@@ -1,22 +1,23 @@
-"use server";
-import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+'use server';
+import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
 
-export async function assignRFID(data: { memberId: string, uid: string }) {
-  const member = await prisma.member.findUnique({ where: { memberId: data.memberId } });
-  if (!member) throw new Error("Member not found");
+export async function assignRFID(data: { memberId: string; uid: string }) {
+  const supabase = await createClient();
 
-  const existing = await prisma.rFIDCard.findUnique({ where: { uid: data.uid } });
-  if (existing) throw new Error("RFID already assigned");
+  const { data: member } = await supabase
+    .from('members').select('id').eq('member_id', data.memberId).single();
+  if (!member) throw new Error('Member not found');
 
-  await prisma.rFIDCard.create({
-    data: {
-      uid: data.uid,
-      memberId: member.id,
-      status: "Active"
-    }
-  });
+  const { data: existing } = await supabase
+    .from('rfid_cards').select('id').eq('uid', data.uid).single();
+  if (existing) throw new Error('RFID already assigned');
 
-  revalidatePath("/rfid");
-  revalidatePath("/members");
+  const { error } = await supabase
+    .from('rfid_cards')
+    .insert({ uid: data.uid, member_id: member.id, status: 'Active' });
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/rfid');
+  revalidatePath('/members');
 }
