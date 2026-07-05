@@ -231,6 +231,9 @@ BEGIN
   RETURNING id INTO v_tx_id;
 
   RETURN v_tx_id;
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE EXCEPTION 'Reference number already exists';
 END;
 $$;
 
