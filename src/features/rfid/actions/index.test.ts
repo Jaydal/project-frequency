@@ -32,6 +32,15 @@ describe('assignRFID', () => {
 
     await assignRFID({ memberId: 'PB-001', uid: 'UID-123' })
 
+    // Assert member lookup pre-check queries
+    expect(members.select).toHaveBeenCalledWith('id')
+    expect(members.eq).toHaveBeenCalledWith('member_id', 'PB-001')
+
+    // Assert RFID availability pre-check queries
+    expect(rfidCards.select).toHaveBeenCalledWith('id')
+    expect(rfidCards.eq).toHaveBeenCalledWith('uid', 'UID-123')
+
+    // Assert the insert call with correct payload
     expect(rfidCards.insert).toHaveBeenCalledWith({ uid: 'UID-123', member_id: 'member-1', status: 'Active' })
   })
 
