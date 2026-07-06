@@ -21,70 +21,38 @@ export default function UpdatePasswordPage({
 }) {
   const router = useRouter();
   const { code } = use(searchParams);
-  const [recovered, setRecovered] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!code || typeof code !== 'string') return;
+    if (code && typeof code === 'string') {
+      const supabase = createClient();
+      supabase.auth.exchangeCodeForSession(code).then(() => {
+        setReady(true);
+      });
+      return;
+    }
 
     const supabase = createClient();
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) {
-        setSessionError(error.message);
-      } else {
-        setSessionReady(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        setReady(true);
       }
     });
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setReady(true);
+    });
+
+    return () => subscription.unsubscribe();
   }, [code]);
 
-  if (!code) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Invalid reset link</CardTitle>
-            <CardDescription>
-              This link is missing the reset code. Please request a new one.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => router.push('/forgot-password')} className="w-full">
-              Request new link
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (sessionError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Reset link expired</CardTitle>
-            <CardDescription>{sessionError}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={() => router.push('/forgot-password')} className="w-full">
-              Request new link
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!sessionReady) {
+  if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Verifying…</CardTitle>
-            <CardDescription>
-              Validating your reset link.
-            </CardDescription>
+            <CardDescription>Validating your reset link.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex justify-center">
