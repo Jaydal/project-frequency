@@ -47,9 +47,7 @@ const RATES: Record<string, number> = { '30': 150, '60': 300, '90': 450 };
 const SUCCESS_DELAY_MS = 5000;
 
 const TEST_PLAYERS: Player[] = [
-  { id: '550e8400-e29b-41d4-a716-446655440000', memberId: 'PB-TEST-001', firstName: 'Juan', lastName: 'Dela Cruz', balance: 99999 },
-  { id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', memberId: 'PB-TEST-002', firstName: 'Maria', lastName: 'Santos', balance: 500 },
-  { id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', memberId: 'PB-TEST-003', firstName: 'Jose', lastName: 'Rizal', balance: 500 },
+  { id: '65d5489e-521c-4fe1-8da2-3cfce7adc289', memberId: '001', firstName: 'test', lastName: 'user', balance: 100 },
 ];
 
 export function TerminalKiosk() {
@@ -68,7 +66,11 @@ export function TerminalKiosk() {
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setTestMode(new URLSearchParams(window.location.search).get('testmode') === 'true');
+    const isTest = new URLSearchParams(window.location.search).get('testmode') === 'true';
+    setTestMode(isTest);
+    if (isTest) {
+      handleTestPlayer(TEST_PLAYERS[0]);
+    }
   }, []);
 
   useEffect(() => {
@@ -363,11 +365,8 @@ export function TerminalKiosk() {
     case 'idle':
       return withLayout(
         <IdleScreen
-          testMode={testMode}
-          testPlayers={TEST_PLAYERS}
           rfidRef={rfidRef}
           onRfidSubmit={handleRfidSubmit}
-          onTestPlayer={handleTestPlayer}
         />
       );
 
@@ -462,7 +461,7 @@ export function TerminalKiosk() {
 
     default:
       return withLayout(
-        <IdleScreen testMode={testMode} testPlayers={TEST_PLAYERS} rfidRef={rfidRef} onRfidSubmit={handleRfidSubmit} onTestPlayer={handleTestPlayer} />
+        <IdleScreen rfidRef={rfidRef} onRfidSubmit={handleRfidSubmit} />
       );
   }
 }
