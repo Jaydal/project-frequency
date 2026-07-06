@@ -363,11 +363,20 @@ export function TerminalKiosk() {
 
   switch (step) {
     case 'idle':
-      return withLayout(
-        <IdleScreen
-          rfidRef={rfidRef}
-          onRfidSubmit={handleRfidSubmit}
-        />
+      return (
+        <div className="relative min-h-screen">
+          <form onSubmit={handleRfidSubmit}
+            className="absolute top-3 right-3 z-10 bg-white/90 backdrop-blur rounded-full shadow-lg px-6 py-3 flex items-center gap-3"
+          >
+            <span className="text-lg">🏓</span>
+            <input ref={rfidRef} type="text" autoFocus
+              className="w-40 text-center text-lg border-0 outline-none bg-transparent"
+              placeholder="Tap RFID..."
+            />
+            <button type="submit" hidden />
+          </form>
+          <QueueBoard onBookNow={() => rfidRef.current?.focus()} />
+        </div>
       );
 
     case 'welcome':

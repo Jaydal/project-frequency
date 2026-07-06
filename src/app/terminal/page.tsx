@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { TerminalKiosk } from '@/components/terminal/TerminalKiosk';
 
 export default function TerminalPage() {
-  redirect('/terminal/queue');
+  return <TerminalKiosk />;
 }

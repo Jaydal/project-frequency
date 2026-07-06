@@ -39,7 +39,7 @@ function getEstimatedWait(position: number): string {
   return `~${Math.ceil(minutes / 60)} hours`;
 }
 
-export function QueueBoard() {
+export function QueueBoard({ onBookNow }: { onBookNow?: () => void }) {
   const [courts, setCourts] = useState<CourtStatusData[]>([]);
   const [offers, setOffers] = useState<QueueEntry[]>([]);
   const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
@@ -166,7 +166,7 @@ export function QueueBoard() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <button
-            onClick={() => {}}
+            onClick={onBookNow ?? (() => {})}
             className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-xl px-10 py-4 rounded-full shadow-sm cursor-pointer touch-manipulation select-none"
           >
             BOOK NOW
