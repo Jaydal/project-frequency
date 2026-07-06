@@ -19,7 +19,7 @@ function makeDb() {
     update: vi.fn(() => chain),
     in: vi.fn(() => chain),
   }
-  return { from: vi.fn(() => chain), rpc: vi.fn() }
+  return { from: vi.fn((_: string) => chain), rpc: vi.fn() }
 }
 
 describe('acceptOffer', () => {

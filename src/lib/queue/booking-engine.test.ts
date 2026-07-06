@@ -16,7 +16,7 @@ function makeDb() {
     lt: vi.fn(() => chain),
     lte: vi.fn(() => chain),
   }
-  return { from: vi.fn(() => chain), rpc: vi.fn() }
+  return { from: vi.fn((_: string) => chain), rpc: vi.fn() }
 }
 
 describe('findAvailableCourt', () => {

@@ -23,7 +23,7 @@ function makeChain() {
 }
 
 function makeDb() {
-  return { from: vi.fn(() => makeChain()), rpc: vi.fn() }
+  return { from: vi.fn((_: string) => makeChain()), rpc: vi.fn() }
 }
 
 describe('joinQueue', () => {

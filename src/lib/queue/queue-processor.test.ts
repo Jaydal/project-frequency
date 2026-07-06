@@ -19,7 +19,7 @@ function makeDb() {
     lt: vi.fn(() => chain),
     gte: vi.fn(() => chain),
   }
-  return { from: vi.fn(() => chain), rpc: vi.fn() }
+  return { from: vi.fn((_: string) => chain), rpc: vi.fn() }
 }
 
 describe('processCourt', () => {
