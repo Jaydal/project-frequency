@@ -1,17 +1,14 @@
-export const dynamic = "force-dynamic";
-import { prisma } from "@/lib/prisma";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { AddMemberDialog } from "./add-member-dialog";
+export const dynamic = 'force-dynamic';
+import { createClient } from '@/lib/supabase/server';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AddMemberDialog } from './add-member-dialog';
 
 export default async function MembersPage() {
-  const members = await prisma.member.findMany({
-    include: {
-      rfidCards: { where: { status: 'Active' } },
-      wallet: true
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+  const supabase = await createClient();
+  const { data: members } = await supabase
+    .from('members')
+    .select('*, rfid_cards(*), wallets(*)')
+    .order('created_at', { ascending: false });
 
   return (
     <div className="space-y-6">
@@ -32,22 +29,26 @@ export default async function MembersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {members.length === 0 ? (
+            {!members?.length ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center">No members found.</TableCell>
               </TableRow>
             ) : (
-              members.map((member) => (
-                <TableRow key={member.id}>
-                  <TableCell>{member.memberId}</TableCell>
-                  <TableCell>{member.firstName} {member.lastName}</TableCell>
-                  <TableCell>
-                    {member.rfidCards[0]?.uid || <span className="text-gray-400">Not Assigned</span>}
-                  </TableCell>
-                  <TableCell>₱{member.wallet?.balance || 0}</TableCell>
-                  <TableCell>{member.status}</TableCell>
-                </TableRow>
-              ))
+              members.map((m: any) => {
+                const activeRfid = (m.rfid_cards ?? []).find((c: any) => c.status === 'Active');
+                const wallet = Array.isArray(m.wallets) ? m.wallets[0] : m.wallets;
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell>{m.member_id}</TableCell>
+                    <TableCell>{m.first_name} {m.last_name}</TableCell>
+                    <TableCell>
+                      {activeRfid?.uid ?? <span className="text-gray-400">Not Assigned</span>}
+                    </TableCell>
+                    <TableCell>₱{wallet?.balance ?? 0}</TableCell>
+                    <TableCell>{m.status}</TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

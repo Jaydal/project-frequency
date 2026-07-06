@@ -1,20 +1,13 @@
-import { withAuth } from "next-auth/middleware";
+import { type NextRequest } from 'next/server'
+import { updateSession } from '@/lib/supabase/middleware'
 
-export default withAuth({
-  pages: {
-    signIn: "/login",
-  },
-});
+export async function proxy(request: NextRequest) {
+  return updateSession(request)
+}
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/members/:path*",
-    "/wallet/:path*",
-    "/courts/:path*",
-    "/settings/:path*",
-    "/reports/:path*",
-    "/rfid/:path*",
-    "/((?!login|api|_next/static|_next/image|favicon.ico).*)",
-  ]
-};
+    // Skip Next.js internals and static files
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}

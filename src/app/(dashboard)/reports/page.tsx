@@ -1,24 +1,19 @@
-export const dynamic = "force-dynamic";
-import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+export const dynamic = 'force-dynamic';
+import { createClient } from '@/lib/supabase/server';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default async function ReportsPage() {
-  const games = await prisma.game.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { court: true },
-    take: 50
-  });
+  const supabase = await createClient();
 
-  const totalRevenue = await prisma.walletTransaction.aggregate({
-    _sum: { amount: true },
-    where: { type: 'Game Charge' }
-  });
+  const [{ data: games }, { data: gameCharges }, { data: reloads }] = await Promise.all([
+    supabase.from('games').select('*, courts(name)').order('created_at', { ascending: false }).limit(50),
+    supabase.from('wallet_transactions').select('amount').eq('type', 'Game Charge'),
+    supabase.from('wallet_transactions').select('amount').eq('type', 'Reload'),
+  ]);
 
-  const totalReloads = await prisma.walletTransaction.aggregate({
-    _sum: { amount: true },
-    where: { type: 'Reload' }
-  });
+  const totalRevenue = gameCharges?.reduce((s: number, r: any) => s + Number(r.amount), 0) ?? 0;
+  const totalReloads = reloads?.reduce((s: number, r: any) => s + Number(r.amount), 0) ?? 0;
 
   return (
     <div className="space-y-6">
@@ -27,11 +22,11 @@ export default async function ReportsPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Total Game Revenue</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">₱{totalRevenue._sum.amount || 0}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold">₱{totalRevenue}</div></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Total Wallet Reloads</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold">₱{totalReloads._sum.amount || 0}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold">₱{totalReloads}</div></CardContent>
         </Card>
       </div>
 
@@ -50,17 +45,17 @@ export default async function ReportsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {games.length === 0 ? (
+              {!games?.length ? (
                 <TableRow><TableCell colSpan={6} className="text-center">No games recorded.</TableCell></TableRow>
               ) : (
-                games.map(game => (
-                  <TableRow key={game.id}>
-                    <TableCell>{game.createdAt.toLocaleString()}</TableCell>
-                    <TableCell>{game.court.name}</TableCell>
-                    <TableCell>{game.matchType}</TableCell>
-                    <TableCell>{game.duration} min</TableCell>
-                    <TableCell>₱{game.chargeAmount}</TableCell>
-                    <TableCell>{game.status}</TableCell>
+                games.map((g: any) => (
+                  <TableRow key={g.id}>
+                    <TableCell>{new Date(g.created_at).toLocaleString()}</TableCell>
+                    <TableCell>{g.courts?.name}</TableCell>
+                    <TableCell>{g.match_type}</TableCell>
+                    <TableCell>{g.duration} min</TableCell>
+                    <TableCell>₱{g.charge_amount}</TableCell>
+                    <TableCell>{g.status}</TableCell>
                   </TableRow>
                 ))
               )}

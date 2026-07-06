@@ -1,20 +1,15 @@
-export const dynamic = "force-dynamic";
-import { prisma } from "@/lib/prisma";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ReloadWalletDialog } from "./reload-wallet-dialog";
+export const dynamic = 'force-dynamic';
+import { createClient } from '@/lib/supabase/server';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ReloadWalletDialog } from './reload-wallet-dialog';
 
 export default async function WalletPage() {
-  const transactions = await prisma.walletTransaction.findMany({
-    include: {
-      wallet: {
-        include: {
-          member: true
-        }
-      }
-    },
-    orderBy: { timestamp: 'desc' },
-    take: 50
-  });
+  const supabase = await createClient();
+  const { data: transactions } = await supabase
+    .from('wallet_transactions')
+    .select('*, wallets(*, members(*))')
+    .order('timestamp', { ascending: false })
+    .limit(50);
 
   return (
     <div className="space-y-6">
@@ -35,22 +30,25 @@ export default async function WalletPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transactions.length === 0 ? (
+            {!transactions?.length ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center">No transactions found.</TableCell>
               </TableRow>
             ) : (
-              transactions.map((tx) => (
-                <TableRow key={tx.id}>
-                  <TableCell>{tx.timestamp.toLocaleString()}</TableCell>
-                  <TableCell>{tx.wallet.member.firstName} {tx.wallet.member.lastName}</TableCell>
-                  <TableCell>{tx.type}</TableCell>
-                  <TableCell className={tx.type === 'Game Charge' ? 'text-red-500' : 'text-green-500'}>
-                    {tx.type === 'Game Charge' ? '-' : '+'}₱{tx.amount}
-                  </TableCell>
-                  <TableCell>{tx.remarks}</TableCell>
-                </TableRow>
-              ))
+              transactions.map((tx: any) => {
+                const member = tx.wallets?.members;
+                return (
+                  <TableRow key={tx.id}>
+                    <TableCell>{new Date(tx.timestamp).toLocaleString()}</TableCell>
+                    <TableCell>{member?.first_name} {member?.last_name}</TableCell>
+                    <TableCell>{tx.type}</TableCell>
+                    <TableCell className={tx.type === 'Game Charge' ? 'text-red-500' : 'text-green-500'}>
+                      {tx.type === 'Game Charge' ? '-' : '+'}₱{tx.amount}
+                    </TableCell>
+                    <TableCell>{tx.remarks}</TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

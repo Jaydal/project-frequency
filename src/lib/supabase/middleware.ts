@@ -35,17 +35,24 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getClaims() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const { data } = await supabase.auth.getClaims()
-  const user = data?.claims
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  const isPublicRoute = request.nextUrl.pathname.startsWith('/login') ||
+                        request.nextUrl.pathname.startsWith('/api/controller') ||
+                        request.nextUrl.pathname.startsWith('/api/public') ||
+                        request.nextUrl.pathname.startsWith('/api/health') ||
+                        request.nextUrl.pathname.startsWith('/health') ||
+                        request.nextUrl.pathname.startsWith('/terminal') ||
+                        request.nextUrl.pathname === '/';
+
+  if (!user && !isPublicRoute) {
+    if (request.nextUrl.pathname.startsWith('/api')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
+    url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 

@@ -9,6 +9,7 @@ export interface JoinQueueParams {
   duration: number;
   partySize: number;
   playerIds: string[];
+  courtId?: string;
 }
 
 export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
@@ -77,16 +78,19 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
   }
 
   // Join the queue
+  const insertData: Record<string, any> = {
+    member_id: params.memberId,
+    requested_start: params.start.toISOString(),
+    duration: params.duration,
+    party_size: params.partySize,
+    player_ids: JSON.stringify(params.playerIds),
+    status: 'waiting',
+  };
+  if (params.courtId) insertData.court_id = params.courtId;
+
   const { data: entry, error } = await supabase
     .from('queue_entries')
-    .insert({
-      member_id: params.memberId,
-      requested_start: params.start.toISOString(),
-      duration: params.duration,
-      party_size: params.partySize,
-      player_ids: JSON.stringify(params.playerIds),
-      status: 'waiting',
-    })
+    .insert(insertData)
     .select()
     .single();
   if (error) throw new Error(error.message);

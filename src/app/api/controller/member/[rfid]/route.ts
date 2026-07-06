@@ -1,41 +1,35 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { createClient } from '@/lib/supabase/server';
+import { checkControllerKey } from '@/lib/controller-auth';
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ rfid: string }> }
 ) {
-  try {
-    const { rfid } = await context.params;
+  if (!checkControllerKey(_request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { rfid } = await context.params;
+  const supabase = await createClient();
 
-    const rfidCard = await prisma.rFIDCard.findUnique({
-      where: { uid: rfid },
-      include: {
-        member: {
-          include: {
-            wallet: true
-          }
-        }
-      }
-    });
+  const { data: card } = await supabase
+    .from('rfid_cards')
+    .select('*, members(*, wallets(*))')
+    .eq('uid', rfid)
+    .single();
 
-    if (!rfidCard || rfidCard.status !== 'Active') {
-      return NextResponse.json({ error: 'Invalid or inactive RFID' }, { status: 404 });
-    }
+  if (!card || card.status !== 'Active')
+    return NextResponse.json({ error: 'Invalid or inactive RFID' }, { status: 404 });
 
-    if (rfidCard.member.status !== 'Active') {
-      return NextResponse.json({ error: 'Member is inactive' }, { status: 403 });
-    }
+  const member = card.members as any;
+  if (member?.status !== 'Active')
+    return NextResponse.json({ error: 'Member is inactive' }, { status: 403 });
 
-    return NextResponse.json({
-      memberId: rfidCard.member.memberId,
-      firstName: rfidCard.member.firstName,
-      lastName: rfidCard.member.lastName,
-      balance: rfidCard.member.wallet?.balance || 0,
-      status: rfidCard.member.status
-    });
-  } catch (error) {
-    console.error('Error fetching member by RFID:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
+  const wallet = Array.isArray(member.wallets) ? member.wallets[0] : member.wallets;
+
+  return NextResponse.json({
+    memberId: member.member_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    balance: wallet?.balance ?? 0,
+    status: member.status,
+  });
 }

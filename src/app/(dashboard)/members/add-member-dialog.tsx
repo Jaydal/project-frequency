@@ -25,7 +25,9 @@ export function AddMemberDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-
+      <DialogTrigger asChild>
+        <Button>Add Member</Button>
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add New Member</DialogTitle>

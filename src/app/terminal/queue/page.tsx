@@ -1,5 +1,5 @@
-import { QueueBoard } from '@/components/terminal/QueueBoard';
+import { TerminalKiosk } from '@/components/terminal/TerminalKiosk';
 
 export default function TerminalQueuePage() {
-  return <QueueBoard />;
+  return <TerminalKiosk />;
 }

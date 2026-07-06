@@ -1,106 +1,74 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { createClient } from '@/lib/supabase/server';
+import { publishDisplay } from '@/lib/mqtt';
 import { z } from 'zod';
 
-const registerSchema = z.object({
+const schema = z.object({
   courtName: z.string(),
   matchType: z.string(),
-  duration: z.number(),
-  players: z.array(z.object({
-    rfid: z.string(),
-    team: z.string().optional(),
-    chargeAmount: z.number()
-  }))
+  duration:  z.number(),
+  players:   z.array(z.object({
+    rfid:         z.string(),
+    team:         z.string().optional(),
+    chargeAmount: z.number(),
+  })),
 });
 
+// Hardware controllers authenticate with a static API key in x-api-key header.
+// Set CONTROLLER_API_KEY in .env.local. If unset, the endpoint is open (dev only).
+function checkControllerKey(request: Request): boolean {
+  const apiKey = process.env.CONTROLLER_API_KEY;
+  if (!apiKey) return false;
+  return request.headers.get('x-api-key') === apiKey;
+}
+
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const result = registerSchema.safeParse(body);
+  if (!checkControllerKey(request))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!result.success) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-    }
+  const body = await request.json();
+  const result = schema.safeParse(body);
+  if (!result.success)
+    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
 
-    const { courtName, matchType, duration, players } = result.data;
+  const { courtName, matchType, duration, players } = result.data;
+  const supabase = await createClient();
 
-    const court = await prisma.court.findUnique({
-      where: { name: courtName }
-    });
+  // Fix #1 & #2: single atomic DB transaction — all wallet debits + game creation
+  // happen inside one SQL function, so no partial state on crash.
+  const { data: gameId, error } = await supabase.rpc('register_game', {
+    p_court_name: courtName,
+    p_match_type: matchType,
+    p_duration:   duration,
+    p_players:    players.map(p => ({
+      rfid:          p.rfid,
+      team:          p.team ?? null,
+      charge_amount: p.chargeAmount,
+    })),
+  });
 
-    if (!court) {
-      return NextResponse.json({ error: 'Court not found' }, { status: 404 });
-    }
-
-    const game = await prisma.$transaction(async (tx) => {
-      const playerRecords = [];
-      let totalChargeAmount = 0;
-
-      for (const p of players) {
-        const rfidCard = await tx.rFIDCard.findUnique({
-          where: { uid: p.rfid },
-          include: { member: { include: { wallet: true } } }
-        });
-
-        if (!rfidCard || !rfidCard.member.wallet) {
-          throw new Error(`Invalid RFID or missing wallet for ${p.rfid}`);
-        }
-
-        if (rfidCard.member.wallet.balance < p.chargeAmount) {
-          throw new Error(`Insufficient funds for ${p.rfid}`);
-        }
-
-        await tx.wallet.update({
-          where: { id: rfidCard.member.wallet.id },
-          data: { balance: { decrement: p.chargeAmount } }
-        });
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: rfidCard.member.wallet.id,
-            amount: p.chargeAmount,
-            type: 'Game Charge',
-            remarks: `Match ${matchType} for ${duration} mins on ${courtName}`
-          }
-        });
-
-        playerRecords.push({
-          memberId: rfidCard.memberId,
-          rfidCardId: rfidCard.id,
-          team: p.team
-        });
-
-        totalChargeAmount += p.chargeAmount;
-      }
-
-      const newGame = await tx.game.create({
-        data: {
-          courtId: court.id,
-          matchType,
-          duration,
-          status: 'In Progress',
-          startTime: new Date(),
-          chargeAmount: totalChargeAmount,
-          players: {
-            create: playerRecords
-          }
-        }
-      });
-
-      await tx.court.update({
-        where: { id: court.id },
-        data: {
-          status: 'In Game',
-          lastActivity: new Date()
-        }
-      });
-
-      return newGame;
-    });
-
-    return NextResponse.json({ success: true, gameId: game.id });
-  } catch (error: any) {
-    console.error('Error registering game:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+  if (error) {
+    // Fix #16: never echo RFID UIDs or raw DB messages to the caller
+    const msg =
+      error.message.includes('Court not found')  ? 'Court not found'     :
+      error.message.includes('Invalid RFID')     ? 'Invalid card'         :
+      error.message.includes('Wallet not found') ? 'Wallet not found'     :
+      error.message.includes('Insufficient')     ? 'Insufficient funds'   :
+                                                   'Registration failed';
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
+
+  // Non-critical: MQTT publish after the transaction commits
+  const { data: court } = await supabase
+    .from('courts').select('id, name').eq('name', courtName).single();
+
+  if (court) {
+    publishDisplay(court.id, {
+      line1: court.name.toUpperCase(),
+      line2: matchType,
+      line3: 'RUNNING',
+    }).catch(() => {});
+  }
+
+  return NextResponse.json({ success: true, gameId });
 }

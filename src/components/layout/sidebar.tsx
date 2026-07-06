@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Home, Users, CreditCard, Settings, Activity } from 'lucide-react';
+import { Home, Users, CreditCard, Settings, Activity, HeartPulse } from 'lucide-react';
 
 export function Sidebar() {
   return (
@@ -26,6 +26,9 @@ export function Sidebar() {
         </Link>
         <Link href="/reports" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
           <Activity size={20} /> Reports
+        </Link>
+        <Link href="/health" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
+          <HeartPulse size={20} /> Health
         </Link>
       </nav>
     </div>

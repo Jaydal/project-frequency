@@ -1,23 +1,25 @@
-export const dynamic = "force-dynamic";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { prisma } from "@/lib/prisma";
+export const dynamic = 'force-dynamic';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { createClient } from '@/lib/supabase/server';
 
 export default async function DashboardPage() {
-  const membersCount = await prisma.member.count({ where: { status: 'Active' } });
-  const rfidCount = await prisma.rFIDCard.count({ where: { status: 'Active' } });
+  const supabase = await createClient();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const [
+    { count: membersCount },
+    { count: rfidCount },
+    { count: activeCourts },
+    { data: reloadRows },
+  ] = await Promise.all([
+    supabase.from('members').select('*', { count: 'exact', head: true }).eq('status', 'Active'),
+    supabase.from('rfid_cards').select('*', { count: 'exact', head: true }).eq('status', 'Active'),
+    supabase.from('courts').select('*', { count: 'exact', head: true }).eq('status', 'In Game'),
+    supabase.from('wallet_transactions').select('amount').eq('type', 'Reload').gte('timestamp', (() => {
+      const d = new Date(); d.setHours(0,0,0,0); return d.toISOString();
+    })()),
+  ]);
 
-  const todayReloads = await prisma.walletTransaction.aggregate({
-    _sum: { amount: true },
-    where: {
-      type: 'Reload',
-      timestamp: { gte: today }
-    }
-  });
-
-  const activeCourts = await prisma.court.count({ where: { status: 'In Game' } });
+  const todayReloads = reloadRows?.reduce((sum: number, r: any) => sum + Number(r.amount), 0) ?? 0;
 
   return (
     <div className="space-y-6">
@@ -29,7 +31,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">Active Members</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{membersCount}</div>
+            <div className="text-2xl font-bold">{membersCount ?? 0}</div>
           </CardContent>
         </Card>
 
@@ -38,7 +40,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">Active RFIDs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{rfidCount}</div>
+            <div className="text-2xl font-bold">{rfidCount ?? 0}</div>
           </CardContent>
         </Card>
 
@@ -47,7 +49,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">Today&apos;s Revenue (Reloads)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₱{todayReloads._sum.amount || 0}</div>
+            <div className="text-2xl font-bold">₱{todayReloads}</div>
           </CardContent>
         </Card>
 
@@ -56,7 +58,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">Active Courts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeCourts} / 2</div>
+            <div className="text-2xl font-bold">{activeCourts ?? 0} / 2</div>
           </CardContent>
         </Card>
       </div>

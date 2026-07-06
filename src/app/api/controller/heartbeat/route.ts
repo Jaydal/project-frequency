@@ -1,38 +1,30 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
+import { checkControllerKey } from '@/lib/controller-auth';
 
-const heartbeatSchema = z.object({
+const schema = z.object({
   status: z.string(),
   firmwareVersion: z.string(),
   ipAddress: z.string(),
-  temperature: z.number().optional()
+  temperature: z.number().optional(),
 });
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const result = heartbeatSchema.safeParse(body);
+  if (!checkControllerKey(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const body = await request.json();
+  const result = schema.safeParse(body);
+  if (!result.success) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
 
-    if (!result.success) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-    }
+  const supabase = await createClient();
+  const { error } = await supabase.from('controller_logs').insert({
+    status: result.data.status,
+    firmware_version: result.data.firmwareVersion,
+    ip_address: result.data.ipAddress,
+    temperature: result.data.temperature ?? null,
+    last_sync: new Date().toISOString(),
+  });
 
-    const { status, firmwareVersion, ipAddress, temperature } = result.data;
-
-    await prisma.controllerLog.create({
-      data: {
-        status,
-        firmwareVersion,
-        ipAddress,
-        temperature,
-        lastSync: new Date()
-      }
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error recording heartbeat:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

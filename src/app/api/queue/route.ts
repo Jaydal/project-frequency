@@ -36,6 +36,7 @@ const joinSchema = z.object({
   duration: z.number().int().positive(),
   partySize: z.union([z.literal(2), z.literal(4)]),
   playerIds: z.array(z.string().uuid()).min(1).max(4),
+  courtId: z.string().uuid().optional(),
 });
 
 export async function POST(request: Request) {
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
       duration: result.data.duration,
       partySize: result.data.partySize,
       playerIds: result.data.playerIds,
+      courtId: result.data.courtId,
     });
 
     if (entry.status === 'completed' && entry.court_id) {
