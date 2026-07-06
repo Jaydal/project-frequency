@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { CourtStatusCard, type CourtStatusData } from './CourtStatusCard';
 import { NowServingCard } from './NowServingCard';
 import { QueueList, type QueueEntryDisplay } from './QueueList';
-import { processExpiredGames, processAvailableCourts, processExpiredOffers } from '@/lib/complete-expired-games';
+import { processExpiredGames, processAvailableCourts, processExpiredOffers, publishCourtDisplays } from '@/lib/complete-expired-games';
 
 type OngoingGame = {
   id: string;
@@ -64,6 +64,7 @@ export function QueueBoard() {
       await processExpiredOffers();
       await processExpiredGames();
       await processAvailableCourts();
+      await publishCourtDisplays();
       await fetchInitial();
     }, 5_000);
     return () => clearInterval(id);

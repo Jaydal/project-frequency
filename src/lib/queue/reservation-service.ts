@@ -93,8 +93,8 @@ export async function acceptOffer(entryId: string): Promise<{ success: boolean; 
 
   await publishDisplay(entry.court_id, {
     line1: court?.name?.toUpperCase() ?? 'COURT',
-    line2: 'GAME STARTED',
-    line3: 'RUNNING',
+    line2: entry.match_title || `${entry.party_size === 4 ? '2v2' : '1v1'}`,
+    line3: 'GAME STARTED',
   });
 
   return { success: true };

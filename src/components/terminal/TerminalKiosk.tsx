@@ -15,7 +15,7 @@ import { BookingSuccess } from './BookingSuccess';
 import { ErrorScreen } from './ErrorScreen';
 import type { ProductsConfig } from '@/lib/products-config-types';
 import { getCost } from '@/lib/products-config-types';
-import { processExpiredGames, processAvailableCourts, processExpiredOffers } from '@/lib/complete-expired-games';
+import { processExpiredGames, processAvailableCourts, processExpiredOffers, publishCourtDisplays } from '@/lib/complete-expired-games';
 
 interface Player {
   id: string;
@@ -117,6 +117,7 @@ export function TerminalKiosk() {
       await processExpiredOffers();
       await processExpiredGames();
       if (!cancelled) await processAvailableCourts();
+      if (!cancelled) await publishCourtDisplays();
       if (!cancelled) await fetchCourts();
     };
     run();
@@ -124,11 +125,11 @@ export function TerminalKiosk() {
     const realtime = supabase.channel('kiosk-processor');
     realtime.on('postgres_changes',
       { event: '*', schema: 'public', table: 'games' },
-      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); fetchCourts(); } }
+      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); publishCourtDisplays(); fetchCourts(); } }
     );
     realtime.on('postgres_changes',
       { event: '*', schema: 'public', table: 'courts' },
-      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); fetchCourts(); } }
+      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); publishCourtDisplays(); fetchCourts(); } }
     );
     realtime.subscribe();
     return () => { cancelled = true; clearInterval(id); supabase.removeChannel(realtime); };

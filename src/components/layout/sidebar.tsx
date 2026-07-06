@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSidebar } from './sidebar-context';
+import { X } from 'lucide-react';
 import {
   LayoutDashboard, Activity, Monitor, Users, CreditCard,
   Wallet, Settings, HeartPulse, BookOpen,
@@ -18,7 +20,7 @@ const groups = [
     label: 'Operations',
     items: [
       { href: '/courts', label: 'Court Monitor', icon: Activity },
-      { href: '/virtual-courts', label: 'Display Monitor', icon: Monitor },
+      { href: '/virtual-displays', label: 'Display Monitor', icon: Monitor },
     ],
   },
   {
@@ -46,18 +48,24 @@ const groups = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { open, setOpen } = useSidebar();
 
-  return (
-    <aside className="w-56 bg-zinc-900/80 backdrop-blur-md border-r border-zinc-800/50 h-screen flex flex-col shrink-0">
-      <div className="px-5 pt-5 pb-4">
-        <h1 className="text-lg font-bold text-emerald-400 tracking-tight">Freq</h1>
-        <p className="text-[10px] text-zinc-500 mt-0.5">Management Portal</p>
+  const content = (
+    <>
+      <div className="flex items-center justify-between px-5 pt-5 pb-4">
+        <div>
+          <h1 className="text-lg font-bold text-emerald-400 tracking-tight">Freq</h1>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Management Portal</p>
+        </div>
+        <button onClick={() => setOpen(false)} className="lg:hidden text-muted-foreground hover:text-foreground cursor-pointer">
+          <X size={20} />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
         {groups.map(group => (
           <div key={group.label}>
-            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest px-2 mb-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-2 mb-1.5">
               {group.label}
             </p>
             <div className="space-y-0.5">
@@ -71,10 +79,11 @@ export function Sidebar() {
                     key={item.href}
                     href={item.href}
                     target={item.external ? '_blank' : undefined}
+                    onClick={() => setOpen(false)}
                     className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                       isActive
                         ? 'bg-emerald-500/10 text-emerald-400 font-medium'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
                     }`}
                   >
                     <Icon size={16} className="shrink-0" />
@@ -86,6 +95,23 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <aside className="hidden lg:flex w-56 bg-sidebar border-r border-border h-screen flex-col shrink-0">
+        {content}
+      </aside>
+
+      {open && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-64 bg-sidebar border-r border-border flex flex-col z-10">
+            {content}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

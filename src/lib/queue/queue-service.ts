@@ -151,8 +151,8 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
 
       await publishDisplay(court.id, {
         line1: court.name.toUpperCase(),
-        line2: 'GAME STARTED',
-        line3: 'RUNNING',
+        line2: params.matchTitle || `${params.partySize === 4 ? '2v2' : '1v1'}`,
+        line3: 'GAME STARTED',
       });
 
       return {

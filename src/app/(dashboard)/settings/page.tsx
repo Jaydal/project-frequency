@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ProductsEditor } from '@/features/settings/components/ProductsEditor';
+import { DisplaySequenceEditor } from '@/features/settings/components/DisplaySequenceEditor';
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -11,6 +12,7 @@ export default async function SettingsPage() {
   const productsRow = settings?.find(s => s.key === 'products');
   const pricesRow = settings?.find(s => s.key === 'prices');
   const prepRow = settings?.find(s => s.key === 'preparationTime');
+  const sequenceRow = settings?.find(s => s.key === 'displaySequence');
 
   const matchTypes: string[] = productsRow?.value ? JSON.parse(productsRow.value).matchTypes ?? ['1v1', '2v2'] : ['1v1', '2v2'];
   const durations: number[] = productsRow?.value ? JSON.parse(productsRow.value).durations ?? [30, 60, 90] : [30, 60, 90];
@@ -28,6 +30,16 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <ProductsEditor matchTypes={matchTypes} durations={durations} rates={rates} prepTimeSec={prepTimeSec} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Display Sequence</CardTitle>
+          <CardDescription>Configure what the LED panels show and how they cycle. Each state (idle, prep, game) has a sequence of pages that rotate at the configured interval.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DisplaySequenceEditor sequence={sequenceRow?.value ?? ''} />
         </CardContent>
       </Card>
 

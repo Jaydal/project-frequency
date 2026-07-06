@@ -107,3 +107,9 @@ async function offerNextInQueue(courtId: string): Promise<void> {
     })
     .eq('id', waiting[0].id);
 }
+
+export async function publishCourtDisplays(): Promise<void> {
+  try {
+    await fetch('/api/display/publish-all', { method: 'POST' });
+  } catch {}
+}

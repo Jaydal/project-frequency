@@ -102,7 +102,20 @@ export function getAllDisplayStates(): Record<string, DisplayPayload> {
 
 // ── Publisher ─────────────────────────────────────────────────────────────────
 
+// Publishes the full board snapshot for the firmware kiosk (retained, so a
+// freshly-connected kiosk gets the latest immediately). Fire-and-forget.
+export function publishBoard(snapshotJson: string): void {
+  try {
+    client().publish('freq/board', snapshotJson, { qos: 0, retain: true });
+  } catch (err) {
+    console.error('[mqtt] publishBoard error:', err);
+  }
+}
+
 export async function publishDisplay(courtId: string, payload: DisplayPayload): Promise<boolean> {
+  // Cache locally immediately — don't wait for MQTT echo
+  g._displayStates!.set(courtId, payload);
+
   const topic = `courts/${courtId}/display`;
   const publish = new Promise<boolean>((resolve) => {
     try {

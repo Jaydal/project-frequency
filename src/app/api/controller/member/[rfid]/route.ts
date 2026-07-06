@@ -26,6 +26,7 @@ export async function GET(
   const wallet = Array.isArray(member.wallets) ? member.wallets[0] : member.wallets;
 
   return NextResponse.json({
+    id: member.id, // UUID — firmware needs this to book (POST /api/queue is uuid-validated)
     memberId: member.member_id,
     firstName: member.first_name,
     lastName: member.last_name,

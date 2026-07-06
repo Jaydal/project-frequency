@@ -42,12 +42,12 @@ function Badge({ status }: { status: string }) {
 
 function StatCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/50 rounded-xl p-4 flex items-start gap-3">
-      <Icon size={18} className="text-zinc-500 mt-0.5 shrink-0" />
+    <div className="bg-card border border-border rounded-xl p-4 flex items-start gap-3">
+      <Icon size={18} className="text-muted-foreground mt-0.5 shrink-0" />
       <div className="min-w-0">
-        <div className="text-xs text-zinc-500">{label}</div>
-        <div className="text-base font-semibold text-zinc-100 truncate">{value}</div>
-        {sub && <div className="text-xs text-zinc-600 mt-0.5">{sub}</div>}
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-base font-semibold text-card-foreground truncate">{value}</div>
+        {sub && <div className="text-xs text-muted-foreground/70 mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -75,7 +75,7 @@ export default function HealthPage() {
     return () => clearInterval(id);
   }, [fetchHealth]);
 
-  if (loading) return <div className="text-center py-12 text-zinc-500">Loading health data...</div>;
+  if (loading) return <div className="text-center py-12 text-muted-foreground">Loading health data...</div>;
   if (!data) return <div className="text-center py-12 text-red-500">Failed to load health data</div>;
 
   const courtCount = Object.keys(data.courtDevices).length;
@@ -85,7 +85,7 @@ export default function HealthPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Activity size={22} className={data.ok ? 'text-emerald-400' : 'text-red-400'} />
-        <h1 className="text-2xl font-bold text-zinc-100">System Health</h1>
+        <h1 className="text-2xl font-bold text-foreground">System Health</h1>
         <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
           data.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
         }`}>
@@ -93,9 +93,9 @@ export default function HealthPage() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Wifi} label="MQTT Broker" value={<span className="flex items-center gap-2"><Badge status={data.connections.broker} /><span className="text-zinc-100">{data.connections.broker}</span></span>} />
-        <StatCard icon={Database} label="Supabase DB" value={<span className="flex items-center gap-2"><Badge status={data.connections.supabase} /><span className="text-zinc-100">{data.connections.supabase}</span></span>} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={Wifi} label="MQTT Broker" value={<span className="flex items-center gap-2"><Badge status={data.connections.broker} /><span className="text-card-foreground">{data.connections.broker}</span></span>} />
+        <StatCard icon={Database} label="Supabase DB" value={<span className="flex items-center gap-2"><Badge status={data.connections.supabase} /><span className="text-card-foreground">{data.connections.supabase}</span></span>} />
         <StatCard icon={Monitor} label="Court Devices" value={`${onlineCourts}/${courtCount} online`} />
       </div>
 
@@ -105,30 +105,30 @@ export default function HealthPage() {
         <StatCard icon={Server} label="Environment" value={data.env} sub={`Node ${data.node}`} />
       </div>
 
-      <div className="bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/50 rounded-xl p-5">
-        <h2 className="font-semibold text-zinc-100 mb-3 flex items-center gap-2 text-sm"><Monitor size={16} /> Court Device Status</h2>
+      <div className="bg-card border border-border rounded-xl p-5">
+        <h2 className="font-semibold text-card-foreground mb-3 flex items-center gap-2 text-sm"><Monitor size={16} /> Court Device Status</h2>
         {courtCount === 0 ? (
-          <p className="text-sm text-zinc-500">No court devices have sent a heartbeat yet.</p>
+          <p className="text-sm text-muted-foreground">No court devices have sent a heartbeat yet.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-5 px-5">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-zinc-500 border-b border-zinc-800">
-                  <th className="pb-2 pr-4 font-medium">Court</th>
-                  <th className="pb-2 pr-4 font-medium">Status</th>
-                  <th className="pb-2 pr-4 font-medium">IP</th>
-                  <th className="pb-2 pr-4 font-medium">RSSI</th>
-                  <th className="pb-2 pr-4 font-medium">Seen</th>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">Court</th>
+                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">Status</th>
+                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">IP</th>
+                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">RSSI</th>
+                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">Seen</th>
                 </tr>
               </thead>
               <tbody>
                 {Object.entries(data.courtDevices).map(([id, device]) => (
-                  <tr key={id} className="border-b border-zinc-800/50 last:border-0">
-                    <td className="py-2.5 pr-4 font-medium text-zinc-200">{device.court || id}</td>
-                    <td className="py-2.5 pr-4"><Badge status={device.status} /><span className="ml-2 text-zinc-300">{device.status}</span></td>
-                    <td className="py-2.5 pr-4 text-zinc-500">{device.ip || '-'}</td>
-                    <td className="py-2.5 pr-4 text-zinc-500">{device.rssi ?? '-'}</td>
-                    <td className="py-2.5 pr-4 text-zinc-500">{device.ago}</td>
+                  <tr key={id} className="border-b border-border/50 last:border-0">
+                    <td className="py-2.5 pr-4 font-medium text-foreground whitespace-nowrap">{device.court || id}</td>
+                    <td className="py-2.5 pr-4 whitespace-nowrap"><Badge status={device.status} /><span className="ml-2 text-card-foreground">{device.status}</span></td>
+                    <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap font-mono text-xs">{device.ip || '-'}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap">{device.rssi ?? '-'}</td>
+                    <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap">{device.ago}</td>
                   </tr>
                 ))}
               </tbody>
@@ -137,7 +137,7 @@ export default function HealthPage() {
         )}
       </div>
 
-      <p className="text-xs text-zinc-600">Last refreshed: {new Date(data.timestamp).toLocaleTimeString()} (auto-updates every 5s)</p>
+      <p className="text-xs text-muted-foreground/60">Last refreshed: {new Date(data.timestamp).toLocaleTimeString()} (auto-updates every 5s)</p>
     </div>
   );
 }
