@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server';
-import { findAvailableCourt } from './booking-engine';
 import type { QueueEntry } from './index';
 import { AVG_GAME_DURATION_MIN } from './index';
 
@@ -49,35 +48,7 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
     .single();
   if (existingQueue) throw new Error('Already in queue');
 
-  // Try to book immediately if court is available
-  const court = await findAvailableCourt(params.start, params.duration, params.partySize);
-  if (court) {
-    const { data: game, error } = await supabase.rpc('register_game', {
-      p_court_name: court.name,
-      p_match_type: params.partySize === 4 ? '2v2' : '1v1',
-      p_duration: params.duration,
-      p_players: JSON.stringify(
-        params.playerIds.map(() => ({ rfid: '', team: null, charge_amount: 0 }))
-      ),
-    });
-    if (error) throw new Error(error.message);
-
-    return {
-      id: game as string,
-      member_id: params.memberId,
-      requested_start: params.start.toISOString(),
-      duration: params.duration,
-      party_size: params.partySize,
-      player_ids: params.playerIds,
-      court_id: court.id,
-      status: 'completed',
-      expires_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-  }
-
-  // Join the queue
+  // Join the queue (immediate booking not supported — always queue, processor handles game creation)
   const insertData: Record<string, any> = {
     member_id: params.memberId,
     requested_start: params.start.toISOString(),

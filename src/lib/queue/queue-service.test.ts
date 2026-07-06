@@ -29,10 +29,8 @@ function makeDb() {
 describe('joinQueue', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('returns immediate booking when a court is available', async () => {
-    vi.mocked(findAvailableCourt).mockResolvedValue({ id: 'c1', name: 'Court 1', status: 'Available' })
+  it('inserts a waiting entry when court is available', async () => {
     const db = makeDb()
-    db.rpc = vi.fn(async () => ({ data: 'game-1', error: null }))
     db.from = vi.fn((t: string) => {
       const c = makeChain()
       if (t === 'members') {
@@ -43,6 +41,11 @@ describe('joinQueue', () => {
       }
       if (t === 'queue_entries') {
         c.single = vi.fn(async () => ({ data: null, error: null }))
+        c.insert = vi.fn(() => {
+          c.select = vi.fn(() => c)
+          c.single = vi.fn(async () => ({ data: { id: 'q1', status: 'waiting' }, error: null }))
+          return c
+        })
       }
       return c
     })
@@ -50,7 +53,7 @@ describe('joinQueue', () => {
 
     const start = new Date('2026-07-07T14:00:00Z')
     const result = await joinQueue({ memberId: 'm1', start, duration: 60, partySize: 2, playerIds: ['m1', 'm2'] })
-    expect(result.status).toBe('completed')
+    expect(result.status).toBe('waiting')
   })
 
   it('inserts a waiting entry when no court is available', async () => {
