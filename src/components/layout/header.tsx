@@ -1,12 +1,13 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import type { User } from "@supabase/supabase-js";
+import { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { Button } from '@/components/ui/button';
+import type { User } from '@supabase/supabase-js';
 
 export function Header() {
   const [user, setUser] = useState<User | null>(null);
+  const [mqttConnected, setMqttConnected] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -17,23 +18,48 @@ export function Header() {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch('/api/mqtt');
+        const data = await res.json();
+        setMqttConnected(data.connected);
+      } catch { setMqttConnected(false); }
+    };
+    check();
+    const id = setInterval(check, 10_000);
+    return () => clearInterval(id);
+  }, []);
+
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    window.location.href = "/login";
+    window.location.href = '/login';
   };
 
   return (
-    <header className="bg-white shadow-sm border-b px-6 py-3 flex justify-between items-center">
-      <div className="text-gray-600 font-medium">Management Portal</div>
+    <header className="bg-zinc-900/60 backdrop-blur-md border-b border-zinc-800/50 px-6 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <span className={`size-2 rounded-full ${mqttConnected ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : 'bg-red-500'}`} />
+        <span className="text-[11px] text-zinc-500 font-medium">
+          MQTT {mqttConnected ? 'Connected' : 'Disconnected'}
+        </span>
+      </div>
+
       <div className="flex items-center gap-4">
         {user ? (
           <>
-            <span className="text-sm font-medium">{user.email}</span>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>Logout</Button>
+            <span className="text-sm text-zinc-400">{user.email}</span>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}
+              className="text-zinc-500 hover:text-zinc-300"
+            >
+              Logout
+            </Button>
           </>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => window.location.href = "/login"}>Login</Button>
+          <Button variant="ghost" size="sm" onClick={() => window.location.href = '/login'}>
+            Login
+          </Button>
         )}
       </div>
     </header>

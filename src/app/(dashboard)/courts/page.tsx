@@ -67,11 +67,11 @@ export default async function CourtsPage() {
               <CardContent>
                 {activeGame ? (
                   <div className="space-y-4">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-zinc-400">
                       Match: {activeGame.match_type} · Duration: {activeGame.duration} min
                     </div>
                     <div>
-                      <h4 className="font-semibold mb-2">Players:</h4>
+                      <h4 className="font-semibold text-zinc-200 mb-2">Players:</h4>
                       <ul className="list-disc list-inside text-sm">
                         {(activeGame.game_players ?? []).map((p: any) => (
                           <li key={p.id}>{p.members?.first_name} {p.members?.last_name}</li>
@@ -81,7 +81,7 @@ export default async function CourtsPage() {
                     <GameActions gameId={activeGame.id} courtId={court.id} courtName={court.name} />
                   </div>
                 ) : (
-                  <div className="text-gray-500 py-8 text-center">Court is currently available.</div>
+                  <div className="text-zinc-500 py-8 text-center">Court is currently available.</div>
                 )}
               </CardContent>
             </Card>

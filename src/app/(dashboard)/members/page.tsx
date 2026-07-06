@@ -44,7 +44,7 @@ export default async function MembersPage() {
                     <TableCell className="font-mono text-sm">{m.member_id}</TableCell>
                     <TableCell>{m.first_name} {m.last_name}</TableCell>
                     <TableCell className="font-mono text-sm">
-                      {activeRfid?.uid ?? <span className="text-gray-400">—</span>}
+                      {activeRfid?.uid ?? <span className="text-zinc-500">—</span>}
                     </TableCell>
                     <TableCell>₱{wallet?.balance ?? 0}</TableCell>
                     <TableCell>{m.status}</TableCell>
