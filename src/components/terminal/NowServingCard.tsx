@@ -31,7 +31,7 @@ export function NowServingCard({ playerNames, courtName, duration, expiresAt }: 
 
   if (!expiresAt || remaining <= 0) {
     return (
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
+      <div className="bg-gray-50 rounded-2xl p-5 shadow-sm border border-gray-200">
         <p className="text-sm text-gray-400">No active offers</p>
       </div>
     );
