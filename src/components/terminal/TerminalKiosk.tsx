@@ -10,7 +10,7 @@ import { SelectCourt } from './SelectCourt';
 import { SelectGameType } from './SelectGameType';
 import { SelectDuration } from './SelectDuration';
 import { ConfirmBooking } from './ConfirmBooking';
-import { QueueStatus } from './QueueStatus';
+import { QueueBoard } from './QueueBoard';
 import { ReservationOffer } from './ReservationOffer';
 import { BookingSuccess } from './BookingSuccess';
 import { ErrorScreen } from './ErrorScreen';
@@ -407,17 +407,18 @@ export function TerminalKiosk() {
       );
 
     case 'queued':
-      return withLayout(
-        queueEntry && member && selectedCourt && (
-          <QueueStatus
-            courtName={selectedCourt.name}
-            position={queueEntry.position ?? 1}
-            estimatedWait={queueEntry.estimatedWait ?? '~60 min'}
-            duration={queueEntry.duration ?? duration ?? 0}
-            status="waiting"
-            onCancel={handleCancelQueue}
-          />
-        )
+      return (
+        <div className="relative">
+          <div className="absolute top-3 right-3 z-10">
+            <button
+              onClick={handleCancelQueue}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg cursor-pointer text-lg"
+            >
+              Cancel Queue
+            </button>
+          </div>
+          <QueueBoard />
+        </div>
       );
 
     case 'offer':
@@ -446,17 +447,18 @@ export function TerminalKiosk() {
       );
 
     case 'queue-status':
-      return withLayout(
-        queueEntry && member && (
-          <QueueStatus
-            courtName={selectedCourt?.name ?? 'Court'}
-            position={queueEntry.position ?? 1}
-            estimatedWait={queueEntry.estimatedWait ?? '~60 min'}
-            duration={queueEntry.duration ?? duration ?? 0}
-            status={queueEntry.status}
-            onCancel={handleCancelQueue}
-          />
-        )
+      return (
+        <div className="relative">
+          <div className="absolute top-3 right-3 z-10">
+            <button
+              onClick={handleCancelQueue}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg cursor-pointer text-lg"
+            >
+              Cancel Queue
+            </button>
+          </div>
+          <QueueBoard />
+        </div>
       );
 
     default:

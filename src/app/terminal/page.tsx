@@ -1,5 +1,5 @@
-import { QueueBoard } from '@/components/terminal/QueueBoard';
+import { redirect } from 'next/navigation';
 
 export default function TerminalPage() {
-  return <QueueBoard />;
+  redirect('/terminal/queue');
 }
