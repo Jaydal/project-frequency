@@ -1,14 +1,19 @@
 import { createClient } from '@/lib/supabase/server';
 import { isSlotAvailable } from './booking-engine';
 import { publishDisplay } from '@/lib/mqtt';
-import { QUEUE_DEFAULT_TIMEOUT_MIN } from './index';
+import { QUEUE_DEFAULT_TIMEOUT_MS } from './index';
+import { effectivePrepSec } from '@/lib/products-config-types';
 
 let expiryInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startExpiryProcessor(): void {
   if (expiryInterval) return;
-  expiryInterval = setInterval(processExpiredOffers, 30_000);
+  expiryInterval = setInterval(() => {
+    processExpiredOffers();
+    processExpiredGames();
+  }, 30_000);
   processExpiredOffers();
+  processExpiredGames();
 }
 
 export async function processExpiredOffers(): Promise<void> {
@@ -38,6 +43,10 @@ export async function processExpiredOffers(): Promise<void> {
 export async function processCourt(courtId: string): Promise<void> {
   const supabase = await createClient();
 
+  const { data: settings } = await supabase.from('settings').select('value').eq('key', 'preparationTime').single();
+  const rawPrepSec = parseInt(settings?.value ?? '300', 10);
+  const prepSec = isNaN(rawPrepSec) ? 300 : rawPrepSec;
+
   const { data: waiting } = await supabase
     .from('queue_entries')
     .select('*')
@@ -55,11 +64,12 @@ export async function processCourt(courtId: string): Promise<void> {
 
   for (const entry of waiting) {
     const start = new Date(entry.requested_start);
-    const end = new Date(start.getTime() + entry.duration * 60_000);
+    const effectivePrep = effectivePrepSec(entry.duration, prepSec);
+    const end = new Date(start.getTime() + effectivePrep * 1000 + entry.duration * 60_000);
     const available = await isSlotAvailable(courtId, start, end);
 
     if (available) {
-      const expiresAt = new Date(Date.now() + QUEUE_DEFAULT_TIMEOUT_MIN * 60_000);
+      const expiresAt = new Date(Date.now() + QUEUE_DEFAULT_TIMEOUT_MS);
       await supabase
         .from('queue_entries')
         .update({
@@ -85,4 +95,39 @@ export async function processCourt(courtId: string): Promise<void> {
     line2: '',
     line3: 'WAITING FOR COMPATIBLE QUEUE',
   });
+}
+
+export async function processExpiredGames(): Promise<void> {
+  const supabase = await createClient();
+  const now = new Date();
+
+  const { data: settings } = await supabase.from('settings').select('value').eq('key', 'preparationTime').single();
+  const rawPrepSec = parseInt(settings?.value ?? '300', 10);
+  const prepSec = isNaN(rawPrepSec) ? 300 : rawPrepSec;
+
+  const { data: active } = await supabase
+    .from('games')
+    .select('id, court_id, start_time, duration')
+    .eq('status', 'In Progress');
+
+  if (!active) return;
+
+  for (const game of active) {
+    if (!game.start_time) continue;
+    const effectivePrep = effectivePrepSec(game.duration, prepSec);
+    const end = new Date(new Date(game.start_time).getTime() + effectivePrep * 1000 + game.duration * 60_000);
+    if (end > now) continue;
+
+    await supabase
+      .from('games')
+      .update({ status: 'Completed', end_time: end.toISOString() })
+      .eq('id', game.id);
+
+    await supabase
+      .from('courts')
+      .update({ status: 'Available', last_activity: now.toISOString() })
+      .eq('id', game.court_id);
+
+    await processCourt(game.court_id);
+  }
 }

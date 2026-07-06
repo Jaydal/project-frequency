@@ -7,6 +7,8 @@ import QueuePanel from '@/components/courts/QueuePanel';
 import HealthBadge from '@/components/ui/HealthBadge';
 import CourtDeviceBadge from '@/components/courts/CourtDeviceBadge';
 import AddCourtForm from '@/components/courts/AddCourtForm';
+import { ManageCourtDialog } from '@/components/courts/ManageCourtDialog';
+import { GameActions } from '@/components/courts/GameActions';
 
 export default async function CourtsPage() {
   const supabase = await createClient();
@@ -25,7 +27,10 @@ export default async function CourtsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Court Monitor</h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Court Monitor</h1>
+          <p className="text-sm text-zinc-500 mt-1">{courts?.length ?? 0} courts</p>
+        </div>
         <HealthBadge />
       </div>
 
@@ -55,6 +60,7 @@ export default async function CourtsPage() {
                     }`}>
                       {court.status}
                     </span>
+                    <ManageCourtDialog court={court} />
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -72,6 +78,7 @@ export default async function CourtsPage() {
                         ))}
                       </ul>
                     </div>
+                    <GameActions gameId={activeGame.id} courtId={court.id} courtName={court.name} />
                   </div>
                 ) : (
                   <div className="text-gray-500 py-8 text-center">Court is currently available.</div>

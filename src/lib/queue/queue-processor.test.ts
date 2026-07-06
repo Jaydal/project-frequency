@@ -38,6 +38,10 @@ describe('processCourt', () => {
       c.lt = vi.fn(() => c)
       c.gte = vi.fn(() => c)
       c.single = vi.fn()
+      if (t === 'settings') {
+        c.eq = vi.fn(() => c)
+        c.single = vi.fn(async () => ({ data: { value: '300' }, error: null }))
+      }
       if (t === 'queue_entries') {
         c.eq = vi.fn(() => c)
         c.order = vi.fn(async () => ({ data: [{ id: 'qe-1', member_id: 'm1', requested_start: '2026-07-07T14:00:00Z', duration: 60, party_size: 2, player_ids: ['m1', 'm2'] }], error: null }))
@@ -52,13 +56,22 @@ describe('processCourt', () => {
 
   it('does nothing when queue is empty', async () => {
     const db = makeDb()
-    db.from = vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          order: vi.fn(async () => ({ data: [], error: null })),
-        })),
-      })),
-    }))
+    db.from = vi.fn((t: string) => {
+      const c: any = { select: vi.fn(), eq: vi.fn(), single: vi.fn(), order: vi.fn(), update: vi.fn(), in: vi.fn(), lt: vi.fn(), gte: vi.fn() }
+      c.select = vi.fn(() => c)
+      c.eq = vi.fn(() => c)
+      c.order = vi.fn(() => c)
+      c.single = vi.fn()
+      if (t === 'settings') {
+        c.eq = vi.fn(() => c)
+        c.single = vi.fn(async () => ({ data: { value: '300' }, error: null }))
+      }
+      if (t === 'queue_entries') {
+        c.eq = vi.fn(() => c)
+        c.order = vi.fn(async () => ({ data: [], error: null }))
+      }
+      return c
+    })
     vi.mocked(createClient).mockResolvedValue(db as any)
 
     await processCourt('c1')
@@ -80,6 +93,12 @@ describe('processExpiredOffers', () => {
       c.gte = vi.fn(() => c)
       c.single = vi.fn()
       c.order = vi.fn(() => c)
+      if (t === 'settings') {
+        c.single = vi.fn(async () => ({ data: { value: '300' }, error: null }))
+      }
+      if (t === 'queue_entries') {
+        c.order = vi.fn(async () => ({ data: [], error: null }))
+      }
       return c
     })
     vi.mocked(createClient).mockResolvedValue(db as any)

@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { TerminalLayout } from './TerminalLayout';
 import { CourtOverview } from './CourtOverview';
 import { IdleScreen } from './IdleScreen';
-import { RfidWelcome } from './RfidWelcome';
 import { SelectCourt } from './SelectCourt';
 import { SelectGameType } from './SelectGameType';
 import { SelectDuration } from './SelectDuration';
@@ -14,6 +13,9 @@ import { QueueBoard } from './QueueBoard';
 import { ReservationOffer } from './ReservationOffer';
 import { BookingSuccess } from './BookingSuccess';
 import { ErrorScreen } from './ErrorScreen';
+import type { ProductsConfig } from '@/lib/products-config-types';
+import { getCost } from '@/lib/products-config-types';
+import { processExpiredGames, processAvailableCourts, processExpiredOffers } from '@/lib/complete-expired-games';
 
 interface Player {
   id: string;
@@ -32,23 +34,17 @@ interface CourtOption {
 
 export type KioskStep =
   | 'idle'
-  | 'welcome'
+  | 'existing-queue'
   | 'select-court'
   | 'select-game'
   | 'select-duration'
   | 'confirm'
-  | 'queued'
   | 'offer'
   | 'success'
-  | 'queue-status'
   | 'error';
 
-const RATES: Record<string, number> = { '30': 150, '60': 300, '90': 450 };
-const SUCCESS_DELAY_MS = 5000;
 
-const TEST_PLAYERS: Player[] = [
-  { id: '65d5489e-521c-4fe1-8da2-3cfce7adc289', memberId: '001', firstName: 'test', lastName: 'user', balance: 100 },
-];
+const SUCCESS_DELAY_MS = 5000;
 
 export function TerminalKiosk() {
   const [step, setStep] = useState<KioskStep>('idle');
@@ -56,11 +52,13 @@ export function TerminalKiosk() {
   const [selectedCourt, setSelectedCourt] = useState<CourtOption | null>(null);
   const [gameType, setGameType] = useState<'1v1' | '2v2' | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
+  const [matchTitle, setMatchTitle] = useState('');
   const [queueEntry, setQueueEntry] = useState<any>(null);
   const [errorInfo, setErrorInfo] = useState<{ title: string; message: string } | null>(null);
   const [courts, setCourts] = useState<CourtOption[]>([]);
   const [testMode, setTestMode] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [config, setConfig] = useState<ProductsConfig | null>(null);
   const rfidRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,9 +66,6 @@ export function TerminalKiosk() {
   useEffect(() => {
     const isTest = new URLSearchParams(window.location.search).get('testmode') === 'true';
     setTestMode(isTest);
-    if (isTest) {
-      handleTestPlayer(TEST_PLAYERS[0]);
-    }
   }, []);
 
   useEffect(() => {
@@ -84,15 +79,19 @@ export function TerminalKiosk() {
       successTimer.current = setTimeout(() => reset(), SUCCESS_DELAY_MS);
       return () => { if (successTimer.current) clearTimeout(successTimer.current); };
     }
+    if (step === 'select-court') {
+      fetchCourts();
+    }
   }, [step]);
 
   useEffect(() => {
-    if (!queueEntry || step !== 'queued') return;
+    if (!queueEntry) return;
     const channel = supabase.channel(`kiosk-${queueEntry.id}`);
     channel.on('postgres_changes',
       { event: '*', schema: 'public', table: 'queue_entries', filter: `id=eq.${queueEntry.id}` },
       async (payload) => {
         const updated = payload.new as any;
+        if (successTimer.current) clearTimeout(successTimer.current);
         if (updated.status === 'offered') {
           setQueueEntry((prev: any) => prev ? { ...prev, status: 'offered', expires_at: updated.expires_at, court_id: updated.court_id } : prev);
           setStep('offer');
@@ -109,8 +108,53 @@ export function TerminalKiosk() {
   }, [queueEntry?.id]);
 
   useEffect(() => {
-    fetchCourts();
+    fetchInitial();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      await processExpiredOffers();
+      await processExpiredGames();
+      if (!cancelled) await processAvailableCourts();
+      if (!cancelled) await fetchCourts();
+    };
+    run();
+    const id = setInterval(run, 10_000);
+    const realtime = supabase.channel('kiosk-processor');
+    realtime.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'games' },
+      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); fetchCourts(); } }
+    );
+    realtime.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'courts' },
+      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); fetchCourts(); } }
+    );
+    realtime.subscribe();
+    return () => { cancelled = true; clearInterval(id); supabase.removeChannel(realtime); };
+  }, []);
+
+  async function fetchInitial() {
+    const { data: rows } = await supabase.from('settings').select('key, value').in('key', ['products', 'prices', 'preparationTime']);
+    if (rows) {
+      const map = new Map(rows.map(r => [r.key, r.value]));
+      const products = tryParse(map.get('products'));
+      const rates = tryParse(map.get('prices'));
+      const prepTimeSec = parseInt(map.get('preparationTime') ?? '', 10);
+      setConfig({
+        matchTypes: products?.matchTypes ?? ['1v1', '2v2'],
+        durations: products?.durations ?? [30, 60, 90],
+        rates: rates ?? { '30': 150, '60': 300, '90': 450 },
+        prepTimeSec: isNaN(prepTimeSec) ? 300 : prepTimeSec,
+      });
+    }
+    await fetchCourts();
+  }
+
+  function tryParse(json: string | undefined): any {
+    if (!json) return undefined;
+    try { return JSON.parse(json); } catch { return undefined; }
+  }
 
   async function fetchCourts() {
     const { data: games } = await supabase
@@ -140,26 +184,36 @@ export function TerminalKiosk() {
     const uid = rfidRef.current.value.trim();
     rfidRef.current.value = '';
     if (!uid) return;
-    await lookupMember(uid);
+    await lookupMember(uid === 'test' ? 'TEST001' : uid);
   }
 
   async function lookupMember(uid: string) {
     setErrorInfo(null);
     try {
-      const { data, error: err } = await supabase
+      const { data: card, error: err } = await supabase
         .from('rfid_cards')
-        .select('uid, member_id, members!inner(id, member_id, first_name, last_name, wallets(balance))')
+        .select('member_id')
         .eq('uid', uid)
         .eq('status', 'Active')
         .single();
-      if (err || !data) { setErrorInfo({ title: 'RFID Read Failed', message: 'Card not recognized. Please try again.' }); setStep('error'); return; }
-      const m = data.members as any;
+      if (err || !card) { setErrorInfo({ title: 'RFID Read Failed', message: 'Card not recognized. Please try again.' }); setStep('error'); return; }
+      const { data: memberData, error: memberErr } = await supabase
+        .from('members')
+        .select('id, member_id, first_name, last_name')
+        .eq('id', card.member_id)
+        .single();
+      if (memberErr || !memberData) { setErrorInfo({ title: 'RFID Read Failed', message: 'Card not recognized. Please try again.' }); setStep('error'); return; }
+      const { data: walletData } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('member_id', memberData.id)
+        .single();
       const player: Player = {
-        id: m.id,
-        memberId: m.member_id,
-        firstName: m.first_name,
-        lastName: m.last_name,
-        balance: Array.isArray(m.wallets) ? (m.wallets[0]?.balance ?? 0) : (m.wallets?.balance ?? 0),
+        id: memberData.id,
+        memberId: memberData.member_id,
+        firstName: memberData.first_name,
+        lastName: memberData.last_name,
+        balance: walletData?.balance ?? 0,
       };
       setMember(player);
       await checkExistingQueue(player.id);
@@ -167,50 +221,33 @@ export function TerminalKiosk() {
   }
 
   async function checkExistingQueue(memberId: string) {
+    // Check if member has an active game
+    const { data: activeGame } = await supabase
+      .from('games')
+      .select('id, court_id, status, start_time, duration, courts!inner(name)')
+      .eq('status', 'In Progress')
+      .eq('game_players.member_id', memberId)
+      .maybeSingle();
+    if (activeGame) {
+      setErrorInfo({ title: 'Already Playing', message: `You are currently playing on ${(activeGame as any).courts?.name ?? 'a court'}. Finish your game first.` });
+      setStep('error');
+      return;
+    }
+
     const { data } = await supabase
       .from('queue_entries')
-      .select('*, courts!left(name)')
+      .select('id, status, court_id, expires_at, courts!left(name)')
       .eq('member_id', memberId)
       .in('status', ['waiting', 'offered'])
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
-    if (data) {
-      setQueueEntry(data);
-      if (data.status === 'offered') { setStep('offer'); return; }
-      setStep('queue-status');
-      return;
-    }
-    const { data: activeBooking } = await supabase
-      .from('games')
-      .select('id, court_id, courts!inner(name), duration, status, start_time')
-      .in('status', ['In Progress', 'Scheduled']);
-    if (activeBooking && activeBooking.length > 0) {
-      const { data: myGames } = await supabase
-        .from('game_players')
-        .select('game_id')
-        .eq('member_id', memberId)
-        .in('game_id', activeBooking.map(g => g.id));
-      if (myGames && myGames.length > 0) {
-        setErrorInfo({ title: 'Active Booking', message: 'You already have an active booking.' });
-        setStep('error');
-        return;
-      }
-    }
-    setStep('welcome');
-  }
-
-  function handleTestPlayer(p: Player) {
-    setMember(p);
-    checkExistingQueue(p.id);
-  }
-
-  function handleContinueToCourt() {
+      .maybeSingle();
+    if (data && data.status === 'offered') { setQueueEntry(data as any); setStep('offer'); return; }
+    if (data && data.status === 'waiting') { setQueueEntry(data as any); setStep('existing-queue'); return; }
     setStep('select-court');
   }
 
   function handleSelectCourt(court: CourtOption) {
-    if (court.status !== 'Available') return;
     setSelectedCourt(court);
     setStep('select-game');
   }
@@ -229,8 +266,9 @@ export function TerminalKiosk() {
     if (!member || !duration || !gameType) return;
     setBusy(true);
     setErrorInfo(null);
+    if (!config) return;
     const partySize = gameType === '2v2' ? 4 : 2;
-    const cost = (RATES[String(duration)] * (duration / 30)) / (partySize === 4 ? 2 : 1);
+    const cost = getCost(config, duration, partySize);
     if (member.balance < cost) {
       setErrorInfo({ title: 'No Credits Remaining', message: `You need ₱${cost} but only have ₱${member.balance}.` });
       setStep('error');
@@ -247,7 +285,8 @@ export function TerminalKiosk() {
           duration,
           partySize,
           playerIds: [member.id],
-          courtId: selectedCourt?.id,
+          ...(selectedCourt?.id ? { courtId: selectedCourt.id } : {}),
+          matchTitle: matchTitle || undefined,
         }),
       });
       if (!res.ok) {
@@ -264,7 +303,9 @@ export function TerminalKiosk() {
         setMember(prev => prev ? { ...prev, balance: remaining } : prev);
         setStep('success');
       } else {
-        setStep('queued');
+        setQueueEntry(entry);
+        setStep('success');
+        successTimer.current = setTimeout(() => reset(), 3000);
       }
     } catch {
       setErrorInfo({ title: 'Unable to Connect', message: 'Check connection and try again.' });
@@ -289,7 +330,7 @@ export function TerminalKiosk() {
         setBusy(false);
         return;
       }
-      const cost = duration ? (RATES[String(duration)] * (duration / 30)) / ((gameType === '2v2' ? 4 : 2) === 4 ? 2 : 1) : 0;
+      const cost = config && duration ? getCost(config, duration, gameType === '2v2' ? 4 : 2) : 0;
       setMember(prev => prev ? { ...prev, balance: prev.balance - cost } : prev);
       setStep('success');
     } catch {
@@ -322,11 +363,24 @@ export function TerminalKiosk() {
     reset();
   }
 
+  async function handleCancelExisting() {
+    if (!queueEntry) return;
+    try {
+      await supabase
+        .from('queue_entries')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', queueEntry.id);
+    } catch {}
+    setQueueEntry(null);
+    setStep('select-court');
+  }
+
   function reset() {
     setMember(null);
     setSelectedCourt(null);
     setGameType(null);
     setDuration(null);
+    setMatchTitle('');
     setQueueEntry(null);
     setErrorInfo(null);
     setStep('idle');
@@ -342,16 +396,18 @@ export function TerminalKiosk() {
     }
   }
 
-  const creditsRequired = member && duration && gameType
-    ? (RATES[String(duration)] * (duration / 30)) / ((gameType === '2v2' ? 4 : 2) === 4 ? 2 : 1)
+  const creditsRequired = config && member && duration && gameType
+    ? getCost(config, duration, gameType === '2v2' ? 4 : 2)
     : 0;
 
   const fullScreenSteps = new Set<KioskStep>(['offer', 'success', 'error']);
   const hasSidebar = !fullScreenSteps.has(step);
 
+  const courtOverview = useMemo(() => <CourtOverview />, []);
+
   function withLayout(content: ReactNode) {
     return (
-      <TerminalLayout sidebar={hasSidebar ? <CourtOverview /> : undefined}>
+      <TerminalLayout sidebar={hasSidebar ? courtOverview : undefined}>
         {content}
       </TerminalLayout>
     );
@@ -364,24 +420,54 @@ export function TerminalKiosk() {
   switch (step) {
     case 'idle':
       return (
-        <div className="relative min-h-screen">
+        <div className="relative min-h-screen bg-black">
           <form onSubmit={handleRfidSubmit}
-            className="absolute top-3 right-3 z-10 bg-white/90 backdrop-blur rounded-full shadow-lg px-6 py-3 flex items-center gap-3"
+            className="absolute top-3 right-3 z-10 bg-zinc-900/90 border border-zinc-800 rounded-lg px-4 py-2.5 flex items-center gap-2"
           >
-            <span className="text-lg">🏓</span>
             <input ref={rfidRef} type="text" autoFocus
-              className="w-40 text-center text-lg border-0 outline-none bg-transparent"
-              placeholder="Tap RFID..."
+              className="w-32 text-center text-sm bg-transparent text-zinc-100 placeholder-zinc-500 border-0 outline-none"
+              placeholder={testMode ? "test" : "RFID"}
             />
-            <button type="submit" hidden />
+            <button type="submit"
+              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer shrink-0"
+            >
+              Go
+            </button>
           </form>
-          <QueueBoard onBookNow={() => rfidRef.current?.focus()} />
+          <QueueBoard />
         </div>
       );
 
-    case 'welcome':
+    case 'existing-queue':
       return withLayout(
-        member && <RfidWelcome member={member} onContinue={handleContinueToCourt} />
+        member && queueEntry && (
+          <div className="min-h-full flex flex-col items-center justify-center p-8 text-center">
+            <h2 className="text-2xl font-bold text-amber-400 mb-4">Existing Booking</h2>
+            <p className="text-zinc-300 mb-6">You have an active queue entry:</p>
+            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 mb-8 w-full max-w-sm text-left space-y-3">
+              <p className="text-zinc-400 text-sm">Queue Position</p>
+              <p className="text-zinc-100 text-lg font-semibold">Waiting</p>
+              {queueEntry.courts?.name && (
+                <>
+                  <p className="text-zinc-400 text-sm">Court</p>
+                  <p className="text-zinc-100">{queueEntry.courts.name}</p>
+                </>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              <button onClick={handleCancelExisting}
+                className="w-full py-3 px-6 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-lg cursor-pointer disabled:opacity-50"
+              >
+                Cancel Booking
+              </button>
+              <button onClick={() => setStep('select-court')}
+                className="w-full py-3 px-6 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-lg cursor-pointer"
+              >
+                Book Another
+              </button>
+            </div>
+          </div>
+        )
       );
 
     case 'select-court':
@@ -396,7 +482,7 @@ export function TerminalKiosk() {
 
     case 'select-duration':
       return withLayout(
-        <SelectDuration onSelect={handleSelectDuration} onBack={handleBack} />
+        config && <SelectDuration durations={config.durations} rates={config.rates} onSelect={handleSelectDuration} onBack={handleBack} />
       );
 
     case 'confirm':
@@ -408,26 +494,13 @@ export function TerminalKiosk() {
             duration={duration}
             creditsRequired={creditsRequired}
             balance={member.balance}
+            matchTitle={matchTitle}
+            onMatchTitleChange={setMatchTitle}
             onConfirm={handleJoinQueue}
             onBack={handleBack}
             busy={busy}
           />
         )
-      );
-
-    case 'queued':
-      return (
-        <div className="relative">
-          <div className="absolute top-3 right-3 z-10">
-            <button
-              onClick={handleCancelQueue}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg cursor-pointer text-lg"
-            >
-              Cancel Queue
-            </button>
-          </div>
-          <QueueBoard />
-        </div>
       );
 
     case 'offer':
@@ -445,29 +518,14 @@ export function TerminalKiosk() {
 
     case 'success':
       return withLayout(
-        member && selectedCourt && gameType && duration && (
+        member && duration && gameType && (
           <BookingSuccess
-            courtName={selectedCourt.name}
+            courtName={selectedCourt?.name}
             duration={duration}
             creditsUsed={creditsRequired}
             creditsRemaining={member.balance}
           />
         )
-      );
-
-    case 'queue-status':
-      return (
-        <div className="relative">
-          <div className="absolute top-3 right-3 z-10">
-            <button
-              onClick={handleCancelQueue}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg cursor-pointer text-lg"
-            >
-              Cancel Queue
-            </button>
-          </div>
-          <QueueBoard />
-        </div>
       );
 
     default:

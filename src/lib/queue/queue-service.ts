@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import type { QueueEntry } from './index';
-import { AVG_GAME_DURATION_MIN } from './index';
+import { findAvailableCourt, isSlotAvailable } from './booking-engine';
+import { publishDisplay } from '@/lib/mqtt';
 
 export interface JoinQueueParams {
   memberId: string;
@@ -9,6 +10,73 @@ export interface JoinQueueParams {
   partySize: number;
   playerIds: string[];
   courtId?: string;
+  matchTitle?: string;
+}
+
+async function getRates(): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const { data } = await supabase.from('settings').select('value').eq('key', 'prices').single();
+  return data?.value ? JSON.parse(data.value) : { '30': 150, '60': 300, '90': 450 };
+}
+
+function calcCharge(rates: Record<string, number>, duration: number, partySize: number): number {
+  const rate = rates[String(duration)];
+  if (!rate) throw new Error(`No price configured for ${duration} min`);
+  return Math.round((rate * (duration / 30)) / (partySize === 4 ? 2 : 1));
+}
+
+async function deductWallet(memberId: string, amount: number, gameId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: wallet } = await supabase
+    .from('wallets')
+    .select('id, balance')
+    .eq('member_id', memberId)
+    .single();
+  if (!wallet) throw new Error('Wallet not found');
+  if (wallet.balance < amount) throw new Error('Insufficient credits');
+
+  const { data: updated } = await supabase
+    .from('wallets')
+    .update({ balance: wallet.balance - amount })
+    .eq('id', wallet.id)
+    .eq('balance', wallet.balance)
+    .select()
+    .single();
+  if (!updated) throw new Error('Concurrent wallet update, try again');
+
+  await supabase.from('wallet_transactions').insert({
+    wallet_id: wallet.id,
+    amount: -amount,
+    type: 'game_fee',
+    reference_number: gameId,
+  });
+}
+
+async function refundWallet(memberId: string, amount: number, gameId: string, remarks: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: wallet } = await supabase
+    .from('wallets')
+    .select('id, balance')
+    .eq('member_id', memberId)
+    .single();
+  if (!wallet) return;
+
+  const { data: updated } = await supabase
+    .from('wallets')
+    .update({ balance: wallet.balance + amount })
+    .eq('id', wallet.id)
+    .eq('balance', wallet.balance)
+    .select()
+    .single();
+  if (!updated) throw new Error('Concurrent wallet update, try again');
+
+  await supabase.from('wallet_transactions').insert({
+    wallet_id: wallet.id,
+    amount,
+    type: 'Refund',
+    reference_number: gameId,
+    remarks,
+  });
 }
 
 export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
@@ -21,34 +89,89 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
     .single();
   if (!member || member.status !== 'Active') throw new Error('Member not active');
 
-  // Check if member already has an active booking
-  const { data: activeGames } = await supabase
-    .from('games')
-    .select('id')
-    .in('status', ['Scheduled', 'In Progress']);
+  const rates = await getRates();
+  const charge = calcCharge(rates, params.duration, params.partySize);
 
-  if (activeGames && activeGames.length > 0) {
-    const { data: myBookings } = await supabase
-      .from('game_players')
-      .select('id')
-      .eq('member_id', params.memberId)
-      .in('game_id', activeGames.map(g => g.id));
+  // Check if this is the first in queue and a court is available — auto-assign
+  const { count: waitingCount } = await supabase
+    .from('queue_entries')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'waiting');
 
-    if (myBookings && myBookings.length > 0) {
-      throw new Error('Already booked');
+  if (!waitingCount || waitingCount === 0) {
+    let court = null;
+
+    if (params.courtId) {
+      const { data: selected } = await supabase
+        .from('courts')
+        .select('id, name, status')
+        .eq('id', params.courtId)
+        .single();
+      if (selected && selected.status === 'Available') {
+        const slotFree = await isSlotAvailable(selected.id, params.start, new Date(params.start.getTime() + params.duration * 60_000));
+        if (slotFree) court = selected;
+      }
+    }
+
+    if (!court) {
+      court = await findAvailableCourt(params.start, params.duration, params.partySize, params.courtId);
+    }
+
+    if (court) {
+      const { data: game, error: gameErr } = await supabase
+        .from('games')
+        .insert({
+          court_id: court.id,
+          match_type: params.partySize === 4 ? '2v2' : '1v1',
+          match_title: params.matchTitle ?? null,
+          duration: params.duration,
+          status: 'In Progress',
+          start_time: new Date().toISOString(),
+          charge_amount: charge,
+        })
+        .select()
+        .single();
+
+      if (gameErr) throw new Error(gameErr.message);
+
+      for (const playerId of params.playerIds) {
+        const { error: gpErr } = await supabase
+          .from('game_players')
+          .insert({ game_id: game.id, member_id: playerId, team: null });
+        if (gpErr) throw new Error(gpErr.message);
+      }
+
+      const { error: courtErr } = await supabase
+        .from('courts')
+        .update({ status: 'In Game', last_activity: new Date().toISOString() })
+        .eq('id', court.id);
+      if (courtErr) throw new Error(courtErr.message);
+
+      await deductWallet(params.memberId, charge, game.id);
+
+      await publishDisplay(court.id, {
+        line1: court.name.toUpperCase(),
+        line2: 'GAME STARTED',
+        line3: 'RUNNING',
+      });
+
+      return {
+        id: game.id,
+        member_id: params.memberId,
+        requested_start: params.start.toISOString(),
+        duration: params.duration,
+        party_size: params.partySize,
+        player_ids: params.playerIds,
+        court_id: court.id,
+        status: 'completed',
+        expires_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as QueueEntry;
     }
   }
 
-  // Check for existing waiting queue entry
-  const { data: existingQueue } = await supabase
-    .from('queue_entries')
-    .select('id')
-    .eq('member_id', params.memberId)
-    .eq('status', 'waiting')
-    .single();
-  if (existingQueue) throw new Error('Already in queue');
-
-  // Join the queue (immediate booking not supported — always queue, processor handles game creation)
+  // Join the queue
   const insertData: Record<string, any> = {
     member_id: params.memberId,
     requested_start: params.start.toISOString(),
@@ -58,6 +181,7 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
     status: 'waiting',
   };
   if (params.courtId) insertData.court_id = params.courtId;
+  if (params.matchTitle) insertData.match_title = params.matchTitle;
 
   const { data: entry, error } = await supabase
     .from('queue_entries')
@@ -95,7 +219,7 @@ export async function getQueuePosition(entryId: string): Promise<number> {
 
 export function getEstimatedWait(position: number): string {
   if (position <= 0) return 'Now';
-  const minutes = position * AVG_GAME_DURATION_MIN;
+  const minutes = position * 30;
   if (minutes <= 60) return `~${minutes} min`;
   return `~${Math.ceil(minutes / 60)} hours`;
 }

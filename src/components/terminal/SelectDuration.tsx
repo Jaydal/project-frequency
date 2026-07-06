@@ -1,31 +1,30 @@
 interface Props {
+  durations: number[];
+  rates: Record<string, number>;
   onSelect: (duration: number) => void;
   onBack: () => void;
 }
 
-const RATES: Record<string, number> = { '30': 150, '60': 300, '90': 450 };
-
-export function SelectDuration({ onSelect, onBack }: Props) {
+export function SelectDuration({ durations, rates, onSelect, onBack }: Props) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Duration</h1>
-      <div className="grid grid-cols-3 gap-4 w-full max-w-md">
-        {[30, 60, 90].map(d => {
-          const total = RATES[String(d)] * (d / 30);
+    <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
+      <h1 className="text-lg font-semibold text-zinc-100">Duration</h1>
+      <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
+        {durations.map(d => {
+          const per30 = rates[String(d)] ?? 0;
+          const total = per30 * (d / 30);
           return (
             <button key={d} onClick={() => onSelect(d)}
-              className="bg-white border-2 border-gray-200 rounded-2xl p-6 text-center active:border-blue-500 cursor-pointer"
+              className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 text-center hover:border-zinc-500 active:border-zinc-400 cursor-pointer"
             >
-              <div className="text-3xl font-bold">{d}</div>
-              <div className="text-sm text-gray-500">min</div>
-              <div className="text-lg font-semibold mt-2 text-blue-700">₱{total}</div>
+              <span className="text-xl font-bold text-zinc-100">{d}</span>
+              <span className="block text-xs text-zinc-500">min</span>
+              <span className="block text-sm font-semibold text-zinc-400 mt-1">₱{total}</span>
             </button>
           );
         })}
       </div>
-      <button onClick={onBack} className="mt-6 py-3 text-gray-500 text-lg underline cursor-pointer">
-        Back
-      </button>
+      <button onClick={onBack} className="text-sm text-zinc-500 hover:text-zinc-400 cursor-pointer">Back</button>
     </div>
   );
 }

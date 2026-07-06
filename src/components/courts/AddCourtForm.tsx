@@ -20,9 +20,12 @@ export default function AddCourtForm() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    
-    const { error } = await supabase.from('courts').insert([{ name }]);
-    
+
+    const { data: max } = await supabase.from('courts').select('number').order('number', { ascending: false }).limit(1);
+    const nextNumber = (max?.[0]?.number ?? 0) + 1;
+
+    const { error } = await supabase.from('courts').insert([{ name: name.trim(), number: nextNumber }]);
+
     if (error) {
       setError(error.message);
     } else {
@@ -39,8 +42,8 @@ export default function AddCourtForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleAdd} className="flex gap-4">
-          <Input 
-            placeholder="Court Name (e.g., Court 3)" 
+          <Input
+            placeholder="Court Name (e.g., Court 3)"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}

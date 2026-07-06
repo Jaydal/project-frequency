@@ -30,34 +30,44 @@ describe('assignRFID', () => {
     const rfidCards = chainable({ data: null, error: null })
     vi.mocked(createClient).mockResolvedValue(makeSupabase({ members, rfid_cards: rfidCards }) as any)
 
-    await assignRFID({ memberId: 'PB-001', uid: 'UID-123' })
-
-    // Assert member lookup pre-check queries
-    expect(members.select).toHaveBeenCalledWith('id')
-    expect(members.eq).toHaveBeenCalledWith('member_id', 'PB-001')
+    await assignRFID({ memberId: 'member-1', uid: 'UID-123' })
 
     // Assert RFID availability pre-check queries
     expect(rfidCards.select).toHaveBeenCalledWith('id')
     expect(rfidCards.eq).toHaveBeenCalledWith('uid', 'UID-123')
 
+    // Assert member lookup by UUID
+    expect(members.select).toHaveBeenCalledWith('id')
+    expect(members.eq).toHaveBeenCalledWith('id', 'member-1')
+
     // Assert the insert call with correct payload
     expect(rfidCards.insert).toHaveBeenCalledWith({ uid: 'UID-123', member_id: 'member-1', status: 'Active' })
   })
 
+  it('inserts unassigned when memberId is null', async () => {
+    const rfidCards = chainable({ data: null, error: null })
+    vi.mocked(createClient).mockResolvedValue(makeSupabase({ rfid_cards: rfidCards }) as any)
+
+    await assignRFID({ memberId: null, uid: 'UID-456' })
+
+    expect(rfidCards.insert).toHaveBeenCalledWith({ uid: 'UID-456', status: 'Unassigned' })
+  })
+
   it('throws Member not found when the member lookup misses', async () => {
+    const rfidCards = chainable({ data: null, error: null })
     const members = chainable({ data: null, error: null })
-    vi.mocked(createClient).mockResolvedValue(makeSupabase({ members }) as any)
+    vi.mocked(createClient).mockResolvedValue(makeSupabase({ members, rfid_cards: rfidCards }) as any)
 
     await expect(assignRFID({ memberId: 'missing', uid: 'UID-123' }))
       .rejects.toThrow('Member not found')
   })
 
-  it('throws RFID already assigned when the UID is taken', async () => {
+  it('throws RFID UID already exists when the UID is taken', async () => {
     const members = chainable({ data: { id: 'member-1' }, error: null })
     const rfidCards = chainable({ data: { id: 'existing-card' }, error: null })
     vi.mocked(createClient).mockResolvedValue(makeSupabase({ members, rfid_cards: rfidCards }) as any)
 
-    await expect(assignRFID({ memberId: 'PB-001', uid: 'UID-123' }))
-      .rejects.toThrow('RFID already assigned')
+    await expect(assignRFID({ memberId: 'member-1', uid: 'UID-123' }))
+      .rejects.toThrow('RFID UID already exists')
   })
 })

@@ -8,16 +8,23 @@ type CourtStatus = {
   seenAt: number;
 };
 
+export interface DisplayPayload {
+  line1: string;
+  line2: string;
+  line3: string;
+}
+
 const g = global as typeof globalThis & {
   _mqttClient?: MqttClient;
   _mqttConnected?: boolean;
   _courtStatuses?: Map<string, CourtStatus>;
+  _displayStates?: Map<string, DisplayPayload>;
 };
 
 if (!g._courtStatuses) g._courtStatuses = new Map();
+if (!g._displayStates) g._displayStates = new Map();
 
 function client(): MqttClient {
-  // Fix #3: guard on existence, not .connected — mqtt lib reconnects automatically
   if (g._mqttClient) return g._mqttClient;
 
   const url = process.env.MQTT_BROKER_URL ?? 'mqtt://localhost:1883';
@@ -33,6 +40,7 @@ function client(): MqttClient {
     g._mqttConnected = true;
     c.subscribe('freq.led/courts/+/status', { qos: 1 });
     c.subscribe('courts/+/status', { qos: 1 });
+    c.subscribe('courts/+/display', { qos: 1 });
     console.log('[mqtt] broker connected');
   });
 
@@ -44,11 +52,19 @@ function client(): MqttClient {
   });
 
   c.on('message', (topic, payload) => {
-    const m = topic.match(/^(?:freq\.led\/)?courts\/(.+)\/status$/);
-    if (m) {
+    const statusMatch = topic.match(/^(?:freq\.led\/)?courts\/(.+)\/status$/);
+    if (statusMatch) {
       try {
         const data = JSON.parse(payload.toString());
-        g._courtStatuses!.set(m[1], { ...data, seenAt: Date.now() });
+        g._courtStatuses!.set(statusMatch[1], { ...data, seenAt: Date.now() });
+      } catch { /* ignore malformed */ }
+      return;
+    }
+    const displayMatch = topic.match(/^courts\/(.+)\/display$/);
+    if (displayMatch) {
+      try {
+        const data = JSON.parse(payload.toString());
+        g._displayStates!.set(displayMatch[1], data);
       } catch { /* ignore malformed */ }
     }
   });
@@ -76,17 +92,17 @@ export function getCourtStatus(courtId: string): CourtStatus | undefined {
   return g._courtStatuses?.get(courtId);
 }
 
-// ── Publisher ─────────────────────────────────────────────────────────────────
-
-// Published to courts/<courtId>/display — matches FreqClient universal library topic
-export interface DisplayPayload {
-  line1: string;
-  line2: string;
-  line3: string;
+export function getDisplayState(courtId: string): DisplayPayload | undefined {
+  return g._displayStates?.get(courtId);
 }
 
+export function getAllDisplayStates(): Record<string, DisplayPayload> {
+  return Object.fromEntries(g._displayStates ?? []);
+}
+
+// ── Publisher ─────────────────────────────────────────────────────────────────
+
 export async function publishDisplay(courtId: string, payload: DisplayPayload): Promise<boolean> {
-  // Fix #9: race against a 5 s timeout so callers never hang indefinitely
   const topic = `courts/${courtId}/display`;
   const publish = new Promise<boolean>((resolve) => {
     try {

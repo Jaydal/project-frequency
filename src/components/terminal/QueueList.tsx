@@ -3,7 +3,9 @@ export interface QueueEntryDisplay {
   position: number;
   firstName: string;
   lastName: string;
-  partySize: number;
+  matchType: string;
+  matchTitle: string;
+  courtName: string;
   duration: number;
   estimatedWait: string;
 }
@@ -14,45 +16,41 @@ interface Props {
 
 export function QueueList({ entries }: Props) {
   if (entries.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-gray-400 text-lg">No one waiting</p>
-      </div>
-    );
+    return <p className="text-zinc-500 text-xs">No one waiting</p>;
   }
 
   return (
-    <div className="space-y-1 overflow-y-auto max-h-[320px] pr-1">
-      {entries.map((e) => (
-        <div
-          key={e.id}
-          className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 min-h-[48px]"
-        >
+    <div>
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[10px] text-zinc-600 uppercase tracking-wider">
+        <span className="size-6 shrink-0" />
+        <span className="w-20 shrink-0">Player</span>
+        <span className="w-24 shrink-0">Match</span>
+        <span className="w-14 shrink-0">Court</span>
+        <span className="w-10 shrink-0 text-right">Time</span>
+        <span className="w-16 text-right shrink-0">ETA</span>
+      </div>
+      <div className="space-y-1">
+        {entries.map((e) => (
           <div
-            className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-              e.position === 1
-                ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-gray-100 text-gray-500'
-            }`}
+            key={e.id}
+            className="flex items-center gap-2 bg-zinc-800 rounded px-3 py-2"
           >
-            {e.position}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold text-base">
-              {e.firstName} {e.lastName.charAt(0)}.
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {e.partySize === 4 ? '2v2' : '1v1'}
+            <span className={`size-6 rounded-full flex items-center justify-center text-xs font-medium shrink-0 ${
+              e.position === 1 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700 text-zinc-400'
+            }`}>
+              {e.position}
             </span>
-            <span className="text-xs text-gray-400">{e.duration}min</span>
-            <span className="text-sm font-medium text-gray-600 w-16 text-right">
-              {e.estimatedWait}
+            <span className="text-sm text-zinc-100 w-20 truncate shrink-0">
+              {e.firstName} {e.lastName}
             </span>
+            <span className="text-xs shrink-0 px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300 font-medium mr-1.5">{e.matchType}</span>
+            {e.matchTitle && <span className="text-xs text-zinc-400 truncate max-w-[80px]">{e.matchTitle}</span>}
+            <span className="text-xs text-zinc-500 w-14 shrink-0">{e.courtName || 'Any'}</span>
+            <span className="text-xs text-zinc-500 w-10 shrink-0 text-right">{e.duration}m</span>
+            <span className="text-xs text-zinc-400 w-16 text-right shrink-0">{e.estimatedWait}</span>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

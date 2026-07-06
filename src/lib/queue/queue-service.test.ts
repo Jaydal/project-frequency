@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('./booking-engine', () => ({ findAvailableCourt: vi.fn(), isSlotAvailable: vi.fn() }))
+vi.mock('@/lib/mqtt', () => ({ publishDisplay: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
 import { findAvailableCourt } from './booking-engine'
 import { joinQueue, leaveQueue, getQueuePosition, getEstimatedWait } from './queue-service'
 
-function makeChain() {
+function makeChain(settingsMock?: any) {
   const c: any = {
     select: vi.fn(() => c),
     eq: vi.fn(() => c),
@@ -26,18 +27,69 @@ function makeDb() {
   return { from: vi.fn((_: string) => makeChain()), rpc: vi.fn() }
 }
 
+function withPrices(db: any) {
+  const orig = db.from
+  db.from = vi.fn((t: string) => {
+    if (t === 'settings') {
+      const c = makeChain()
+      c.single = vi.fn(async () => ({ data: { value: '{"30":150,"60":300}' }, error: null }))
+      return c
+    }
+    return orig(t)
+  })
+  return db
+}
+
+function withWallet(db: any) {
+  const orig = db.from
+  db.from = vi.fn((t: string) => {
+    if (t === 'wallets') {
+      const c = makeChain()
+      c.single = vi.fn(async () => ({ data: { id: 'w1', balance: 1000 }, error: null }))
+      c.update = vi.fn(() => c)
+      c.eq = vi.fn(() => c)
+      c.select = vi.fn(() => c)
+      c.single = vi.fn(async () => ({ data: { id: 'w1', balance: 940 }, error: null }))
+      return c
+    }
+    if (t === 'wallet_transactions') {
+      const c = makeChain()
+      c.insert = vi.fn(() => c)
+      return c
+    }
+    return orig(t)
+  })
+  return db
+}
+
 describe('joinQueue', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('inserts a waiting entry when court is available', async () => {
-    const db = makeDb()
+    const db = withWallet(withPrices(makeDb()))
     db.from = vi.fn((t: string) => {
       const c = makeChain()
+      if (t === 'settings') {
+        c.single = vi.fn(async () => ({ data: { value: '{"30":150,"60":300}' }, error: null }))
+        return c
+      }
+      if (t === 'wallets') {
+        c.single = vi.fn(async () => ({ data: { id: 'w1', balance: 1000 }, error: null }))
+        c.update = vi.fn(() => c)
+        c.eq = vi.fn(() => c)
+        c.select = vi.fn(() => c)
+        c.single = vi.fn(async () => ({ data: { id: 'w1', balance: 940 }, error: null }))
+        return c
+      }
+      if (t === 'wallet_transactions') {
+        c.insert = vi.fn(() => c)
+        return c
+      }
       if (t === 'members') {
         c.single = vi.fn(async () => ({ data: { status: 'Active' }, error: null }))
       }
-      if (t === 'games') {
-        c.in = vi.fn(async () => ({ data: [], error: null }))
+      if (t === 'game_players') {
+        c.eq = vi.fn(async () => ({ data: [], error: null }))
       }
       if (t === 'queue_entries') {
         c.single = vi.fn(async () => ({ data: null, error: null }))
@@ -61,11 +113,12 @@ describe('joinQueue', () => {
     const db = makeDb()
     db.from = vi.fn((t: string) => {
       const c = makeChain()
+      if (t === 'settings') {
+        c.single = vi.fn(async () => ({ data: { value: '{"30":150,"60":300}' }, error: null }))
+        return c
+      }
       if (t === 'members') {
         c.single = vi.fn(async () => ({ data: { status: 'Active' }, error: null }))
-      }
-      if (t === 'games') {
-        c.in = vi.fn(async () => ({ data: [], error: null }))
       }
       if (t === 'queue_entries') {
         c.single = vi.fn(async () => ({ data: null, error: null }))
@@ -85,30 +138,34 @@ describe('joinQueue', () => {
     expect(result.status).toBe('waiting')
   })
 
-  it('rejects when member has overlapping booking', async () => {
+  it('allows booking even when member has active game', async () => {
     vi.mocked(findAvailableCourt).mockResolvedValue(null)
     const db = makeDb()
     db.from = vi.fn((t: string) => {
       const c = makeChain()
+      if (t === 'settings') {
+        c.single = vi.fn(async () => ({ data: { value: '{"30":150,"60":300}' }, error: null }))
+        return c
+      }
       if (t === 'members') {
         c.single = vi.fn(async () => ({ data: { status: 'Active' }, error: null }))
       }
-      if (t === 'games') {
-        c.in = vi.fn(async () => ({ data: [{ id: 'g1' }], error: null }))
-      }
-      if (t === 'game_players') {
-        c.in = vi.fn(async () => ({ data: [{ id: 'gp1' }], error: null }))
-      }
       if (t === 'queue_entries') {
         c.single = vi.fn(async () => ({ data: null, error: null }))
+        c.insert = vi.fn(() => {
+          const chain = makeChain()
+          chain.select = vi.fn(() => chain)
+          chain.single = vi.fn(async () => ({ data: { id: 'qe-1', member_id: 'm1', status: 'waiting' }, error: null }))
+          return chain
+        })
       }
       return c
     })
     vi.mocked(createClient).mockResolvedValue(db as any)
 
     const start = new Date('2026-07-07T14:00:00Z')
-    await expect(joinQueue({ memberId: 'm1', start, duration: 60, partySize: 2, playerIds: ['m1', 'm2'] }))
-      .rejects.toThrow('Already booked')
+    const result = await joinQueue({ memberId: 'm1', start, duration: 60, partySize: 2, playerIds: ['m1', 'm2'] })
+    expect(result.status).toBe('waiting')
   })
 })
 
@@ -144,7 +201,7 @@ describe('getQueuePosition', () => {
 describe('getEstimatedWait', () => {
   it('formats human-readable time', () => {
     expect(getEstimatedWait(0)).toBe('Now')
-    expect(getEstimatedWait(1)).toBe('~60 min')
-    expect(getEstimatedWait(3)).toBe('~3 hours')
+    expect(getEstimatedWait(1)).toBe('~30 min')
+    expect(getEstimatedWait(3)).toBe('~2 hours')
   })
 })

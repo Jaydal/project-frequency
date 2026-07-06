@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { isOverlapping, type CourtInfo } from './index';
+import { effectivePrepSec } from '@/lib/products-config-types';
 
 export async function findAvailableCourt(
   requestedStart: Date,
@@ -8,12 +9,15 @@ export async function findAvailableCourt(
   excludeCourtId?: string
 ): Promise<CourtInfo | null> {
   const supabase = await createClient();
-  const end = new Date(requestedStart.getTime() + duration * 60_000);
+  const { data: settings } = await supabase.from('settings').select('value').eq('key', 'preparationTime').single();
+  const rawPrepSec = parseInt(settings?.value ?? '300', 10);
+  const prepSec = isNaN(rawPrepSec) ? 300 : rawPrepSec;
+  const effectivePrep = effectivePrepSec(duration, prepSec);
+  const end = new Date(requestedStart.getTime() + effectivePrep * 1000 + duration * 60_000);
 
   const { data: courts } = await supabase
     .from('courts')
     .select('*')
-    .eq('status', 'Available')
     .order('name', { ascending: true });
 
   if (!courts) return null;
@@ -33,6 +37,9 @@ export async function isSlotAvailable(
   end: Date
 ): Promise<boolean> {
   const supabase = await createClient();
+  const { data: settings } = await supabase.from('settings').select('value').eq('key', 'preparationTime').single();
+  const rawPrepSec = parseInt(settings?.value ?? '300', 10);
+  const prepSec = isNaN(rawPrepSec) ? 300 : rawPrepSec;
 
   const { data: overlapping } = await supabase
     .from('games')
@@ -54,8 +61,9 @@ export async function isSlotAvailable(
   if (!straddling) return true;
 
   for (const game of straddling) {
+    const effectivePrep = effectivePrepSec(game.duration, prepSec);
     const gameEnd = new Date(
-      new Date(game.start_time).getTime() + game.duration * 60_000
+      new Date(game.start_time).getTime() + effectivePrep * 1000 + game.duration * 60_000
     );
     if (isOverlapping(start, end, new Date(game.start_time), gameEnd)) {
       return false;

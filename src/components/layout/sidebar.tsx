@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Home, Users, CreditCard, Settings, Activity, HeartPulse } from 'lucide-react';
+import { Home, Users, CreditCard, Settings, Activity, HeartPulse, BookOpen, Monitor } from 'lucide-react';
 
 export function Sidebar() {
   return (
@@ -18,6 +18,9 @@ export function Sidebar() {
         <Link href="/courts" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
           <Activity size={20} /> Court Monitor
         </Link>
+        <Link href="/virtual-courts" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
+          <Monitor size={20} /> Display Monitor
+        </Link>
         <Link href="/rfid" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
           <CreditCard size={20} /> RFID Cards
         </Link>
@@ -29,6 +32,9 @@ export function Sidebar() {
         </Link>
         <Link href="/health" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
           <HeartPulse size={20} /> Health
+        </Link>
+        <Link href="/api/docs" className="flex items-center gap-2 p-2 hover:bg-gray-800 rounded">
+          <BookOpen size={20} /> API Docs
         </Link>
       </nav>
     </div>

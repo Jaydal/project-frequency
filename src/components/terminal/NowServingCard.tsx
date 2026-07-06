@@ -31,25 +31,21 @@ export function NowServingCard({ playerNames, courtName, duration, expiresAt }: 
 
   if (!expiresAt || remaining <= 0) {
     return (
-      <div className="bg-gray-50 rounded-2xl p-5 shadow-sm border border-gray-200">
-        <p className="text-sm text-gray-400">No active offers</p>
+      <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
+        <p className="text-xs text-zinc-500">No active offers</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-amber-50 rounded-2xl p-5 shadow-sm border-2 border-amber-300">
-      <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
-        Now Serving
-      </div>
-      <div className="text-2xl font-bold text-gray-900 mb-1">{playerNames}</div>
-      <div className="text-sm text-gray-600 mb-3">
-        {courtName} &middot; {duration} min
-      </div>
-      <div className={`text-4xl font-mono font-bold mb-1 ${isUrgent ? 'text-red-600 animate-pulse' : 'text-amber-700'}`}>
+    <div className="bg-zinc-900 rounded-lg p-4 border border-emerald-500/30">
+      <p className="text-xs font-medium text-emerald-400 uppercase tracking-wider mb-1">Now Serving</p>
+      <p className="text-lg font-semibold text-zinc-100 mb-0.5">{playerNames}</p>
+      <p className="text-xs text-zinc-500 mb-2">{courtName} &middot; {duration} min</p>
+      <p className={`text-3xl font-mono font-bold tabular-nums ${isUrgent ? 'text-red-400' : 'text-emerald-400'}`}>
         {formatCountdown(remaining)}
-      </div>
-      <div className="text-xs text-gray-500">remaining to confirm at terminal</div>
+      </p>
+      <p className="text-xs text-zinc-500 mt-1">remaining to confirm</p>
     </div>
   );
 }

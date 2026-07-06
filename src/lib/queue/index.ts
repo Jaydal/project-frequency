@@ -23,7 +23,7 @@ export interface QueueEntry {
   updated_at: string;
 }
 
-export const QUEUE_DEFAULT_TIMEOUT_MIN = 5;
+export const QUEUE_DEFAULT_TIMEOUT_MS = 30_000; // 30s offer confirmation, part of 5min prep time
 export const AVG_GAME_DURATION_MIN = 60;
 
 export function isOverlapping(

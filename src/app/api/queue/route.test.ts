@@ -110,11 +110,12 @@ describe('POST /api/queue', () => {
     expect(data.estimatedWait).toBe('~60 min');
   });
 
-  it('returns error when member is already booked', async () => {
-    mockJoinQueue.mockRejectedValue(new Error('Already booked'));
+  it('returns 409 when member is already in queue', async () => {
+    mockJoinQueue.mockRejectedValue(new Error('Already in queue'));
     const res = await POST(makeReq(validBody));
     const data = await res.json();
-    expect(data.error).toBe('Already booked');
+    expect(res.status).toBe(409);
+    expect(data.error).toBe('Already in queue');
   });
 });
 

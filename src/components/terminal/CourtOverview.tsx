@@ -2,125 +2,105 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { phaseForElapsed } from './CourtStatusCard';
+import { effectivePrepSec } from '@/lib/products-config-types';
 
-interface CourtOverviewData {
+interface CourtState {
   id: string;
   name: string;
   status: string;
-  remaining?: string;
-  queueCount: number;
+  elapsed: number;
+  duration?: number;
 }
 
-const STATUS_BADGE: Record<string, { bg: string; text: string }> = {
-  Available: { bg: 'bg-green-100', text: 'text-green-700' },
-  Playing: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  Reserved: { bg: 'bg-orange-100', text: 'text-orange-700' },
-  Maintenance: { bg: 'bg-red-100', text: 'text-red-700' },
-  Closed: { bg: 'bg-gray-100', text: 'text-gray-500' },
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  Available: 'Available',
-  Playing: 'Playing',
-  Reserved: 'Reserved',
-  Maintenance: 'Maintenance',
-  Closed: 'Closed',
-};
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export function CourtOverview() {
-  const [courts, setCourts] = useState<CourtOverviewData[]>([]);
+  const [courts, setCourts] = useState<CourtState[]>([]);
+  const [prepTimeSec, setPrepTimeSec] = useState(300);
   const supabase = createClient();
 
-  useEffect(() => {
-    fetchOverview();
-    const channel = supabase.channel('court-overview');
-    channel.on('postgres_changes',
-      { event: '*', schema: 'public', table: 'games' },
-      () => fetchOverview()
-    );
-    channel.on('postgres_changes',
-      { event: '*', schema: 'public', table: 'queue_entries' },
-      () => fetchOverview()
-    );
-    channel.subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+  async function fetchAll() {
+    const { data: settings } = await supabase.from('settings').select('key, value').eq('key', 'preparationTime').single();
+    if (settings) {
+      const v = parseInt(settings.value, 10);
+      if (!isNaN(v)) setPrepTimeSec(v);
+    }
 
-  async function fetchOverview() {
-    const { data: allCourts } = await supabase
+    const { data: courtsData } = await supabase
       .from('courts')
       .select('*')
-      .order('name');
+      .order('name', { ascending: true });
+    if (!courtsData) return;
 
     const { data: games } = await supabase
       .from('games')
-      .select('court_id, duration, start_time')
+      .select('court_id, status, start_time, duration')
       .in('status', ['In Progress', 'Scheduled']);
 
-    const { data: queue } = await supabase
-      .from('queue_entries')
-      .select('court_id')
-      .eq('status', 'waiting');
-
-    if (!allCourts) return;
-
-    const busyMap = new Map<string, { duration: number; start_time: string }>();
-    (games ?? []).forEach((g: any) => {
-      busyMap.set(g.court_id, g);
-    });
-
-    const queueCounts = new Map<string, number>();
-    (queue ?? []).forEach((q: any) => {
-      const courtId = q.court_id ?? '__none';
-      queueCounts.set(courtId, (queueCounts.get(courtId) ?? 0) + 1);
-    });
-
-    const totalWaiting = queue?.length ?? 0;
-    const perCourt = Math.max(1, Math.ceil(totalWaiting / (allCourts.length || 1)));
-
-    setCourts(allCourts.map((c: any) => {
-      const game = busyMap.get(c.id);
-      let status = c.status === 'Available' ? 'Available' : c.status;
-      let remaining: string | undefined;
-      if (game) {
-        status = 'Playing';
-        const elapsed = Math.floor((Date.now() - new Date(game.start_time).getTime()) / 1000);
-        const left = Math.max(0, game.duration * 60 - elapsed);
-        remaining = `${Math.ceil(left / 60)} min`;
+    const now = Date.now();
+    setCourts(courtsData.map((c: any) => {
+      const game = (games ?? []).find((g: any) => g.court_id === c.id);
+      if (game && game.start_time) {
+        return {
+          id: c.id,
+          name: c.name,
+          status: game.status === 'In Progress' ? 'In Progress' : 'Scheduled',
+          elapsed: game.status === 'In Progress'
+            ? Math.floor((now - new Date(game.start_time).getTime()) / 1000)
+            : 0,
+          duration: game.duration,
+        };
       }
-      return {
-        id: c.id,
-        name: c.name,
-        status,
-        remaining,
-        queueCount: queueCounts.get(c.id) ?? 0,
-      };
+      return { id: c.id, name: c.name, status: 'Available', elapsed: 0 };
     }));
   }
 
+  useEffect(() => {
+    fetchAll();
+    const interval = setInterval(fetchAll, 5000);
+    const channel = supabase.channel('court-overview');
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'games' },
+      () => fetchAll()
+    );
+    channel.on('postgres_changes',
+      { event: '*', schema: 'public', table: 'courts' },
+      () => fetchAll()
+    );
+    channel.subscribe();
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   return (
-    <div className="h-full overflow-y-auto p-3 space-y-2 bg-gray-50">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Court Overview</h3>
-      {courts.map(c => {
-        const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.Closed;
-        const label = STATUS_LABEL[c.status] ?? c.status;
-        return (
-          <div key={c.id} className="bg-white rounded-xl p-3 text-sm">
-            <div className="font-bold text-gray-800 text-base">{c.name}</div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge.bg} ${badge.text}`}>
-                {label}
-              </span>
+    <div className="h-full flex flex-col p-3 gap-1.5">
+      <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Courts</h2>
+      <div className="flex-1 space-y-1 overflow-y-auto">
+        {courts.map(c => {
+          const effectivePrep = c.duration ? effectivePrepSec(c.duration, prepTimeSec) : prepTimeSec;
+          const phase = phaseForElapsed(c.elapsed, effectivePrep);
+          return (
+            <div key={c.id} className={`rounded px-2 py-1.5 border ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-zinc-900 border-amber-500/20' : 'bg-zinc-900 border-emerald-500/20') : 'bg-zinc-900/50 border-zinc-800'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className={`size-1.5 rounded-full ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-zinc-600'}`} />
+                  <span className="text-xs font-medium text-zinc-300">{c.name}</span>
+                </div>
+                {c.status === 'In Progress' && (
+                  <span className="text-xs font-mono text-zinc-400 tabular-nums">{formatTime(c.elapsed)}</span>
+                )}
+              </div>
             </div>
-            {c.remaining && (
-              <div className="text-xs text-gray-500 mt-1">{c.remaining} remaining</div>
-            )}
-            {c.queueCount > 0 && (
-              <div className="text-xs text-orange-600 font-medium mt-1">Queue: {c.queueCount}</div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

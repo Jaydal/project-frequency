@@ -37,6 +37,7 @@ const joinSchema = z.object({
   partySize: z.union([z.literal(2), z.literal(4)]),
   playerIds: z.array(z.string().uuid()).min(1).max(4),
   courtId: z.string().uuid().optional(),
+  matchTitle: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
       partySize: result.data.partySize,
       playerIds: result.data.playerIds,
       courtId: result.data.courtId,
+      matchTitle: result.data.matchTitle,
     });
 
     if (entry.status === 'completed' && entry.court_id) {
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json(entry, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    const status = message === 'Member not active' || message === 'Already booked' || message === 'Already in queue' ? 409 : 400;
+    const status = message === 'Member not active' || message === 'Already in queue' ? 409 : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

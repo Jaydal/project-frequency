@@ -2,6 +2,16 @@ import { createClient } from '@/lib/supabase/server';
 import { isSlotAvailable } from './booking-engine';
 import { processCourt } from './queue-processor';
 import { publishDisplay } from '@/lib/mqtt';
+import { effectivePrepSec } from '@/lib/products-config-types';
+
+async function getChargeAmount(duration: number, partySize: number): Promise<number> {
+  const supabase = await createClient();
+  const { data: pricesRow } = await supabase.from('settings').select('value').eq('key', 'prices').single();
+  const rates: Record<string, number> = pricesRow?.value ? JSON.parse(pricesRow.value) : { '30': 150, '60': 300, '90': 450 };
+  const rate = rates[String(duration)];
+  if (!rate) throw new Error(`No price configured for ${duration} min`);
+  return Math.round((rate * (duration / 30)) / (partySize === 4 ? 2 : 1));
+}
 
 export async function acceptOffer(entryId: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
@@ -29,8 +39,14 @@ export async function acceptOffer(entryId: string): Promise<{ success: boolean; 
     return { success: false, error: 'Member not active' };
   }
 
+  const charge = await getChargeAmount(entry.duration, entry.party_size);
+
+  const { data: prepRow } = await supabase.from('settings').select('value').eq('key', 'preparationTime').single();
+  const prepSec = parseInt(prepRow?.value ?? '300', 10);
+  const effectivePrep = effectivePrepSec(entry.duration, isNaN(prepSec) ? 300 : prepSec);
+
   const start = new Date(entry.requested_start);
-  const end = new Date(start.getTime() + entry.duration * 60_000);
+  const end = new Date(start.getTime() + effectivePrep * 1000 + entry.duration * 60_000);
   if (!entry.court_id || !(await isSlotAvailable(entry.court_id, start, end))) {
     await supabase.from('queue_entries').update({ status: 'waiting', court_id: null, expires_at: null, updated_at: new Date().toISOString() }).eq('id', entryId);
     if (entry.court_id) await processCourt(entry.court_id);
@@ -38,20 +54,22 @@ export async function acceptOffer(entryId: string): Promise<{ success: boolean; 
   }
 
   const { data: court } = await supabase.from('courts').select('name').eq('id', entry.court_id).single();
+  const playerIds: string[] = typeof entry.player_ids === 'string' ? JSON.parse(entry.player_ids) : entry.player_ids;
   const { data: rfidCards } = await supabase
     .from('rfid_cards')
     .select('uid, member_id')
-    .in('member_id', entry.player_ids)
+    .in('member_id', playerIds)
     .eq('status', 'Active');
 
   const rfidMap = new Map((rfidCards ?? []).map(r => [r.member_id, r.uid]));
-  const players = (entry.player_ids as string[]).map((pid, i) => ({
+  const chargePerPerson = Math.round(charge / playerIds.length);
+  const players = playerIds.map((pid, i) => ({
     rfid: rfidMap.get(pid) || '',
     team: entry.party_size === 4 ? (i < 2 ? 'Team A' : 'Team B') : null,
-    charge_amount: 0,
+    charge_amount: chargePerPerson,
   }));
 
-  const { error: gameErr } = await supabase.rpc('register_game', {
+  const { data: gameId, error: gameErr } = await supabase.rpc('register_game', {
     p_court_name: court?.name ?? '',
     p_match_type: entry.party_size === 4 ? '2v2' : '1v1',
     p_duration: entry.duration,
@@ -65,6 +83,10 @@ export async function acceptOffer(entryId: string): Promise<{ success: boolean; 
       return { success: false, error: 'Insufficient credits' };
     }
     return { success: false, error: gameErr.message };
+  }
+
+  if (entry.match_title && gameId) {
+    await supabase.from('games').update({ match_title: entry.match_title }).eq('id', gameId);
   }
 
   await supabase.from('queue_entries').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', entryId);
