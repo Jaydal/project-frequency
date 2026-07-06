@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,21 +14,96 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 
-export default function UpdatePasswordPage() {
+export default function UpdatePasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const router = useRouter();
+  const { code } = use(searchParams);
+  const [recovered, setRecovered] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!code || typeof code !== 'string') return;
+
+    const supabase = createClient();
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) {
+        setSessionError(error.message);
+      } else {
+        setSessionReady(true);
+      }
+    });
+  }, [code]);
+
+  if (!code) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Invalid reset link</CardTitle>
+            <CardDescription>
+              This link is missing the reset code. Please request a new one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => router.push('/forgot-password')} className="w-full">
+              Request new link
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (sessionError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Reset link expired</CardTitle>
+            <CardDescription>{sessionError}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => router.push('/forgot-password')} className="w-full">
+              Request new link
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!sessionReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Verifying…</CardTitle>
+            <CardDescription>
+              Validating your reset link.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-center">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return <PasswordForm onDone={() => router.push('/dashboard')} />;
+}
+
+function PasswordForm({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.onAuthStateChange((event) => {
-      if (event !== 'PASSWORD_RECOVERY') {
-        router.push('/login');
-      }
-    });
-  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +134,7 @@ export default function UpdatePasswordPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => router.push('/dashboard')} className="w-full">
+            <Button onClick={onDone} className="w-full">
               Go to Dashboard
             </Button>
           </CardContent>
