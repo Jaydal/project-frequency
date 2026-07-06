@@ -32,8 +32,6 @@ type QueueEntry = {
   created_at: string;
 };
 
-const supabase = createClient();
-
 function getEstimatedWait(position: number): string {
   if (position <= 0) return 'Now';
   const minutes = position * 60;
@@ -46,12 +44,7 @@ export function QueueBoard() {
   const [offers, setOffers] = useState<QueueEntry[]>([]);
   const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, { first: string; last: string }>>({});
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const supabase = createClient();
 
   const fetchInitial = useCallback(async () => {
     const { data: games } = await supabase
@@ -87,7 +80,7 @@ export function QueueBoard() {
         const game = statusMap.get(c.id);
         if (game) {
           const elapsed = game.start_time
-            ? Math.floor((now - new Date(game.start_time).getTime()) / 1000)
+            ? Math.floor((Date.now() - new Date(game.start_time).getTime()) / 1000)
             : 0;
           return {
             id: c.id,
@@ -121,7 +114,7 @@ export function QueueBoard() {
         setMemberNames(prev => ({ ...prev, ...map }));
       }
     }
-  }, [now]);
+  }, []);
 
   useEffect(() => {
     fetchInitial();
@@ -142,7 +135,7 @@ export function QueueBoard() {
 
     channel.subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [fetchInitial]);
 
   const prioritizedOffer = offers.length > 0
     ? offers.reduce((a, b) =>
