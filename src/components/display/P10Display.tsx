@@ -54,20 +54,18 @@ const FONT: Record<string, number[]> = {
 
 const CHAR_W = 5;
 const CHAR_H = 7;
-const CHAR_H_COMPACT = 5;
 const SPACING = 1;
 const CELL_W = CHAR_W + SPACING;
 
 function textWidth(text: string): number { return text.length * CELL_W; }
 
-function textToDots(text: string, offsetX = 0, offsetY = 0, compact = false): { x: number; y: number }[] {
+function textToDots(text: string, offsetX = 0, offsetY = 0): { x: number; y: number }[] {
   const dots: { x: number; y: number }[] = [];
   let cursor = offsetX;
-  const charH = compact ? CHAR_H_COMPACT : CHAR_H;
   for (const ch of text) {
-    const rows = getChar(ch, compact);
+    const rows = getChar(ch);
     if (!rows) { cursor += CELL_W; continue; }
-    for (let row = 0; row < charH; row++) {
+    for (let row = 0; row < CHAR_H; row++) {
       for (let col = 0; col < CHAR_W; col++) {
         if (rows[row] & (1 << (CHAR_W - 1 - col))) {
           dots.push({ x: cursor + col, y: offsetY + row });
@@ -79,27 +77,24 @@ function textToDots(text: string, offsetX = 0, offsetY = 0, compact = false): { 
   return dots;
 }
 
-function getChar(ch: string, compact = false): number[] | undefined {
+function getChar(ch: string): number[] | undefined {
   const u = ch.toUpperCase();
-  const rows = FONT[u] ?? (ch === '\u00A0' ? FONT[' '] : undefined);
-  if (!rows || !compact) return rows;
-  // Strip first and last row for 16px panels: 5x7 → 5x5
-  return rows.slice(1, -1);
+  return FONT[u] ?? (ch === '\u00A0' ? FONT[' '] : undefined);
 }
 
 type LineDots = { dots: { x: number; y: number }[]; width: number; text: string; yOff: number };
 
-function renderLine(text: string, yOff: number, panelWidth: number, compact = false): LineDots {
+function renderLine(text: string, yOff: number, panelWidth: number): LineDots {
   const s = text || '';
   const w = textWidth(s);
   const xOff = w < panelWidth ? Math.floor((panelWidth - w) / 2) : 0;
   return {
     text: s, width: w, yOff,
-    dots: textToDots(s.toUpperCase(), xOff, yOff, compact),
+    dots: textToDots(s.toUpperCase(), xOff, yOff),
   };
 }
 
-function ScrollGroup({ line, panelWidth, yOff, compact }: { line: LineDots; panelWidth: number; yOff: number; compact?: boolean }) {
+function ScrollGroup({ line, panelWidth }: { line: LineDots; panelWidth: number }) {
   const overflows = line.width > panelWidth;
 
   // Horizontal marquee scroll for overflowing lines
@@ -111,7 +106,7 @@ function ScrollGroup({ line, panelWidth, yOff, compact }: { line: LineDots; pane
       {line.dots.map((d, i) => (
         <circle key={i} cx={d.x + 0.5} cy={d.y + 0.5} r={0.4} fill="#ffd8a0" opacity={0.95} />
       ))}
-      {overflows && textToDots(line.text, line.width + panelWidth + 4, line.yOff, compact).map((d, i) => (
+      {overflows && textToDots(line.text, line.width + panelWidth + 4, line.yOff).map((d, i) => (
         <circle key={`dup-${i}`} cx={d.x + 0.5} cy={d.y + 0.5} r={0.4} fill="#ffd8a0" opacity={0.95} />
       ))}
     </>
@@ -138,22 +133,21 @@ export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props
   const isHoriz = layout === 'horizontal';
   const cols = isHoriz ? 64 : 32;
   const rows = isHoriz ? 16 : 32;
-  const compact = isHoriz;
-  const charH = compact ? CHAR_H_COMPACT : CHAR_H;
-  const lineGap = compact ? 0 : 2;
-  const lineCount = compact ? 2 : 3; // 2 lines for 16px horizontal, 3 lines for 32px vertical
+  const charH = CHAR_H;
+  const lineGap = isHoriz ? 1 : 2;
+  const lineCount = isHoriz ? 2 : 3; // 2 lines for 16px horizontal, 3 lines for 32px vertical
 
   const contentH = charH * lineCount + lineGap * (lineCount - 1);
-  const topOff = Math.floor((rows - contentH) / 2) + 1; // +1 safety margin
+  const topOff = Math.floor((rows - contentH) / 2);
 
-  // For horizontal (64×16): 2 lines of 5x5 compact font, centered in 16 rows
+  // For horizontal (64×16): 2 lines of 5x7 font centered in 16 rows (1px gap)
   // For vertical (32×32): 3 lines of 5x7 font with 2px gaps, centered in 32 rows
 
   const rawLines = [line1 || '', line2 || '', line3 || ''];
   const displayLines = rawLines.slice(0, lineCount);
 
   const lines = displayLines.map((text, i) =>
-    renderLine(text, topOff + i * (charH + lineGap), cols, compact),
+    renderLine(text, topOff + i * (charH + lineGap), cols),
   );
 
   return (
@@ -218,7 +212,7 @@ export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props
               {/* Lit LED dots with glow */}
               <g clipPath="url(#panel-clip)" filter="url(#led-glow)">
                 {lines.map((line, i) => (
-                  <ScrollGroup key={i} line={line} panelWidth={cols} yOff={0} compact={compact} />
+                  <ScrollGroup key={i} line={line} panelWidth={cols} />
                 ))}
               </g>
 
