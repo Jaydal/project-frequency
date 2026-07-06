@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AddMemberDialog } from './add-member-dialog';
+import { AssignRfidButton, ReloadWalletButton } from './member-actions';
 
 export default async function MembersPage() {
   const supabase = await createClient();
@@ -23,15 +24,16 @@ export default async function MembersPage() {
             <TableRow>
               <TableHead>Member ID</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>RFID UID</TableHead>
-              <TableHead>Wallet Balance</TableHead>
+              <TableHead>RFID</TableHead>
+              <TableHead>Balance</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!members?.length ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">No members found.</TableCell>
+                <TableCell colSpan={6} className="text-center">No members found.</TableCell>
               </TableRow>
             ) : (
               members.map((m: any) => {
@@ -39,13 +41,19 @@ export default async function MembersPage() {
                 const wallet = Array.isArray(m.wallets) ? m.wallets[0] : m.wallets;
                 return (
                   <TableRow key={m.id}>
-                    <TableCell>{m.member_id}</TableCell>
+                    <TableCell className="font-mono text-sm">{m.member_id}</TableCell>
                     <TableCell>{m.first_name} {m.last_name}</TableCell>
-                    <TableCell>
-                      {activeRfid?.uid ?? <span className="text-gray-400">Not Assigned</span>}
+                    <TableCell className="font-mono text-sm">
+                      {activeRfid?.uid ?? <span className="text-gray-400">—</span>}
                     </TableCell>
                     <TableCell>₱{wallet?.balance ?? 0}</TableCell>
                     <TableCell>{m.status}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {!activeRfid && <AssignRfidButton memberId={m.member_id} />}
+                        <ReloadWalletButton memberId={m.member_id} />
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })

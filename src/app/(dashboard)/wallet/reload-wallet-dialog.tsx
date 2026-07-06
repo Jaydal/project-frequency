@@ -25,7 +25,7 @@ export function ReloadWalletDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger>
         <Button>Reload Wallet</Button>
       </DialogTrigger>
       <DialogContent>

@@ -25,7 +25,7 @@ export function AssignRFIDDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger>
         <Button>Assign RFID</Button>
       </DialogTrigger>
       <DialogContent>

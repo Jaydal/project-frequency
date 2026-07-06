@@ -9,14 +9,14 @@ import { toast } from "sonner";
 
 export function AddMemberDialog() {
   const [open, setOpen] = useState(false);
-  const [formData, setFormData] = useState({ memberId: "", firstName: "", lastName: "", email: "" });
+  const [formData, setFormData] = useState({ firstName: "", lastName: "", email: "" });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await createMember(formData);
       setOpen(false);
-      setFormData({ memberId: "", firstName: "", lastName: "", email: "" });
+      setFormData({ firstName: "", lastName: "", email: "" });
       toast("Member created successfully!");
     } catch(err) {
       toast("Failed to create member");
@@ -25,7 +25,7 @@ export function AddMemberDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger>
         <Button>Add Member</Button>
       </DialogTrigger>
       <DialogContent>
@@ -33,10 +33,6 @@ export function AddMemberDialog() {
           <DialogTitle>Add New Member</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="memberId">Member ID</Label>
-            <Input id="memberId" required value={formData.memberId} onChange={e => setFormData({ ...formData, memberId: e.target.value })} />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="firstName">First Name</Label>
             <Input id="firstName" required value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} />
