@@ -237,6 +237,28 @@ EXCEPTION
 END;
 $$;
 
+CREATE TABLE IF NOT EXISTS queue_entries (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  member_id       UUID NOT NULL REFERENCES members(id),
+  requested_start TIMESTAMPTZ NOT NULL,
+  duration        INTEGER NOT NULL CHECK (duration IN (30, 60, 90)),
+  party_size      INTEGER NOT NULL CHECK (party_size IN (2, 4)),
+  player_ids      JSONB NOT NULL DEFAULT '[]',
+  court_id        UUID REFERENCES courts(id),
+  status          TEXT NOT NULL DEFAULT 'waiting'
+                    CHECK (status IN (
+                      'waiting', 'offered', 'accepted',
+                      'declined', 'expired', 'cancelled',
+                      'completed', 'insufficient_credits'
+                    )),
+  expires_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_queue_entries_member_waiting
+  ON queue_entries (member_id) WHERE status = 'waiting';
+
 -- Seed courts
 INSERT INTO courts (name, status) VALUES
   ('Court 1', 'Available'),
