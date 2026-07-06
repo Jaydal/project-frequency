@@ -1,62 +1,91 @@
-export const dynamic = "force-dynamic";
-import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+export const dynamic = 'force-dynamic';
+import { createClient } from '@/lib/supabase/server';
+import { getCourtStatus } from '@/lib/mqtt';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import DisplayControl from '@/components/courts/DisplayControl';
+import QueuePanel from '@/components/courts/QueuePanel';
+import HealthBadge from '@/components/ui/HealthBadge';
+import CourtDeviceBadge from '@/components/courts/CourtDeviceBadge';
+import AddCourtForm from '@/components/courts/AddCourtForm';
 
 export default async function CourtsPage() {
-  const courts = await prisma.court.findMany({
-    include: {
-      games: {
-        where: { status: 'In Progress' },
-        include: { players: { include: { member: true } } },
-        orderBy: { startTime: 'desc' },
-        take: 1
-      }
-    }
-  });
+  const supabase = await createClient();
+
+  const [{ data: courts }, { data: activeGames }] = await Promise.all([
+    supabase.from('courts').select('*').order('name'),
+    supabase
+      .from('games')
+      .select('*, game_players(*, members(*))')
+      .eq('status', 'In Progress')
+      .order('start_time', { ascending: false }),
+  ]);
+
+  const courtList = (courts ?? []).map((c: any) => ({ id: c.id, name: c.name }));
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Court Monitor</h1>
+        <HealthBadge />
       </div>
 
+      {/* Add Court Form */}
+      <AddCourtForm />
+
+      {/* Court status cards */}
       <div className="grid gap-6 md:grid-cols-2">
-        {courts.map(court => {
-          const activeGame = court.games[0];
+        {(courts ?? []).map((court: any) => {
+          const activeGame = (activeGames ?? []).find((g: any) => g.court_id === court.id);
+          const deviceStatus = getCourtStatus(court.id);
+
           return (
-            <Card key={court.id} className={court.status === 'In Game' ? 'border-red-500' : 'border-green-500'}>
+            <Card
+              key={court.id}
+              className={court.status === 'In Game' ? 'border-red-500' : 'border-green-500'}
+            >
               <CardHeader className="pb-2">
-                <CardTitle className="text-2xl flex justify-between items-center">
-                  {court.name}
-                  <span className={`text-sm px-3 py-1 rounded-full ${court.status === 'In Game' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                    {court.status}
-                  </span>
+                <CardTitle className="text-2xl flex justify-between items-center gap-2">
+                  <span>{court.name}</span>
+                  <div className="flex items-center gap-2">
+                    <CourtDeviceBadge courtId={court.id} initialStatus={deviceStatus} />
+                    <span className={`text-sm px-3 py-1 rounded-full ${
+                      court.status === 'In Game'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {court.status}
+                    </span>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {activeGame ? (
                   <div className="space-y-4">
                     <div className="text-sm text-gray-500">
-                      Match: {activeGame.matchType} | Duration: {activeGame.duration} min
+                      Match: {activeGame.match_type} · Duration: {activeGame.duration} min
                     </div>
                     <div>
                       <h4 className="font-semibold mb-2">Players:</h4>
                       <ul className="list-disc list-inside text-sm">
-                        {activeGame.players.map(p => (
-                          <li key={p.id}>{p.member.firstName} {p.member.lastName}</li>
+                        {(activeGame.game_players ?? []).map((p: any) => (
+                          <li key={p.id}>{p.members?.first_name} {p.members?.last_name}</li>
                         ))}
                       </ul>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-gray-500 py-8 text-center">
-                    Court is currently available.
-                  </div>
+                  <div className="text-gray-500 py-8 text-center">Court is currently available.</div>
                 )}
               </CardContent>
             </Card>
           );
         })}
+      </div>
+
+      {/* Queue + Display management */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <QueuePanel courts={courtList} />
+        <DisplayControl courts={courtList} />
       </div>
     </div>
   );
