@@ -45,6 +45,8 @@ export async function updateSession(request: NextRequest) {
                         request.nextUrl.pathname.startsWith('/api/controller') ||
                         request.nextUrl.pathname.startsWith('/api/public') ||
                         request.nextUrl.pathname.startsWith('/api/health') ||
+                        request.nextUrl.pathname.startsWith('/api/queue') ||
+                        request.nextUrl.pathname.startsWith('/api/display/state') ||
                         request.nextUrl.pathname.startsWith('/health') ||
                         request.nextUrl.pathname.startsWith('/terminal') ||
                         request.nextUrl.pathname === '/';
