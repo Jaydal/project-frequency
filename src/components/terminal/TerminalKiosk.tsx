@@ -225,7 +225,7 @@ export function TerminalKiosk() {
     // Check if member has an active game
     const { data: activeGame } = await supabase
       .from('games')
-      .select('id, court_id, status, start_time, duration, courts!inner(name)')
+      .select('id, court_id, status, start_time, duration, courts!inner(name), game_players!inner(member_id)')
       .eq('status', 'In Progress')
       .eq('game_players.member_id', memberId)
       .maybeSingle();
