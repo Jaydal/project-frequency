@@ -69,7 +69,7 @@ export async function POST() {
   const { count: qCount } = await supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting');
   const queueTotal = qCount ?? 0;
   const gameByCourt = new Map<string, any>();
-  (games ?? []).forEach(g => gameByCourt.set(g.court_id, g));
+  (games ?? []).forEach((g: any) => gameByCourt.set(g.court_id, g));
 
   for (const court of courts ?? []) {
     const game = gameByCourt.get(court.id);

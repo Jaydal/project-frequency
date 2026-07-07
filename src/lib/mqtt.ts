@@ -46,12 +46,12 @@ function client(): MqttClient {
 
   c.on('offline', () => { g._mqttConnected = false; });
   c.on('close',   () => { g._mqttConnected = false; });
-  c.on('error', (err) => {
+  c.on('error', (err: Error) => {
     g._mqttConnected = false;
     console.error('[mqtt]', err.message);
   });
 
-  c.on('message', (topic, payload) => {
+  c.on('message', (topic: string, payload: Buffer) => {
     const statusMatch = topic.match(/^(?:freq\.led\/)?courts\/(.+)\/status$/);
     if (statusMatch) {
       try {

@@ -44,16 +44,25 @@ export interface BoardQueueRow {
   estimatedWait: string;
 }
 
+/* Pricing/durations config (from the `settings` table) so the kiosk doesn't
+ * hardcode them. durations[i] pairs with rates[i]. */
+export interface BoardConfig {
+  durations: number[];
+  rates: number[];
+  prepTimeSec: number;
+}
+
 export interface BoardSnapshot {
+  config: BoardConfig;
   courts: BoardCourt[];
   nowServing: BoardNowServing;
   queue: BoardQueueRow[];
 }
 
 export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardSnapshot> {
-  const [{ data: prepSetting }, { data: games }, { data: allCourts }, { data: waiting }, { data: offers }] =
+  const [{ data: settingsRows }, { data: games }, { data: allCourts }, { data: waiting }, { data: offers }] =
     await Promise.all([
-      supabase.from('settings').select('value').eq('key', 'preparationTime').single(),
+      supabase.from('settings').select('key, value').in('key', ['products', 'prices', 'preparationTime']),
       supabase
         .from('games')
         .select('id, court_id, match_type, match_title, duration, status, start_time, courts!inner(name), game_players(member_id, members!inner(first_name, last_name))')
@@ -64,7 +73,16 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
       supabase.from('queue_entries').select('*').eq('status', 'offered').order('expires_at', { ascending: true }),
     ]);
 
-  const prepTimeSec = prepSetting ? (parseInt(prepSetting.value, 10) || 300) : 300;
+  const settings = new Map<string, string>((settingsRows ?? []).map((r: any) => [r.key, r.value]));
+  const tryParse = (v: string | undefined): any => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
+  const prepTimeSec = parseInt(settings.get('preparationTime') ?? '', 10) || 300;
+  const durations: number[] = tryParse(settings.get('products'))?.durations ?? [30, 60, 90];
+  const priceMap: Record<string, number> = tryParse(settings.get('prices')) ?? { '30': 150, '60': 300, '90': 450 };
+  const config: BoardConfig = {
+    durations,
+    rates: durations.map((d) => priceMap[String(d)] ?? 0),
+    prepTimeSec,
+  };
 
   const gameByCourt = new Map<string, any>();
   (games ?? []).forEach((g: any) => { if (!gameByCourt.has(g.court_id)) gameByCourt.set(g.court_id, g); });
@@ -136,5 +154,5 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
   // pass the raw configured prepTimeSec so the kiosk applies the same rule.
   void effectivePrepSec;
 
-  return { courts, nowServing, queue };
+  return { config, courts, nowServing, queue };
 }
