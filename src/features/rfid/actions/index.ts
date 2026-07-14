@@ -1,12 +1,17 @@
 'use server';
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { getRfidFormats } from '@/lib/rfid';
 
 export async function assignRFID(data: { memberId: string | null; uid: string }) {
   const supabase = await createClient();
+  const formats = getRfidFormats(data.uid);
 
   const { data: existing } = await supabase
-    .from('rfid_cards').select('id, status').eq('uid', data.uid).maybeSingle();
+    .from('rfid_cards')
+    .select('id, status')
+    .in('uid', formats)
+    .maybeSingle();
 
   if (existing) {
     if (existing.status !== 'Unassigned') {

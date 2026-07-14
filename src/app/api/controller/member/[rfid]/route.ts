@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkControllerKey } from '@/lib/controller-auth';
 import { processExpiredGames, processExpiredOffers } from '@/lib/queue/queue-processor';
+import { getRfidFormats } from '@/lib/rfid';
 
 export async function GET(
   _request: NextRequest,
@@ -18,12 +19,13 @@ export async function GET(
 
   const { rfid } = await context.params;
   const supabase = await createClient();
+  const formats = getRfidFormats(rfid);
 
   const { data: card } = await supabase
     .from('rfid_cards')
     .select('*, members(*, wallets(*))')
-    .eq('uid', rfid)
-    .single();
+    .in('uid', formats)
+    .maybeSingle();
 
   if (!card || card.status !== 'Active')
     return NextResponse.json({ error: 'Invalid or inactive RFID' }, { status: 404 });

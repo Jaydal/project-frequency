@@ -16,6 +16,7 @@ import { ErrorScreen } from './ErrorScreen';
 import type { ProductsConfig } from '@/lib/products-config-types';
 import { getCost } from '@/lib/products-config-types';
 import { AlertCircle, Trash2, Plus } from 'lucide-react';
+import { getRfidFormats } from '@/lib/rfid';
 
 interface Player {
   id: string;
@@ -260,12 +261,13 @@ export function TerminalKiosk() {
   async function lookupMember(uid: string) {
     setErrorInfo(null);
     try {
+      const formats = getRfidFormats(uid);
       const { data: card, error: err } = await supabase
         .from('rfid_cards')
         .select('member_id')
-        .eq('uid', uid)
+        .in('uid', formats)
         .eq('status', 'Active')
-        .single();
+        .maybeSingle();
       if (err || !card) { setErrorInfo({ title: 'RFID Read Failed', message: 'Card not recognized. Please try again.' }); setStep('error'); return; }
       
       const { data: memberData, error: memberErr } = await supabase

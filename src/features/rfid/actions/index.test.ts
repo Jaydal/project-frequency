@@ -16,6 +16,7 @@ function chainable(result: Result) {
     maybeSingle: vi.fn(async () => result),
     insert: vi.fn(async () => result),
     update: vi.fn(() => builder),
+    in: vi.fn(() => builder),
   }
   return builder
 }
@@ -36,7 +37,7 @@ describe('assignRFID', () => {
 
     // Assert RFID availability pre-check queries
     expect(rfidCards.select).toHaveBeenCalledWith('id, status')
-    expect(rfidCards.eq).toHaveBeenCalledWith('uid', 'UID-123')
+    expect(rfidCards.in).toHaveBeenCalledWith('uid', ['UID-123'])
 
     // Assert member lookup by UUID
     expect(members.select).toHaveBeenCalledWith('id')
