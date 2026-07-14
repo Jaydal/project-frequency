@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isSlotAvailable } from './booking-engine';
 import { processCourt } from './queue-processor';
 import { publishDisplay } from '@/lib/mqtt';
+import { generatePayload } from '@/lib/display/sports-caster';
 import { effectivePrepSec } from '@/lib/products-config-types';
 
 async function getChargeAmount(duration: number, partySize: number): Promise<number> {
@@ -91,11 +92,10 @@ export async function acceptOffer(entryId: string): Promise<{ success: boolean; 
 
   await supabase.from('queue_entries').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', entryId);
 
-  await publishDisplay(entry.court_id, {
-    line1: court?.name?.toUpperCase() ?? 'COURT',
-    line2: entry.match_title || `${entry.party_size === 4 ? '2v2' : '1v1'}`,
-    line3: 'GAME STARTED',
-  });
+  await publishDisplay(entry.court_id, generatePayload(entry.court_id, {
+    current: { name: entry.match_title || `${entry.party_size === 4 ? '2v2' : '1v1'}`, startTime: new Date().toISOString(), durationMinutes: entry.duration },
+    upcoming: []
+  }));
 
   return { success: true };
 }

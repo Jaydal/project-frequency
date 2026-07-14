@@ -15,7 +15,6 @@ import { BookingSuccess } from './BookingSuccess';
 import { ErrorScreen } from './ErrorScreen';
 import type { ProductsConfig } from '@/lib/products-config-types';
 import { getCost } from '@/lib/products-config-types';
-import { processExpiredGames, processAvailableCourts, processExpiredOffers, publishCourtDisplays } from '@/lib/complete-expired-games';
 
 interface Player {
   id: string;
@@ -33,6 +32,7 @@ interface CourtOption {
 }
 
 export type KioskStep =
+  | 'booting'
   | 'idle'
   | 'existing-queue'
   | 'select-court'
@@ -47,7 +47,7 @@ export type KioskStep =
 const SUCCESS_DELAY_MS = 5000;
 
 export function TerminalKiosk() {
-  const [step, setStep] = useState<KioskStep>('idle');
+  const [step, setStep] = useState<KioskStep>('booting');
   const [member, setMember] = useState<Player | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<CourtOption | null>(null);
   const [gameType, setGameType] = useState<'1v1' | '2v2' | null>(null);
@@ -114,10 +114,6 @@ export function TerminalKiosk() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      await processExpiredOffers();
-      await processExpiredGames();
-      if (!cancelled) await processAvailableCourts();
-      if (!cancelled) await publishCourtDisplays();
       if (!cancelled) await fetchCourts();
     };
     run();
@@ -125,31 +121,45 @@ export function TerminalKiosk() {
     const realtime = supabase.channel('kiosk-processor');
     realtime.on('postgres_changes',
       { event: '*', schema: 'public', table: 'games' },
-      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); publishCourtDisplays(); fetchCourts(); } }
+      () => { if (!cancelled) { fetchCourts(); } }
     );
     realtime.on('postgres_changes',
       { event: '*', schema: 'public', table: 'courts' },
-      () => { if (!cancelled) { processExpiredOffers(); processAvailableCourts(); publishCourtDisplays(); fetchCourts(); } }
+      () => { if (!cancelled) { fetchCourts(); } }
     );
     realtime.subscribe();
     return () => { cancelled = true; clearInterval(id); supabase.removeChannel(realtime); };
   }, []);
 
   async function fetchInitial() {
-    const { data: rows } = await supabase.from('settings').select('key, value').in('key', ['products', 'prices', 'preparationTime']);
-    if (rows) {
-      const map = new Map(rows.map(r => [r.key, r.value]));
-      const products = tryParse(map.get('products'));
-      const rates = tryParse(map.get('prices'));
-      const prepTimeSec = parseInt(map.get('preparationTime') ?? '', 10);
-      setConfig({
-        matchTypes: products?.matchTypes ?? ['1v1', '2v2'],
-        durations: products?.durations ?? [30, 60, 90],
-        rates: rates ?? { '30': 150, '60': 300, '90': 450 },
-        prepTimeSec: isNaN(prepTimeSec) ? 300 : prepTimeSec,
-      });
+    try {
+      // 1. Test backend API connection
+      const apiRes = await fetch('/api/health');
+      if (!apiRes.ok) throw new Error('API unreachable');
+
+      // 2. Test Supabase Database connection
+      const { data: rows, error } = await supabase.from('settings').select('key, value').in('key', ['products', 'prices', 'preparationTime']);
+      if (error) throw new Error('Database unreachable');
+
+      if (rows) {
+        const map = new Map(rows.map(r => [r.key, r.value]));
+        const products = tryParse(map.get('products'));
+        const rates = tryParse(map.get('prices'));
+        const prepTimeSec = parseInt(map.get('preparationTime') ?? '', 10);
+        setConfig({
+          matchTypes: products?.matchTypes ?? ['1v1', '2v2'],
+          durations: products?.durations ?? [30, 60, 90],
+          rates: rates ?? { '30': 150, '60': 300, '90': 450 },
+          prepTimeSec: isNaN(prepTimeSec) ? 300 : prepTimeSec,
+        });
+      }
+      await fetchCourts();
+      setStep('idle');
+    } catch (err: any) {
+      setErrorInfo({ title: 'System Offline', message: 'Unable to connect to the server. Retrying...' });
+      setStep('error');
+      setTimeout(fetchInitial, 5000); // retry after 5 seconds
     }
-    await fetchCourts();
   }
 
   function tryParse(json: string | undefined): any {
@@ -356,10 +366,7 @@ export function TerminalKiosk() {
   async function handleCancelQueue() {
     if (!queueEntry) return;
     try {
-      await supabase
-        .from('queue_entries')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', queueEntry.id);
+      await fetch(`/api/queue/${queueEntry.id}`, { method: 'DELETE' });
     } catch {}
     reset();
   }
@@ -367,10 +374,7 @@ export function TerminalKiosk() {
   async function handleCancelExisting() {
     if (!queueEntry) return;
     try {
-      await supabase
-        .from('queue_entries')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', queueEntry.id);
+      await fetch(`/api/queue/${queueEntry.id}`, { method: 'DELETE' });
     } catch {}
     setQueueEntry(null);
     setStep('select-court');
@@ -419,6 +423,15 @@ export function TerminalKiosk() {
   }
 
   switch (step) {
+    case 'booting':
+      return (
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center p-8">
+          <div className="w-16 h-16 border-4 border-zinc-800 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
+          <h1 className="text-2xl font-bold text-zinc-100 mb-2">Connecting to Network...</h1>
+          <p className="text-zinc-500">Performing system health checks before starting</p>
+        </div>
+      );
+
     case 'idle':
       return (
         <div className="relative min-h-screen bg-black">

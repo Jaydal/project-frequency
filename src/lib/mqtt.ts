@@ -8,10 +8,24 @@ type CourtStatus = {
   seenAt: number;
 };
 
+export interface DisplayPage {
+  text: string;
+  color?: string; // Hex string e.g. "#00FF00"
+  effect?: 'SCROLL' | 'STATIC' | 'BLINK';
+  durationSeconds?: number;
+}
+
 export interface DisplayPayload {
-  line1: string;
-  line2: string;
-  line3: string;
+  courtId: string;
+  action?: string;
+  state: 'OPEN' | 'PLAYING' | 'MAINTENANCE';
+  schedule: {
+    current?: { name: string; startTime: string; durationMinutes: number } | null;
+    upcoming: { name: string }[];
+  };
+  display: {
+    pages: DisplayPage[];
+  };
 }
 
 const g = global as typeof globalThis & {

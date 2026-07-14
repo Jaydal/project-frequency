@@ -17,9 +17,13 @@ export async function POST(request: Request) {
   }
 
   const ok = await publishDisplay(result.data.courtId, {
-    line1: result.data.line1,
-    line2: result.data.line2,
-    line3: result.data.line3,
+    courtId: result.data.courtId,
+    action: 'MANUAL_OVERRIDE',
+    state: 'MAINTENANCE',
+    schedule: { upcoming: [] },
+    display: {
+      pages: [{ text: `${result.data.line1} ${result.data.line2} ${result.data.line3}`.trim(), color: '#FFFFFF', effect: 'SCROLL', durationSeconds: 10 }]
+    }
   });
 
   return NextResponse.json({ published: ok });

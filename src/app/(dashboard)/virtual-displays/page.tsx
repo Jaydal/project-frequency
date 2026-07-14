@@ -17,11 +17,9 @@ function fmt(sec: number): string {
 export default function VirtualDisplaysPage() {
   const [courts, setCourts] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected] = useState('');
-  const [display, setDisplay] = useState<DisplayPayload | null>(null);
+  const [display, setDisplay] = useState<any>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-  const [gameInfo, setGameInfo] = useState<{ startTime: string; duration: number; prepTimeSec: number } | null>(null);
-  const [now, setNow] = useState(Date.now());
   const [layout, setLayout] = useState<'horizontal' | 'vertical'>('horizontal');
   const supabase = createClient();
   const viewerId = useMemo(() => Math.random().toString(36).slice(2, 10), []);
@@ -32,15 +30,8 @@ export default function VirtualDisplaysPage() {
     });
   }, []);
 
-  // Tick every second for local countdown
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Poll server display state every 2s + send heartbeat
-  useEffect(() => {
-    if (!selected) { setDisplay(null); setGameInfo(null); return; }
+    if (!selected) { setDisplay(null); return; }
 
     const fetchDisplay = async () => {
       try {
@@ -53,7 +44,6 @@ export default function VirtualDisplaysPage() {
         setConnected(mqtt.connected);
         setDisplay(state.display);
         setStatus(state.status?.status ?? null);
-        setGameInfo(state.game ?? null);
         fetch('/api/display/heartbeat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -66,22 +56,6 @@ export default function VirtualDisplaysPage() {
     const id = setInterval(fetchDisplay, 2000);
     return () => clearInterval(id);
   }, [selected]);
-
-  // Compute live display with local countdown
-  const liveDisplay = useMemo(() => {
-    if (!display || !gameInfo) return display;
-
-    const elapsed = Math.floor((now - new Date(gameInfo.startTime).getTime()) / 1000);
-    const prep = effectivePrepSec(gameInfo.duration, gameInfo.prepTimeSec);
-    const totalSec = gameInfo.duration * 60 + prep;
-
-    if (elapsed < prep) {
-      return { ...display, line2: `GAME ${fmt(prep - elapsed)}` };
-    } else if (elapsed < totalSec) {
-      return { ...display, line2: `${fmt(totalSec - elapsed)} LEFT` };
-    }
-    return display;
-  }, [display, gameInfo, now]);
 
   const selectedCourt = courts.find(c => c.id === selected || c.name === selected);
 
@@ -129,18 +103,18 @@ export default function VirtualDisplaysPage() {
       {selected && (
         <div className="w-full flex flex-col items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className={`size-2 rounded-full ${liveDisplay ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+            <span className={`size-2 rounded-full ${display ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
             <span className="text-sm font-medium text-foreground">{selectedCourt?.name ?? selected}</span>
           </div>
           <div className="w-full max-w-md mx-auto">
-            {liveDisplay ? (
-              <P10Display line1={liveDisplay.line1} line2={liveDisplay.line2} line3={liveDisplay.line3} layout={layout} />
+            {display ? (
+              <P10Display pages={display.display?.pages || display.pages} layout={layout} />
             ) : (
-              <P10Display line1="" line2="NO DISPLAY" line3="DATA" layout={layout} />
+              <P10Display pages={[{ text: 'NO DISPLAY DATA', color: '#ff0000', effect: 'STATIC' }]} layout={layout} />
             )}
           </div>
           <p className="text-[10px] text-center" style={{ color: '#ff3a00', opacity: 0.3 }}>
-            courts/{selected}/display{gameInfo && ' · countdown live'}
+            courts/{selected}/display
           </p>
 
           {status && (

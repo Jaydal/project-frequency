@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { joinQueue, getQueuePosition, getEstimatedWait } from '@/lib/queue/queue-service';
 import { acceptOffer, declineOffer } from '@/lib/queue/reservation-service';
+import { publishBoardOnce } from '@/lib/queue/board-publisher';
 import { z } from 'zod';
 
 export async function GET(request: Request) {
@@ -58,6 +59,10 @@ export async function POST(request: Request) {
       matchTitle: result.data.matchTitle,
     });
 
+    // Push the updated board to the firmware kiosk (setInterval publishing is
+    // unreliable in Next/serverless, so we publish on every mutation instead).
+    await publishBoardOnce();
+
     if (entry.status === 'completed' && entry.court_id) {
       const supabase = await createClient();
       const { data: court } = await supabase.from('courts').select('name').eq('id', entry.court_id).single();
@@ -92,6 +97,8 @@ export async function PATCH(request: Request) {
   const { id, action } = result.data;
 
   try {
+    // publish the refreshed board after the accept/decline mutation runs
+    const publishAfter = async () => { await publishBoardOnce(); };
     if (action === 'accept') {
       const res = await acceptOffer(id);
       if (!res.success) {
@@ -104,12 +111,14 @@ export async function PATCH(request: Request) {
         const { data: court } = await supabase.from('courts').select('name').eq('id', entry.court_id).single();
         courtName = court?.name;
       }
+      await publishAfter();
       return NextResponse.json({ success: true, courtName }, { status: 200 });
     }
 
     const supabase = await createClient();
     const { data: entry } = await supabase.from('queue_entries').select('court_id').eq('id', id).single();
     await declineOffer(id, entry?.court_id ?? null);
+    await publishAfter();
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

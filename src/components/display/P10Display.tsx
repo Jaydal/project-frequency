@@ -1,9 +1,16 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
+export interface DisplayPage {
+  text: string;
+  color?: string;
+  effect?: 'SCROLL' | 'STATIC' | 'BLINK';
+  durationSeconds?: number;
+}
+
 interface Props {
-  line1: string;
-  line2: string;
-  line3: string;
+  pages?: DisplayPage[];
   layout?: 'horizontal' | 'vertical';
 }
 
@@ -82,73 +89,88 @@ function getChar(ch: string): number[] | undefined {
   return FONT[u] ?? (ch === '\u00A0' ? FONT[' '] : undefined);
 }
 
-type LineDots = { dots: { x: number; y: number }[]; width: number; text: string; yOff: number };
+type LineDots = { dots: { x: number; y: number }[]; width: number; text: string; color: string; effect: string };
 
-function renderLine(text: string, yOff: number, panelWidth: number): LineDots {
-  const s = text || '';
+function renderPage(page: DisplayPage, panelWidth: number): LineDots {
+  const s = page.text || '';
   const w = textWidth(s);
-  const xOff = w < panelWidth ? Math.floor((panelWidth - w) / 2) : 0;
+  const isStatic = page.effect === 'STATIC' && w <= panelWidth;
+  const xOff = isStatic ? Math.floor((panelWidth - w) / 2) : 0;
+  
+  // The scale factor is 2, so the actual virtual height is 7 * 2 = 14.
+  // The panel height is 16. So y offset is 1. We don't scale the coordinates here, 
+  // we just scale the SVG group wrapper.
+  // So the unscaled yOff is 1 / 2 = 0.5 (or just 0, it doesn't matter since we center the group).
+  
   return {
-    text: s, width: w, yOff,
-    dots: textToDots(s.toUpperCase(), xOff, yOff),
+    text: s, 
+    width: w,
+    color: page.color || '#00FF00',
+    effect: page.effect || 'SCROLL',
+    dots: textToDots(s.toUpperCase(), xOff, 0),
   };
 }
 
-function ScrollGroup({ line, panelWidth }: { line: LineDots; panelWidth: number }) {
-  const overflows = line.width > panelWidth;
-
-  // Horizontal marquee scroll for overflowing lines
+function PageGroup({ line, panelWidth }: { line: LineDots; panelWidth: number }) {
+  const overflows = line.width > panelWidth || line.effect === 'SCROLL';
   const duration = Math.max(4, line.width * 0.3);
-  const dupOffset = line.width + panelWidth + 4;
 
   const rendered = (
     <>
       {line.dots.map((d, i) => (
-        <circle key={i} cx={d.x + 0.5} cy={d.y + 0.5} r={0.4} fill="#ffd8a0" opacity={0.95} />
+        <circle key={i} cx={d.x + 0.5} cy={d.y + 0.5} r={0.4} fill={line.color} opacity={0.95} />
       ))}
-      {overflows && textToDots(line.text, line.width + panelWidth + 4, line.yOff).map((d, i) => (
-        <circle key={`dup-${i}`} cx={d.x + 0.5} cy={d.y + 0.5} r={0.4} fill="#ffd8a0" opacity={0.95} />
+      {overflows && textToDots(line.text, line.width + panelWidth + 4, 0).map((d, i) => (
+        <circle key={`dup-${i}`} cx={d.x + 0.5} cy={d.y + 0.5} r={0.4} fill={line.color} opacity={0.95} />
       ))}
     </>
   );
 
-  if (!overflows) return <>{rendered}</>;
+  if (!overflows) {
+    if (line.effect === 'BLINK') {
+       return (
+         <g>
+           <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }`}</style>
+           <g style={{ animation: 'blink 1s step-end infinite' }}>{rendered}</g>
+         </g>
+       );
+    }
+    return <>{rendered}</>;
+  }
 
   return (
     <g>
       <style>{`
-        @keyframes scroll-${line.yOff} {
+        @keyframes scroll-page {
           0% { transform: translateX(${panelWidth}px); }
           100% { transform: translateX(-${line.width}px); }
         }
       `}</style>
-      <g style={{ animation: `scroll-${line.yOff} ${duration}s linear infinite` }}>
+      <g style={{ animation: `scroll-page ${duration}s linear infinite` }}>
         {rendered}
       </g>
     </g>
   );
 }
 
-export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props) {
+export function P10Display({ pages = [], layout = 'horizontal' }: Props) {
   const isHoriz = layout === 'horizontal';
   const cols = isHoriz ? 64 : 32;
   const rows = isHoriz ? 16 : 32;
-  const charH = CHAR_H;
-  const lineGap = isHoriz ? 1 : 2;
-  const lineCount = isHoriz ? 2 : 3; // 2 lines for 16px horizontal, 3 lines for 32px vertical
 
-  const contentH = charH * lineCount + lineGap * (lineCount - 1);
-  const topOff = Math.floor((rows - contentH) / 2);
+  const [idx, setIdx] = useState(0);
 
-  // For horizontal (64×16): 2 lines of 5x7 font centered in 16 rows (1px gap)
-  // For vertical (32×32): 3 lines of 5x7 font with 2px gaps, centered in 32 rows
+  useEffect(() => {
+    if (!pages || pages.length <= 1) return;
+    const dur = (pages[idx]?.durationSeconds || 10) * 1000;
+    const t = setTimeout(() => {
+      setIdx((prev) => (prev + 1) % pages.length);
+    }, dur);
+    return () => clearTimeout(t);
+  }, [idx, pages]);
 
-  const rawLines = [line1 || '', line2 || '', line3 || ''];
-  const displayLines = rawLines.slice(0, lineCount);
-
-  const lines = displayLines.map((text, i) =>
-    renderLine(text, topOff + i * (charH + lineGap), cols),
-  );
+  const activePage = pages && pages.length > 0 ? pages[idx] : { text: 'NO DATA', color: '#ff0000', effect: 'STATIC' as const };
+  const line = renderPage(activePage, cols / 2); // Unscaled cols is half
 
   return (
     <div className="w-full mx-auto" style={{ perspective: '600px' }}>
@@ -172,7 +194,6 @@ export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props
                 <clipPath id="panel-clip">
                   <rect x={0} y={0} width={cols} height={rows} rx={0.3} />
                 </clipPath>
-                {/* LED glow filter */}
                 <filter id="led-glow" x="-50%" y="-50%" width="200%" height="200%">
                   <feGaussianBlur stdDeviation="0.3" result="blur" />
                   <feMerge>
@@ -180,22 +201,18 @@ export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props
                     <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
-                {/* Radial gradient for off-LEDs */}
                 <radialGradient id="off-led" cx="50%" cy="40%" r="60%">
                   <stop offset="0%" stopColor="#1a1210" />
                   <stop offset="100%" stopColor="#0d0806" />
                 </radialGradient>
               </defs>
 
-              {/* Panel background */}
               <rect width={cols} height={rows} fill="url(#off-led)" rx={0.3} />
 
-              {/* Panel divider */}
               {isHoriz && (
                 <rect x={32} y={0} width={0.5} height={16} fill="#1a1a1a" rx={0.1} />
               )}
 
-              {/* All possible LED positions — dim/unlit */}
               {Array.from({ length: cols }).flatMap((_, cx) =>
                 Array.from({ length: rows }).map((_, cy) => (
                   <circle
@@ -203,20 +220,19 @@ export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props
                     cx={cx + 0.5}
                     cy={cy + 0.5}
                     r={0.3}
-                    fill="#ffd8a0"
-                    opacity={0.04}
+                    fill="#333333"
+                    opacity={0.1}
                   />
                 ))
               )}
 
-              {/* Lit LED dots with glow */}
               <g clipPath="url(#panel-clip)" filter="url(#led-glow)">
-                {lines.map((line, i) => (
-                  <ScrollGroup key={i} line={line} panelWidth={cols} />
-                ))}
+                {/* Scale 2x and center vertically */}
+                <g transform={`translate(0, ${(rows - 14)/2}) scale(2)`}>
+                  <PageGroup line={line} panelWidth={cols / 2} />
+                </g>
               </g>
 
-              {/* Scan line overlay */}
               <rect width={cols} height={rows} fill="url(#scanlines)" opacity={0.15} pointerEvents="none" />
               <defs>
                 <pattern id="scanlines" width="1" height="2" patternUnits="userSpaceOnUse">
@@ -225,7 +241,6 @@ export function P10Display({ line1, line2, line3, layout = 'horizontal' }: Props
                 </pattern>
               </defs>
 
-              {/* Subtle glare/reflection */}
               <rect
                 x={0} y={0} width={cols} height={rows * 0.4}
                 fill="url(#glare)" opacity={0.06} pointerEvents="none"

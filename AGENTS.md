@@ -37,10 +37,12 @@ Server subscribes to both `courts/+/display` and `courts/+/status` (plus `freq.l
 ### P10 Display Layout
 
 Each display = 2 P10 panels. Physical resolution:
-- **Horizontal** (side-by-side): 64×16 px = 640×160mm — shows 2 lines of 5x5 compact text, vertical scroll (bottom→top)
-- **Vertical** (stacked): 32×32 px = 320×320mm — shows 3 lines of 5x7 text, horizontal marquee for long text
+- **Horizontal** (side-by-side): 64×16 px = 640×160mm — shows **2 lines** of **5×7** text (line1 y=0, line2 y=8, 1px gap). **line3 is dropped.** Lines that overflow 64px **marquee horizontally** (left direction, scroll-then-wrap). Matches `web/src/components/display/P10Display.tsx` `slice(0, 2)` + `ScrollGroup`.
+- **Vertical** (stacked): 32×32 px = 320×320mm — shows 3 lines of 5×7 text with 2px gaps, horizontal marquee for long text
 
 Layout toggle in Display Monitor. Configured via `displayLayout` setting.
+
+> Authoring rule: put the most important info in `line1` and `line2`. `line3` is best-effort — visible on 32-tall vertical panels, silently dropped on the 16-tall horizontal WF2 controller.
 
 ### Display Templates (Sequence)
 

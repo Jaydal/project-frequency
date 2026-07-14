@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { isSlotAvailable } from './booking-engine';
 import { publishDisplay } from '@/lib/mqtt';
+import { generatePayload } from '@/lib/display/sports-caster';
 import { QUEUE_DEFAULT_TIMEOUT_MS } from './index';
 import { effectivePrepSec } from '@/lib/products-config-types';
 
@@ -54,11 +55,7 @@ export async function processCourt(courtId: string): Promise<void> {
     .order('created_at', { ascending: true });
 
   if (!waiting || waiting.length === 0) {
-    await publishDisplay(courtId, {
-      line1: 'COURT AVAILABLE',
-      line2: '',
-      line3: 'READY FOR NEXT GAME',
-    });
+    await publishDisplay(courtId, generatePayload(courtId, { current: null, upcoming: [] }));
     return;
   }
 
@@ -80,21 +77,13 @@ export async function processCourt(courtId: string): Promise<void> {
         })
         .eq('id', entry.id);
 
-      await publishDisplay(courtId, {
-        line1: 'COURT AVAILABLE',
-        line2: `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')} – ${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`,
-        line3: 'PLEASE CONFIRM AT TERMINAL',
-      });
+      await publishDisplay(courtId, generatePayload(courtId, { current: null, upcoming: [] }));
 
       return;
     }
   }
 
-  await publishDisplay(courtId, {
-    line1: 'COURT AVAILABLE',
-    line2: '',
-    line3: 'WAITING FOR COMPATIBLE QUEUE',
-  });
+  await publishDisplay(courtId, generatePayload(courtId, { current: null, upcoming: [] }));
 }
 
 export async function processExpiredGames(): Promise<void> {

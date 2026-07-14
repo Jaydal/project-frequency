@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { QueueEntry } from './index';
 import { findAvailableCourt, isSlotAvailable } from './booking-engine';
 import { publishDisplay } from '@/lib/mqtt';
+import { generatePayload } from '@/lib/display/sports-caster';
 
 export interface JoinQueueParams {
   memberId: string;
@@ -149,11 +150,10 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
 
       await deductWallet(params.memberId, charge, game.id);
 
-      await publishDisplay(court.id, {
-        line1: court.name.toUpperCase(),
-        line2: params.matchTitle || `${params.partySize === 4 ? '2v2' : '1v1'}`,
-        line3: 'GAME STARTED',
-      });
+      await publishDisplay(court.id, generatePayload(court.id, {
+        current: { name: params.matchTitle || `${params.partySize === 4 ? '2v2' : '1v1'}`, startTime: new Date().toISOString(), durationMinutes: params.duration },
+        upcoming: []
+      }));
 
       return {
         id: game.id,
