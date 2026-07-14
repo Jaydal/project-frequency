@@ -38,63 +38,103 @@ const g = global as typeof globalThis & {
 if (!g._courtStatuses) g._courtStatuses = new Map();
 if (!g._displayStates) g._displayStates = new Map();
 
-function client(): MqttClient | null {
-  if (g._mqttClient) return g._mqttClient;
-
+export async function connectMqtt(): Promise<MqttClient | null> {
   const url = process.env.MQTT_BROKER_URL;
-  // During build/static generation there's no broker URL — skip connection entirely
   if (!url) return null;
 
-  const c = mqtt.connect(url, {
-    clientId: `freq-web-${Math.random().toString(16).slice(2, 8)}`,
-    reconnectPeriod: 5000,
-    connectTimeout: 5000,
-    username: process.env.MQTT_USERNAME,
-    password: process.env.MQTT_PASSWORD,
-  });
+  if (g._mqttClient && g._mqttConnected) {
+    return g._mqttClient;
+  }
 
-  c.on('connect', () => {
-    g._mqttConnected = true;
-    c.subscribe('freq.led/courts/+/status', { qos: 1 });
-    c.subscribe('courts/+/status', { qos: 1 });
-    c.subscribe('courts/+/display', { qos: 1 });
-    console.log('[mqtt] broker connected');
-  });
+  if (!g._mqttClient) {
+    g._mqttClient = mqtt.connect(url, {
+      clientId: `freq-web-${Math.random().toString(16).slice(2, 8)}`,
+      reconnectPeriod: 5000,
+      connectTimeout: 5000,
+      username: process.env.MQTT_USERNAME,
+      password: process.env.MQTT_PASSWORD,
+    });
 
-  c.on('offline', () => { g._mqttConnected = false; });
-  c.on('close',   () => { g._mqttConnected = false; });
-  c.on('error', (err: Error) => {
-    g._mqttConnected = false;
-    console.error('[mqtt]', err.message);
-  });
+    g._mqttClient.on('connect', () => {
+      g._mqttConnected = true;
+      g._mqttClient?.subscribe('freq.led/courts/+/status', { qos: 1 });
+      g._mqttClient?.subscribe('courts/+/status', { qos: 1 });
+      g._mqttClient?.subscribe('courts/+/display', { qos: 1 });
+      console.log('[mqtt] broker connected');
+    });
 
-  c.on('message', (topic: string, payload: Buffer) => {
-    const statusMatch = topic.match(/^(?:freq\.led\/)?courts\/(.+)\/status$/);
-    if (statusMatch) {
-      try {
-        const data = JSON.parse(payload.toString());
-        g._courtStatuses!.set(statusMatch[1], { ...data, seenAt: Date.now() });
-      } catch { /* ignore malformed */ }
-      return;
+    g._mqttClient.on('offline', () => { g._mqttConnected = false; });
+    g._mqttClient.on('close',   () => { g._mqttConnected = false; });
+    g._mqttClient.on('error', (err: Error) => {
+      g._mqttConnected = false;
+      console.error('[mqtt]', err.message);
+    });
+
+    g._mqttClient.on('message', (topic: string, payload: Buffer) => {
+      const statusMatch = topic.match(/^(?:freq\.led\/)?courts\/(.+)\/status$/);
+      if (statusMatch) {
+        try {
+          const data = JSON.parse(payload.toString());
+          g._courtStatuses!.set(statusMatch[1], { ...data, seenAt: Date.now() });
+        } catch { /* ignore malformed */ }
+        return;
+      }
+      const displayMatch = topic.match(/^courts\/(.+)\/display$/);
+      if (displayMatch) {
+        try {
+          const data = JSON.parse(payload.toString());
+          g._displayStates!.set(displayMatch[1], data);
+        } catch { /* ignore malformed */ }
+      }
+    });
+  }
+
+  if (g._mqttConnected) {
+    return g._mqttClient;
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const onConnect = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(g._mqttClient!);
+    };
+
+    const onError = () => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(null);
+    };
+
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(null);
+    }, 4000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      g._mqttClient?.off('connect', onConnect);
+      g._mqttClient?.off('error', onError);
+      g._mqttClient?.off('close', onError);
     }
-    const displayMatch = topic.match(/^courts\/(.+)\/display$/);
-    if (displayMatch) {
-      try {
-        const data = JSON.parse(payload.toString());
-        g._displayStates!.set(displayMatch[1], data);
-      } catch { /* ignore malformed */ }
-    }
-  });
 
-  g._mqttClient = c;
-  return c;
+    g._mqttClient?.once('connect', onConnect);
+    g._mqttClient?.once('error', onError);
+    g._mqttClient?.once('close', onError);
+  });
 }
 
 // ── Health helpers ────────────────────────────────────────────────────────────
 
-export function ensureConnected(): boolean {
-  client(); // triggers lazy connect if MQTT_BROKER_URL is set
-  return g._mqttConnected ?? false;
+export async function ensureConnected(): Promise<boolean> {
+  const c = await connectMqtt();
+  return !!c;
 }
 
 export function isBrokerConnected(): boolean {
@@ -120,12 +160,24 @@ export function getAllDisplayStates(): Record<string, DisplayPayload> {
 // ── Publisher ─────────────────────────────────────────────────────────────────
 
 // Publishes the full board snapshot for the firmware kiosk (retained, so a
-// freshly-connected kiosk gets the latest immediately). Fire-and-forget.
-export function publishBoard(snapshotJson: string): void {
+// freshly-connected kiosk gets the latest immediately).
+export async function publishBoard(snapshotJson: string): Promise<boolean> {
   try {
-    client()?.publish('freq/board', snapshotJson, { qos: 0, retain: true });
+    const c = await connectMqtt();
+    if (!c) return false;
+    return new Promise((resolve) => {
+      c.publish('freq/board', snapshotJson, { qos: 1, retain: true }, (err) => {
+        if (err) {
+          console.error('[mqtt] publishBoard callback error:', err);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
   } catch (err) {
     console.error('[mqtt] publishBoard error:', err);
+    return false;
   }
 }
 
@@ -134,12 +186,23 @@ export async function publishDisplay(courtId: string, payload: DisplayPayload): 
   g._displayStates!.set(courtId, payload);
 
   try {
-    client()?.publish(
-      `courts/${courtId}/display`,
-      JSON.stringify(payload),
-      { qos: 1, retain: true }
-    );
-    return true;
+    const c = await connectMqtt();
+    if (!c) return false;
+    return new Promise((resolve) => {
+      c.publish(
+        `courts/${courtId}/display`,
+        JSON.stringify(payload),
+        { qos: 1, retain: true },
+        (err) => {
+          if (err) {
+            console.error('[mqtt] publishDisplay callback error:', err);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        }
+      );
+    });
   } catch (err) {
     console.error('[mqtt] publishDisplay error:', err);
     return false;

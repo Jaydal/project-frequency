@@ -9,12 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ courtId: string }> },
 ) {
   const { courtId } = await params;
-  ensureConnected();
-
-  for (let i = 0; i < 50; i++) {
-    if (isBrokerConnected()) break;
-    await new Promise(r => setTimeout(r, 100));
-  }
+  await ensureConnected();
 
   let display = getDisplayState(courtId);
   let gameInfo: { startTime: string; duration: number; prepTimeSec: number } | null = null;

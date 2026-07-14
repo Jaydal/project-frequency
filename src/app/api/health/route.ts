@@ -6,10 +6,9 @@ const started = Date.now();
 
 export async function GET() {
   // Ensure MQTT client is initialized
-  ensureConnected();
+  const brokerOk = await ensureConnected();
 
-  const [broker, supabaseDb, courtStatuses] = await Promise.all([
-    Promise.resolve(isBrokerConnected()),
+  const [supabaseDb, courtStatuses] = await Promise.all([
     createClient()
       .then(sb => sb.from('courts').select('id').limit(1))
       .then(({ error }) => error ? `error: ${error.message}` : 'ok')
@@ -17,7 +16,6 @@ export async function GET() {
     Promise.resolve(getCourtStatuses()),
   ]);
 
-  const brokerOk = broker;
   const dbOk = supabaseDb === 'ok';
   
   // Return 200 if the database is online, even if MQTT is down.
@@ -32,7 +30,7 @@ export async function GET() {
     node: process.version,
     env: process.env.NODE_ENV ?? 'development',
     connections: {
-      broker: broker ? 'connected' : 'disconnected',
+      broker: brokerOk ? 'connected' : 'disconnected',
       supabase: supabaseDb,
     },
     courtDevices: Object.fromEntries(

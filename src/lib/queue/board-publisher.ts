@@ -30,7 +30,7 @@ export async function publishBoardOnce(): Promise<void> {
   if (!supabase) return;
   try {
     const snapshot = await getBoardSnapshot(supabase);
-    publishBoard(JSON.stringify(snapshot));
+    await publishBoard(JSON.stringify(snapshot));
   } catch (err) {
     console.error('[board-publisher]', err instanceof Error ? err.message : err);
   }

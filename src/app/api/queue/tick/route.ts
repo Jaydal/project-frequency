@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processExpiredGames, processExpiredOffers } from '@/lib/queue/queue-processor';
+import { publishBoardOnce } from '@/lib/queue/board-publisher';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,10 @@ export async function GET() {
       processExpiredGames(),
       processExpiredOffers()
     ]);
+
+    // Update physical kiosk and display board snapshot
+    await publishBoardOnce();
+
     return NextResponse.json({ ok: true, timestamp: new Date(now).toISOString() });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
