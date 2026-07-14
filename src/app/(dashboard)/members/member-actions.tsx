@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useEffect } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { updateMember, deleteMember } from '@/features/members/actions';
 
 export function AssignRfidButton({ memberId }: { memberId: string }) {
   const [open, setOpen] = useState(false);
@@ -179,6 +181,138 @@ export function ReloadWalletButton({ memberId }: { memberId: string }) {
           </div>
           <Button type="submit" className="w-full">Reload</Button>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EditMemberButton({ member }: { member: any }) {
+  const [open, setOpen] = useState(false);
+  const [firstName, setFirstName] = useState(member.first_name);
+  const [lastName, setLastName] = useState(member.last_name);
+  const [email, setEmail] = useState(member.email || '');
+  const [status, setStatus] = useState<'Active' | 'Inactive' | 'Suspended'>(member.status);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateMember(member.id, {
+        firstName,
+        lastName,
+        email: email || undefined,
+        status,
+      });
+      setOpen(false);
+      toast.success('Member updated successfully');
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update member');
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="icon-sm" title="Edit Member" />}>
+        <Pencil className="size-3.5" />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Member Details</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-firstName">First Name</Label>
+            <Input
+              id="edit-firstName"
+              required
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-lastName">Last Name</Label>
+            <Input
+              id="edit-lastName"
+              required
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-email">Email</Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-status">Status</Label>
+            <select
+              id="edit-status"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as any)}
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="Suspended">Suspended</option>
+            </select>
+          </div>
+          <Button type="submit" className="w-full mt-2">Save Changes</Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function DeleteMemberButton({ member }: { member: any }) {
+  const [open, setOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const router = useRouter();
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteMember(member.id);
+      setOpen(false);
+      toast.success('Member deleted successfully');
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete member');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" size="icon-sm" className="text-red-500 hover:text-red-400 hover:bg-red-500/10 border-red-500/20" title="Delete Member" />}>
+        <Trash2 className="size-3.5" />
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Member</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-400">
+            Are you sure you want to delete <span className="font-semibold text-zinc-200">{member.first_name} {member.last_name}</span>? 
+            This will permanently remove their profile, wallet, and active RFID cards.
+          </p>
+          <p className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded p-2">
+            Warning: Members with active game history cannot be deleted. If they have played games, please set their status to Inactive instead.
+          </p>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Permanently Delete'}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

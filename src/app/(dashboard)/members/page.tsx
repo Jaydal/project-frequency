@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AddMemberDialog } from './add-member-dialog';
-import { AssignRfidButton, ReloadWalletButton } from './member-actions';
+import { AssignRfidButton, ReloadWalletButton, EditMemberButton, DeleteMemberButton } from './member-actions';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default async function MembersPage() {
@@ -72,9 +72,11 @@ export default async function MembersPage() {
                         </span>
                       </TableCell>
                       <TableCell className="py-3.5 text-right pr-6">
-                        <div className="flex gap-1.5 justify-end">
+                        <div className="flex gap-1.5 justify-end items-center">
                           {!activeRfid && <AssignRfidButton memberId={m.member_id} />}
                           <ReloadWalletButton memberId={m.member_id} />
+                          <EditMemberButton member={m} />
+                          <DeleteMemberButton member={m} />
                         </div>
                       </TableCell>
                     </TableRow>
