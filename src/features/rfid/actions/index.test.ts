@@ -13,7 +13,9 @@ function chainable(result: Result) {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     single: vi.fn(async () => result),
+    maybeSingle: vi.fn(async () => result),
     insert: vi.fn(async () => result),
+    update: vi.fn(() => builder),
   }
   return builder
 }
@@ -33,7 +35,7 @@ describe('assignRFID', () => {
     await assignRFID({ memberId: 'member-1', uid: 'UID-123' })
 
     // Assert RFID availability pre-check queries
-    expect(rfidCards.select).toHaveBeenCalledWith('id')
+    expect(rfidCards.select).toHaveBeenCalledWith('id, status')
     expect(rfidCards.eq).toHaveBeenCalledWith('uid', 'UID-123')
 
     // Assert member lookup by UUID
@@ -64,10 +66,10 @@ describe('assignRFID', () => {
 
   it('throws RFID UID already exists when the UID is taken', async () => {
     const members = chainable({ data: { id: 'member-1' }, error: null })
-    const rfidCards = chainable({ data: { id: 'existing-card' }, error: null })
+    const rfidCards = chainable({ data: { id: 'existing-card', status: 'Active' }, error: null })
     vi.mocked(createClient).mockResolvedValue(makeSupabase({ members, rfid_cards: rfidCards }) as any)
 
     await expect(assignRFID({ memberId: 'member-1', uid: 'UID-123' }))
-      .rejects.toThrow('RFID UID already exists')
+      .rejects.toThrow('This RFID card is already assigned to another member')
   })
 })

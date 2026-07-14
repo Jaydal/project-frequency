@@ -19,6 +19,7 @@ function makeChain(settingsMock?: any) {
     in: vi.fn(() => c),
     lt: vi.fn(() => c),
     count: vi.fn(() => c),
+    limit: vi.fn(() => c),
   }
   return c
 }
