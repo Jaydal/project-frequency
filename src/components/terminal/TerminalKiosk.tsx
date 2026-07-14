@@ -76,10 +76,10 @@ export function TerminalKiosk() {
   }, []);
 
   useEffect(() => {
-    if (step === 'idle' && !testMode) {
+    if (step === 'idle') {
       setTimeout(() => rfidRef.current?.focus(), 200);
     }
-  }, [step, testMode]);
+  }, [step]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -492,6 +492,28 @@ export function TerminalKiosk() {
       return (
         <div className="relative min-h-screen bg-black">
           <QueueBoard />
+          {testMode && (
+            <div className="absolute top-4 right-4 z-50 bg-zinc-950/90 border border-zinc-800 rounded-xl p-4 w-64 shadow-2xl animate-fade-in">
+              <h3 className="text-xs font-bold text-zinc-300 mb-2 flex items-center gap-1.5">
+                <span>🔧</span>
+                <span>Test RFID Input</span>
+              </h3>
+              <form onSubmit={handleRfidSubmit} className="flex gap-2">
+                <input
+                  ref={rfidRef}
+                  type="text"
+                  placeholder="Enter Card UID"
+                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-650 focus:outline-none focus:border-zinc-700"
+                />
+                <button
+                  type="submit"
+                  className="bg-emerald-500 hover:bg-emerald-450 text-black text-xs font-extrabold px-3 py-1.5 rounded-lg active:scale-95 transition-all cursor-pointer"
+                >
+                  Go
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       );
 
