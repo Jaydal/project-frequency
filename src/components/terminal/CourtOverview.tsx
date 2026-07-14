@@ -20,16 +20,41 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function CourtOverviewItem({ court, prepTimeSec }: { court: CourtState; prepTimeSec: number }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (court.status !== 'In Progress' || !court.start_time) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [court.status, court.start_time]);
+
+  const elapsed = court.status === 'In Progress' && court.start_time
+    ? Math.max(0, Math.floor((now - new Date(court.start_time).getTime()) / 1000))
+    : 0;
+
+  const effectivePrep = court.duration ? effectivePrepSec(court.duration, prepTimeSec) : prepTimeSec;
+  const phase = phaseForElapsed(elapsed, effectivePrep);
+
+  return (
+    <div className={`shrink-0 w-[140px] sm:w-auto rounded px-2 py-1.5 border ${court.status === 'In Progress' ? (phase === 'preparing' ? 'bg-zinc-900 border-amber-500/20' : 'bg-zinc-900 border-emerald-500/20') : 'bg-zinc-900/50 border-zinc-800'}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <span className={`size-1.5 shrink-0 rounded-full ${court.status === 'In Progress' ? (phase === 'preparing' ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-zinc-600'}`} />
+          <span className="text-xs font-medium text-zinc-300 truncate">{court.name}</span>
+        </div>
+        {court.status === 'In Progress' && (
+          <span className="text-xs font-mono text-zinc-400 tabular-nums shrink-0 ml-2">{formatTime(elapsed)}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CourtOverview() {
   const [courts, setCourts] = useState<CourtState[]>([]);
   const [prepTimeSec, setPrepTimeSec] = useState(300);
-  const [tick, setTick] = useState(0);
   const supabase = createClient();
-
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   async function fetchAll() {
     const { data: settings } = await supabase.from('settings').select('key, value').eq('key', 'preparationTime').single();
@@ -92,38 +117,13 @@ export function CourtOverview() {
     };
   }, []);
 
-  const now = Date.now();
-  const liveCourts = courts.map(c => {
-    if (c.status === 'In Progress' && c.start_time) {
-      return {
-        ...c,
-        elapsed: Math.max(0, Math.floor((now - new Date(c.start_time).getTime()) / 1000)),
-      };
-    }
-    return c;
-  });
-
   return (
     <div className="h-full flex flex-col p-3 gap-1.5 bg-zinc-950">
       <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider hidden sm:block">Courts</h2>
       <div className="flex sm:flex-col gap-2 sm:gap-1 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto pb-1 sm:pb-0 no-scrollbar">
-        {liveCourts.map(c => {
-          const effectivePrep = c.duration ? effectivePrepSec(c.duration, prepTimeSec) : prepTimeSec;
-          const phase = phaseForElapsed(c.elapsed, effectivePrep);
-          return (
-            <div key={c.id} className={`shrink-0 w-[140px] sm:w-auto rounded px-2 py-1.5 border ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-zinc-900 border-amber-500/20' : 'bg-zinc-900 border-emerald-500/20') : 'bg-zinc-900/50 border-zinc-800'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 overflow-hidden">
-                  <span className={`size-1.5 shrink-0 rounded-full ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-zinc-600'}`} />
-                  <span className="text-xs font-medium text-zinc-300 truncate">{c.name}</span>
-                </div>
-                {c.status === 'In Progress' && (
-                  <span className="text-xs font-mono text-zinc-400 tabular-nums shrink-0 ml-2">{formatTime(c.elapsed)}</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {courts.map(c => (
+          <CourtOverviewItem key={c.id} court={c} prepTimeSec={prepTimeSec} />
+        ))}
       </div>
     </div>
   );

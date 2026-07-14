@@ -48,14 +48,8 @@ export function QueueBoard() {
   const [offers, setOffers] = useState<QueueEntry[]>([]);
   const [queueEntries, setQueueEntries] = useState<QueueEntry[]>([]);
   const [memberNames, setMemberNames] = useState<Record<string, { first: string; last: string }>>({});
-  const [tick, setTick] = useState(0);
   const [prepTimeSec, setPrepTimeSec] = useState(300);
   const supabase = createClient();
-
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     fetchInitial();
@@ -185,14 +179,6 @@ export function QueueBoard() {
     ? courts.find(c => c.id === prioritizedOffer.court_id)?.name ?? 'Court'
     : '';
 
-  const now = Date.now();
-  const liveCourts: CourtStatusData[] = courts.map(c => {
-    if (c.start_time) {
-      return { ...c, elapsed: Math.floor((now - new Date(c.start_time).getTime()) / 1000) };
-    }
-    return c;
-  });
-
   const queueDisplay: QueueEntryDisplay[] = queueEntries.map((q, i) => ({
     id: q.id,
     position: i + 1,
@@ -214,7 +200,7 @@ export function QueueBoard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
           <div className="lg:col-span-3 space-y-2">
-            {liveCourts.map((c) => (
+            {courts.map((c) => (
               <CourtStatusCard key={c.id} court={c} />
             ))}
           </div>

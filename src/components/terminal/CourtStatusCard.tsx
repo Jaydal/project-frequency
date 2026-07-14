@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { effectivePrepSec } from '@/lib/products-config-types';
 
 export interface CourtStatusData {
@@ -10,6 +11,7 @@ export interface CourtStatusData {
   duration?: number;
   prepTimeSec?: number;
   players?: Array<{ first_name: string; last_name: string }>;
+  start_time?: string;
 }
 
 interface Props {
@@ -27,14 +29,25 @@ export function phaseForElapsed(elapsed: number, prepTimeSec: number): 'preparin
 }
 
 export function CourtStatusCard({ court }: Props) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (court.status !== 'In Progress' || !court.start_time) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [court.status, court.start_time]);
+
   const rawPrepTime = court.prepTimeSec ?? 300;
   const prepTime = court.duration ? effectivePrepSec(court.duration, rawPrepTime) : rawPrepTime;
   const isActive = court.status === 'In Progress';
-  const phase = court.elapsed !== undefined ? phaseForElapsed(court.elapsed, prepTime) : null;
-  const totalSec = court.duration ? court.duration * 60 + prepTime : prepTime;
-  const remain = court.elapsed !== undefined
-    ? Math.max(0, totalSec - court.elapsed)
+
+  const elapsed = isActive && court.start_time
+    ? Math.max(0, Math.floor((now - new Date(court.start_time).getTime()) / 1000))
     : 0;
+
+  const phase = isActive ? phaseForElapsed(elapsed, prepTime) : null;
+  const totalSec = court.duration ? court.duration * 60 + prepTime : prepTime;
+  const remain = isActive ? Math.max(0, totalSec - elapsed) : 0;
 
   return (
     <div className={`rounded-lg p-3 border-l-4 ${
@@ -66,7 +79,7 @@ export function CourtStatusCard({ court }: Props) {
         <div className="text-xs text-zinc-400 mb-1.5">{court.matchTitle}</div>
       )}
 
-      {isActive && court.elapsed !== undefined && court.duration && (
+      {isActive && court.duration && (
         <>
           <div className="flex flex-col items-center py-2">
             <div className={`rounded-xl px-4 py-3 ${phase === 'preparing' ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
@@ -82,14 +95,14 @@ export function CourtStatusCard({ court }: Props) {
             <div className="flex gap-3 mt-2 text-[11px] text-zinc-500 tabular-nums">
               {phase === 'preparing' && (
                 <>
-                  <span>Game starts in {formatTime(Math.max(0, prepTime - court.elapsed))}</span>
+                  <span>Game starts in {formatTime(Math.max(0, prepTime - elapsed))}</span>
                 </>
               )}
               {phase === 'in_game' && (
                 <>
-                  <span>Elapsed {formatTime(court.elapsed)}</span>
+                  <span>Elapsed {formatTime(elapsed)}</span>
                   <span className="text-zinc-600">|</span>
-                  <span>Game {formatTime(court.elapsed - prepTime)}</span>
+                  <span>Game {formatTime(elapsed - prepTime)}</span>
                 </>
               )}
             </div>
