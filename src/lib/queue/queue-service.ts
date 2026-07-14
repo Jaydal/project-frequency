@@ -108,10 +108,8 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
         const slotFree = await isSlotAvailable(selected.id, params.start, new Date(params.start.getTime() + params.duration * 60_000));
         if (slotFree) court = selected;
       }
-    }
-
-    if (!court) {
-      court = await findAvailableCourt(params.start, params.duration, params.partySize, params.courtId);
+    } else {
+      court = await findAvailableCourt(params.start, params.duration, params.partySize);
     }
 
     if (court) {

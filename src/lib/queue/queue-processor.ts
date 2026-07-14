@@ -60,6 +60,9 @@ export async function processCourt(courtId: string): Promise<void> {
   }
 
   for (const entry of waiting) {
+    if (entry.court_id && entry.court_id !== courtId) {
+      continue;
+    }
     const start = new Date(entry.requested_start);
     const effectivePrep = effectivePrepSec(entry.duration, prepSec);
     const end = new Date(start.getTime() + effectivePrep * 1000 + entry.duration * 60_000);
