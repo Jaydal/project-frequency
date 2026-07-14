@@ -3,9 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { processCourt } from '@/lib/queue/queue-processor';
 
-export async function updateCourt(courtId: string, name: string) {
+export async function updateCourt(courtId: string, name: string, newId?: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from('courts').update({ name }).eq('id', courtId);
+  const updates: any = { name };
+  if (newId && newId !== courtId) updates.id = newId;
+  const { error } = await supabase.from('courts').update(updates).eq('id', courtId);
   if (error) throw new Error(error.message);
   revalidatePath('/courts');
 }

@@ -48,7 +48,7 @@ export async function acceptOffer(entryId: string): Promise<{ success: boolean; 
 
   const start = new Date(entry.requested_start);
   const end = new Date(start.getTime() + effectivePrep * 1000 + entry.duration * 60_000);
-  if (!entry.court_id || !(await isSlotAvailable(entry.court_id, start, end))) {
+  if (!entry.court_id || !(await isSlotAvailable(entry.court_id, start, end, entry.id))) {
     await supabase.from('queue_entries').update({ status: 'waiting', court_id: null, expires_at: null, updated_at: new Date().toISOString() }).eq('id', entryId);
     if (entry.court_id) await processCourt(entry.court_id);
     return { success: false, error: 'Court no longer available' };

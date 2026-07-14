@@ -38,10 +38,13 @@ const g = global as typeof globalThis & {
 if (!g._courtStatuses) g._courtStatuses = new Map();
 if (!g._displayStates) g._displayStates = new Map();
 
-function client(): MqttClient {
+function client(): MqttClient | null {
   if (g._mqttClient) return g._mqttClient;
 
-  const url = process.env.MQTT_BROKER_URL ?? 'mqtt://localhost:1883';
+  const url = process.env.MQTT_BROKER_URL;
+  // During build/static generation there's no broker URL — skip connection entirely
+  if (!url) return null;
+
   const c = mqtt.connect(url, {
     clientId: `freq-web-${Math.random().toString(16).slice(2, 8)}`,
     reconnectPeriod: 5000,
@@ -90,7 +93,7 @@ function client(): MqttClient {
 // ── Health helpers ────────────────────────────────────────────────────────────
 
 export function ensureConnected(): boolean {
-  client();
+  client(); // triggers lazy connect if MQTT_BROKER_URL is set
   return g._mqttConnected ?? false;
 }
 
@@ -120,31 +123,25 @@ export function getAllDisplayStates(): Record<string, DisplayPayload> {
 // freshly-connected kiosk gets the latest immediately). Fire-and-forget.
 export function publishBoard(snapshotJson: string): void {
   try {
-    client().publish('freq/board', snapshotJson, { qos: 0, retain: true });
+    client()?.publish('freq/board', snapshotJson, { qos: 0, retain: true });
   } catch (err) {
     console.error('[mqtt] publishBoard error:', err);
   }
 }
 
 export async function publishDisplay(courtId: string, payload: DisplayPayload): Promise<boolean> {
-  // Cache locally immediately — don't wait for MQTT echo
+  // Cache locally immediately
   g._displayStates!.set(courtId, payload);
 
-  const topic = `courts/${courtId}/display`;
-  const publish = new Promise<boolean>((resolve) => {
-    try {
-      client().publish(
-        topic,
-        JSON.stringify(payload),
-        { qos: 1, retain: true },
-        (err) => resolve(!err),
-      );
-    } catch (err) {
-      console.error('[mqtt] publish error:', err);
-      resolve(false);
-    }
-  });
-
-  const timeout = new Promise<false>((r) => setTimeout(() => r(false), 5000));
-  return Promise.race([publish, timeout]);
+  try {
+    client()?.publish(
+      `courts/${courtId}/display`,
+      JSON.stringify(payload),
+      { qos: 1, retain: true }
+    );
+    return true;
+  } catch (err) {
+    console.error('[mqtt] publishDisplay error:', err);
+    return false;
+  }
 }

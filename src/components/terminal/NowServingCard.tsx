@@ -30,11 +30,7 @@ export function NowServingCard({ playerNames, courtName, duration, expiresAt }: 
   const isUrgent = remaining > 0 && remaining < 60;
 
   if (!expiresAt || remaining <= 0) {
-    return (
-      <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-800">
-        <p className="text-xs text-zinc-500">No active offers</p>
-      </div>
-    );
+    return null;
   }
 
   return (

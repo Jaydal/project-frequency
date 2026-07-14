@@ -34,7 +34,8 @@ export async function findAvailableCourt(
 export async function isSlotAvailable(
   courtId: string,
   start: Date,
-  end: Date
+  end: Date,
+  excludeQueueEntryId?: string
 ): Promise<boolean> {
   const supabase = await createClient();
   const { data: settings } = await supabase.from('settings').select('value').eq('key', 'preparationTime').single();
@@ -50,6 +51,25 @@ export async function isSlotAvailable(
     .lt('start_time', end.toISOString());
 
   if (overlapping && overlapping.length > 0) return false;
+
+  // Also check if there are any active offers for this court that overlap
+  const { data: offered } = await supabase
+    .from('queue_entries')
+    .select('id, requested_start, duration')
+    .eq('court_id', courtId)
+    .eq('status', 'offered');
+  
+  if (offered && offered.length > 0) {
+    for (const offer of offered) {
+      if (excludeQueueEntryId && offer.id === excludeQueueEntryId) continue;
+      const offerStart = new Date(offer.requested_start);
+      const effectiveOfferPrep = effectivePrepSec(offer.duration, prepSec);
+      const offerEnd = new Date(offerStart.getTime() + effectiveOfferPrep * 1000 + offer.duration * 60_000);
+      if (isOverlapping(start, end, offerStart, offerEnd)) {
+        return false;
+      }
+    }
+  }
 
   const { data: straddling } = await supabase
     .from('games')

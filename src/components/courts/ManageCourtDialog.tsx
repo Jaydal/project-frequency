@@ -15,16 +15,17 @@ export function ManageCourtDialog({ court }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(court.name);
+  const [newId, setNewId] = useState(court.id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || name === court.name) return;
+    if (!name.trim() || !newId.trim() || (name === court.name && newId === court.id)) return;
     setLoading(true);
     setError(null);
     try {
-      await updateCourt(court.id, name.trim());
+      await updateCourt(court.id, name.trim(), newId.trim());
       setOpen(false);
       router.refresh();
     } catch (err: any) {
@@ -57,10 +58,17 @@ export function ManageCourtDialog({ court }: Props) {
           <DialogTitle>Manage {court.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <form onSubmit={handleUpdate} className="flex gap-2">
-            <Input value={name} onChange={e => setName(e.target.value)} disabled={loading} />
-            <Button type="submit" disabled={loading || !name.trim() || name === court.name}>
-              Rename
+          <form onSubmit={handleUpdate} className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-zinc-400">Court ID (Hardware Reference)</label>
+              <Input value={newId} onChange={e => setNewId(e.target.value)} disabled={loading} placeholder="court-1" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-zinc-400">Display Name</label>
+              <Input value={name} onChange={e => setName(e.target.value)} disabled={loading} placeholder="Court 1" />
+            </div>
+            <Button type="submit" disabled={loading || !name.trim() || !newId.trim() || (name === court.name && newId === court.id)}>
+              Save Changes
             </Button>
           </form>
           {error && <p className="text-sm text-red-500">{error}</p>}

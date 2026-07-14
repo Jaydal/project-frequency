@@ -19,7 +19,10 @@ export async function GET() {
 
   const brokerOk = broker;
   const dbOk = supabaseDb === 'ok';
-  const ok = brokerOk && dbOk;
+  
+  // Return 200 if the database is online, even if MQTT is down.
+  // We don't want to fail the kiosk/web UI just because physical panels are disconnected.
+  const ok = dbOk;
 
   const status: Record<string, unknown> = {
     ok,

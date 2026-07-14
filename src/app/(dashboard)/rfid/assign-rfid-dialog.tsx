@@ -15,8 +15,16 @@ export function AssignRFIDDialog() {
   const [members, setMembers] = useState<any[]>([]);
   const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
   const [searching, setSearching] = useState(false);
+  const [isScanningNFC, setIsScanningNFC] = useState(false);
+  const [nfcSupported, setNfcSupported] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const supabase = createClient();
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && !("NDEFReader" in window)) {
+      setNfcSupported(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (search.length < 2) { setMembers([]); return; }
@@ -33,6 +41,32 @@ export function AssignRFIDDialog() {
     }, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search]);
+
+  const startNFCScan = async () => {
+    try {
+      const ndef = new (window as any).NDEFReader();
+      await ndef.scan();
+      setIsScanningNFC(true);
+      toast("Ready to scan! Hold an NFC card to the back of your phone.");
+
+      ndef.addEventListener("reading", ({ serialNumber }: any) => {
+        if (serialNumber) {
+          const formattedUID = serialNumber.replace(/:/g, "").toUpperCase();
+          setUid(formattedUID);
+          setIsScanningNFC(false);
+          toast.success("NFC card detected!");
+        }
+      });
+      
+      ndef.addEventListener("readingerror", () => {
+        toast.error("NFC read error. Try holding it steady.");
+        setIsScanningNFC(false);
+      });
+    } catch (error: any) {
+      toast.error("NFC Error: " + error.message);
+      setIsScanningNFC(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,8 +85,8 @@ export function AssignRFIDDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <Button>Add RFID</Button>
+      <DialogTrigger render={<Button />}>
+        Add RFID
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -61,7 +95,19 @@ export function AssignRFIDDialog() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="uid">RFID UID</Label>
-            <Input id="uid" required value={uid} onChange={e => setUid(e.target.value)} placeholder="e.g. TEST001" />
+            <div className="flex gap-2">
+              <Input id="uid" required value={uid} onChange={e => setUid(e.target.value)} placeholder="e.g. 04A1B2C3" />
+              {nfcSupported && (
+                <Button 
+                  type="button" 
+                  variant={isScanningNFC ? "secondary" : "outline"}
+                  onClick={startNFCScan}
+                  className={isScanningNFC ? "animate-pulse border-emerald-500 text-emerald-500" : ""}
+                >
+                  {isScanningNFC ? "Scanning..." : "Scan NFC"}
+                </Button>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Assign to Member (optional)</Label>

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS members (
 CREATE TABLE IF NOT EXISTS rfid_cards (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   uid           TEXT UNIQUE NOT NULL,
-  member_id     UUID NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  member_id     UUID REFERENCES members(id) ON DELETE CASCADE,
   status        TEXT NOT NULL DEFAULT 'Active',
   assigned_date TIMESTAMPTZ DEFAULT NOW()
 );
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
 );
 
 CREATE TABLE IF NOT EXISTS courts (
-  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id            TEXT PRIMARY KEY,
   name          TEXT UNIQUE NOT NULL,
   status        TEXT NOT NULL DEFAULT 'Available',
   last_activity TIMESTAMPTZ
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS courts (
 
 CREATE TABLE IF NOT EXISTS games (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  court_id      UUID NOT NULL REFERENCES courts(id) ON DELETE CASCADE,
+  court_id      TEXT NOT NULL REFERENCES courts(id) ON DELETE CASCADE ON UPDATE CASCADE,
   match_type    TEXT NOT NULL,
   duration      INTEGER NOT NULL,
   status        TEXT NOT NULL DEFAULT 'Completed',
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   duration        INTEGER NOT NULL CHECK (duration IN (30, 60, 90)),
   party_size      INTEGER NOT NULL CHECK (party_size IN (2, 4)),
   player_ids      JSONB NOT NULL DEFAULT '[]',
-  court_id        UUID REFERENCES courts(id),
+  court_id        TEXT REFERENCES courts(id) ON UPDATE CASCADE,
   status          TEXT NOT NULL DEFAULT 'waiting'
                     CHECK (status IN (
                       'waiting', 'offered', 'accepted',
@@ -260,10 +260,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_queue_entries_member_waiting
   ON queue_entries (member_id) WHERE status = 'waiting';
 
 -- Seed courts
-INSERT INTO courts (name, status) VALUES
-  ('Court 1', 'Available'),
-  ('Court 2', 'Available')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO courts (id, name, status) VALUES
+  ('court-1', 'Court 1', 'Available'),
+  ('court-2', 'Court 2', 'Available')
+ON CONFLICT (id) DO NOTHING;
 
 -- Seed default settings
 INSERT INTO settings (key, value, description) VALUES

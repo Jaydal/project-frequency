@@ -14,8 +14,7 @@ export interface JoinQueueParams {
   matchTitle?: string;
 }
 
-async function getRates(): Promise<Record<string, number>> {
-  const supabase = await createClient();
+async function getRates(supabase: Awaited<ReturnType<typeof createClient>>): Promise<Record<string, number>> {
   const { data } = await supabase.from('settings').select('value').eq('key', 'prices').single();
   return data?.value ? JSON.parse(data.value) : { '30': 150, '60': 300, '90': 450 };
 }
@@ -83,21 +82,20 @@ async function refundWallet(memberId: string, amount: number, gameId: string, re
 export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
   const supabase = await createClient();
 
-  const { data: member } = await supabase
-    .from('members')
-    .select('status')
-    .eq('id', params.memberId)
-    .single();
-  if (!member || member.status !== 'Active') throw new Error('Member not active');
+  // Run independent checks in parallel to reduce round trips
+  const [memberRes, existingQueueRes, ratesRes, waitingRes] = await Promise.all([
+    supabase.from('members').select('status').eq('id', params.memberId).single(),
+    supabase.from('queue_entries').select('id').eq('member_id', params.memberId).in('status', ['waiting', 'offered']).limit(1),
+    getRates(supabase),
+    supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
+  ]);
 
-  const rates = await getRates();
+  if (!memberRes.data || memberRes.data.status !== 'Active') throw new Error('Member not active');
+  if (existingQueueRes.data && existingQueueRes.data.length > 0) throw new Error('Already in queue');
+
+  const rates = ratesRes;
   const charge = calcCharge(rates, params.duration, params.partySize);
-
-  // Check if this is the first in queue and a court is available — auto-assign
-  const { count: waitingCount } = await supabase
-    .from('queue_entries')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'waiting');
+  const waitingCount = waitingRes.count;
 
   if (!waitingCount || waitingCount === 0) {
     let court = null;
@@ -135,12 +133,11 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
 
       if (gameErr) throw new Error(gameErr.message);
 
-      for (const playerId of params.playerIds) {
-        const { error: gpErr } = await supabase
-          .from('game_players')
-          .insert({ game_id: game.id, member_id: playerId, team: null });
-        if (gpErr) throw new Error(gpErr.message);
-      }
+      // Batch insert all game_players in one query
+      const { error: gpErr } = await supabase
+        .from('game_players')
+        .insert(params.playerIds.map(pid => ({ game_id: game.id, member_id: pid, team: null })));
+      if (gpErr) throw new Error(gpErr.message);
 
       const { error: courtErr } = await supabase
         .from('courts')
@@ -150,7 +147,8 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
 
       await deductWallet(params.memberId, charge, game.id);
 
-      await publishDisplay(court.id, generatePayload(court.id, {
+      // Fire-and-forget: publish board update without blocking the response
+      publishDisplay(court.id, generatePayload(court.id, {
         current: { name: params.matchTitle || `${params.partySize === 4 ? '2v2' : '1v1'}`, startTime: new Date().toISOString(), durationMinutes: params.duration },
         upcoming: []
       }));

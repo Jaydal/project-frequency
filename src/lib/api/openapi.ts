@@ -65,7 +65,7 @@ The system uses MQTT for real-time court display updates and ESP32 health monito
                       id: { type: 'string', format: 'uuid' },
                       member_id: { type: 'string', format: 'uuid' },
                       status: { type: 'string', enum: ['waiting', 'offered'] },
-                      court_id: { type: 'string', format: 'uuid', nullable: true },
+                      court_id: { type: 'string', nullable: true },
                       expires_at: { type: 'string', format: 'date-time', nullable: true },
                       duration: { type: 'integer' },
                       party_size: { type: 'integer', enum: [2, 4] },
@@ -117,7 +117,7 @@ The system uses MQTT for real-time court display updates and ESP32 health monito
                   properties: {
                     id: { type: 'string', format: 'uuid' },
                     status: { type: 'string', enum: ['waiting', 'completed'] },
-                    court_id: { type: 'string', format: 'uuid', nullable: true },
+                    court_id: { type: 'string', nullable: true },
                     court_name: { type: 'string', nullable: true },
                     duration: { type: 'integer' },
                     position: { type: 'integer' },

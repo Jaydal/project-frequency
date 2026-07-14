@@ -15,6 +15,7 @@ import { BookingSuccess } from './BookingSuccess';
 import { ErrorScreen } from './ErrorScreen';
 import type { ProductsConfig } from '@/lib/products-config-types';
 import { getCost } from '@/lib/products-config-types';
+import { AlertCircle, Trash2, Plus } from 'lucide-react';
 
 interface Player {
   id: string;
@@ -58,8 +59,13 @@ export function TerminalKiosk() {
   const [courts, setCourts] = useState<CourtOption[]>([]);
   const [testMode, setTestMode] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [scannedNfcUid, setScannedNfcUid] = useState<string | null>(null);
+  const [nfcStatus, setNfcStatus] = useState<'idle' | 'waiting_for_interaction' | 'active' | 'error' | 'unsupported'>('idle');
+  const [nfcBadgeVisible, setNfcBadgeVisible] = useState(false);
+  const nfcBadgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [config, setConfig] = useState<ProductsConfig | null>(null);
   const rfidRef = useRef<HTMLInputElement>(null);
+  const nfcScannerRef = useRef<any>(null);
   const supabase = createClient();
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -73,6 +79,56 @@ export function TerminalKiosk() {
       setTimeout(() => rfidRef.current?.focus(), 200);
     }
   }, [step, testMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("NDEFReader" in window)) {
+      setNfcStatus('unsupported');
+      return;
+    }
+
+    setNfcStatus('waiting_for_interaction');
+
+    const startScanner = async () => {
+      if (nfcScannerRef.current) return;
+
+      try {
+        const ndef = new (window as any).NDEFReader();
+        await ndef.scan();
+        nfcScannerRef.current = ndef;
+        setNfcStatus('active');
+        setNfcBadgeVisible(true);
+        // Auto-hide the "active" badge after 3 seconds
+        if (nfcBadgeTimer.current) clearTimeout(nfcBadgeTimer.current);
+        nfcBadgeTimer.current = setTimeout(() => setNfcBadgeVisible(false), 3000);
+        
+        ndef.addEventListener("reading", ({ serialNumber }: any) => {
+          if (serialNumber) {
+             const uid = serialNumber.replace(/:/g, "").toUpperCase();
+             setScannedNfcUid(uid);
+          }
+        });
+      } catch (err) {
+        console.error("NFC start failed", err);
+        setNfcStatus('error');
+      }
+    };
+
+    document.addEventListener("click", startScanner);
+    document.addEventListener("touchstart", startScanner);
+
+    return () => {
+      document.removeEventListener("click", startScanner);
+      document.removeEventListener("touchstart", startScanner);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (scannedNfcUid && step === 'idle') {
+      lookupMember(scannedNfcUid);
+      setScannedNfcUid(null);
+    }
+  }, [scannedNfcUid, step]);
 
   useEffect(() => {
     if (step === 'success') {
@@ -168,6 +224,9 @@ export function TerminalKiosk() {
   }
 
   async function fetchCourts() {
+    // Trigger queue processor tick asynchronously to advance/expire games
+    fetch('/api/queue/tick').catch(() => {});
+
     const { data: games } = await supabase
       .from('games')
       .select('id, court_id, duration, status, start_time')
@@ -208,17 +267,20 @@ export function TerminalKiosk() {
         .eq('status', 'Active')
         .single();
       if (err || !card) { setErrorInfo({ title: 'RFID Read Failed', message: 'Card not recognized. Please try again.' }); setStep('error'); return; }
+      
       const { data: memberData, error: memberErr } = await supabase
         .from('members')
         .select('id, member_id, first_name, last_name')
         .eq('id', card.member_id)
         .single();
       if (memberErr || !memberData) { setErrorInfo({ title: 'RFID Read Failed', message: 'Card not recognized. Please try again.' }); setStep('error'); return; }
+      
       const { data: walletData } = await supabase
         .from('wallets')
         .select('balance')
         .eq('member_id', memberData.id)
         .single();
+
       const player: Player = {
         id: memberData.id,
         memberId: memberData.member_id,
@@ -227,35 +289,26 @@ export function TerminalKiosk() {
         balance: walletData?.balance ?? 0,
       };
       setMember(player);
-      await checkExistingQueue(player.id);
-    } catch { setErrorInfo({ title: 'Unable to Connect', message: 'Check connection and try again.' }); setStep('error'); }
-  }
+      
+      // Removed checkExistingQueue (allow users to book even if they are in an active game)
 
-  async function checkExistingQueue(memberId: string) {
-    // Check if member has an active game
-    const { data: activeGame } = await supabase
-      .from('games')
-      .select('id, court_id, status, start_time, duration, courts!inner(name), game_players!inner(member_id)')
-      .eq('status', 'In Progress')
-      .eq('game_players.member_id', memberId)
-      .maybeSingle();
-    if (activeGame) {
-      setErrorInfo({ title: 'Already Playing', message: `You are currently playing on ${(activeGame as any).courts?.name ?? 'a court'}. Finish your game first.` });
-      setStep('error');
-      return;
+      // Check if they are in a queue
+      const { data } = await supabase
+        .from('queue_entries')
+        .select('id, status, court_id, expires_at, courts!left(name)')
+        .eq('member_id', player.id)
+        .in('status', ['waiting', 'offered'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data && data.status === 'offered') { setQueueEntry(data as any); setStep('offer'); return; }
+      if (data && data.status === 'waiting') { setQueueEntry(data as any); setStep('existing-queue'); return; }
+      setStep('select-court');
+    } catch { 
+      setErrorInfo({ title: 'Unable to Connect', message: 'Check connection and try again.' }); 
+      setStep('error'); 
     }
-
-    const { data } = await supabase
-      .from('queue_entries')
-      .select('id, status, court_id, expires_at, courts!left(name)')
-      .eq('member_id', memberId)
-      .in('status', ['waiting', 'offered'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data && data.status === 'offered') { setQueueEntry(data as any); setStep('offer'); return; }
-    if (data && data.status === 'waiting') { setQueueEntry(data as any); setStep('existing-queue'); return; }
-    setStep('select-court');
   }
 
   function handleSelectCourt(court: CourtOption) {
@@ -422,32 +475,20 @@ export function TerminalKiosk() {
     return withLayout(<ErrorScreen title={errorInfo.title} message={errorInfo.message} onRetry={reset} />);
   }
 
-  switch (step) {
-    case 'booting':
-      return (
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center p-8">
-          <div className="w-16 h-16 border-4 border-zinc-800 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
-          <h1 className="text-2xl font-bold text-zinc-100 mb-2">Connecting to Network...</h1>
-          <p className="text-zinc-500">Performing system health checks before starting</p>
-        </div>
-      );
+  const renderStep = () => {
+    switch (step) {
+      case 'booting':
+        return (
+          <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center p-8">
+            <div className="w-16 h-16 border-4 border-zinc-800 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
+            <h1 className="text-2xl font-bold text-zinc-100 mb-2">Connecting to Network...</h1>
+            <p className="text-zinc-500">Performing system health checks before starting</p>
+          </div>
+        );
 
     case 'idle':
       return (
         <div className="relative min-h-screen bg-black">
-          <form onSubmit={handleRfidSubmit}
-            className="absolute top-3 right-3 z-10 bg-zinc-900/90 border border-zinc-800 rounded-lg px-4 py-2.5 flex items-center gap-2"
-          >
-            <input ref={rfidRef} type="text" autoFocus
-              className="w-32 text-center text-sm bg-transparent text-zinc-100 placeholder-zinc-500 border-0 outline-none"
-              placeholder={testMode ? "test" : "RFID"}
-            />
-            <button type="submit"
-              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer shrink-0"
-            >
-              Go
-            </button>
-          </form>
           <QueueBoard />
         </div>
       );
@@ -455,29 +496,45 @@ export function TerminalKiosk() {
     case 'existing-queue':
       return withLayout(
         member && queueEntry && (
-          <div className="min-h-full flex flex-col items-center justify-center p-8 text-center">
-            <h2 className="text-2xl font-bold text-amber-400 mb-4">Existing Booking</h2>
-            <p className="text-zinc-300 mb-6">You have an active queue entry:</p>
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 mb-8 w-full max-w-sm text-left space-y-3">
-              <p className="text-zinc-400 text-sm">Queue Position</p>
-              <p className="text-zinc-100 text-lg font-semibold">Waiting</p>
+          <div className="min-h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+            <div className="size-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4 text-amber-400">
+              <AlertCircle className="size-6" />
+            </div>
+            <h2 className="text-lg font-black text-zinc-100 tracking-wide">Active Booking Found</h2>
+            <p className="text-xs text-zinc-400 mt-1 mb-6">You are already in the waiting list.</p>
+            
+            <div className="bg-gradient-to-br from-zinc-900/40 to-zinc-950/20 border border-zinc-800/85 rounded-2xl p-5 mb-8 w-full max-w-sm text-left shadow-md shadow-black/10 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">Queue Status</span>
+                <span className="text-xs font-bold text-amber-455 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  Waiting
+                </span>
+              </div>
               {queueEntry.courts?.name && (
                 <>
-                  <p className="text-zinc-400 text-sm">Court</p>
-                  <p className="text-zinc-100">{queueEntry.courts.name}</p>
+                  <div className="h-px bg-zinc-850" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">Preferred Court</span>
+                    <span className="text-xs font-black text-zinc-200">{queueEntry.courts.name}</span>
+                  </div>
                 </>
               )}
             </div>
-            <div className="flex flex-col gap-3 w-full max-w-xs">
-              <button onClick={handleCancelExisting}
-                className="w-full py-3 px-6 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-lg cursor-pointer disabled:opacity-50"
+
+            <div className="flex flex-col gap-2.5 w-full max-w-xs">
+              <button 
+                onClick={() => setStep('select-court')}
+                className="w-full py-3.5 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-450 text-black font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-emerald-500/10 flex items-center justify-center gap-2"
               >
-                Cancel Booking
+                <Plus className="size-4 stroke-[2.5]" />
+                <span>Book Another Game</span>
               </button>
-              <button onClick={() => setStep('select-court')}
-                className="w-full py-3 px-6 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-lg cursor-pointer"
+              <button 
+                onClick={handleCancelExisting}
+                className="w-full py-3.5 px-6 rounded-xl bg-transparent border border-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/45 hover:bg-red-500/[0.02] font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
               >
-                Book Another
+                <Trash2 className="size-4" />
+                <span>Cancel Booking</span>
               </button>
             </div>
           </div>
@@ -486,23 +543,24 @@ export function TerminalKiosk() {
 
     case 'select-court':
       return withLayout(
-        <SelectCourt courts={courts} onSelect={handleSelectCourt} onBack={reset} />
+        <SelectCourt member={member} courts={courts} onSelect={handleSelectCourt} onBack={reset} />
       );
 
     case 'select-game':
       return withLayout(
-        <SelectGameType onSelect={handleSelectGame} onBack={handleBack} />
+        <SelectGameType member={member} onSelect={handleSelectGame} onBack={handleBack} onCancel={reset} />
       );
 
     case 'select-duration':
       return withLayout(
-        config && <SelectDuration durations={config.durations} rates={config.rates} onSelect={handleSelectDuration} onBack={handleBack} />
+        config && <SelectDuration member={member} durations={config.durations} rates={config.rates} onSelect={handleSelectDuration} onBack={handleBack} onCancel={reset} />
       );
 
     case 'confirm':
       return withLayout(
         member && selectedCourt && gameType && duration && (
           <ConfirmBooking
+            member={member}
             courtName={selectedCourt.name}
             gameType={gameType}
             duration={duration}
@@ -512,6 +570,7 @@ export function TerminalKiosk() {
             onMatchTitleChange={setMatchTitle}
             onConfirm={handleJoinQueue}
             onBack={handleBack}
+            onCancel={reset}
             busy={busy}
           />
         )
@@ -542,9 +601,36 @@ export function TerminalKiosk() {
         )
       );
 
-    default:
-      return withLayout(
-        <IdleScreen rfidRef={rfidRef} onRfidSubmit={handleRfidSubmit} />
-      );
-  }
+      default:
+        return withLayout(
+          <IdleScreen rfidRef={rfidRef} onRfidSubmit={handleRfidSubmit} />
+        );
+    }
+  };
+
+  return (
+    <>
+      {renderStep()}
+      {/* Persistent badges for permanent states */}
+      {nfcStatus === 'unsupported' && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-3 py-1.5 rounded-lg text-xs font-medium z-50 whitespace-nowrap">
+          NFC Not Supported (Requires Android Chrome)
+        </div>
+      )}
+      {nfcStatus === 'waiting_for_interaction' && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-amber-500/90 text-black px-3 py-1.5 rounded-lg text-xs font-medium z-50 whitespace-nowrap">
+          Tap anywhere to enable NFC
+        </div>
+      )}
+      {nfcStatus === 'error' && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-3 py-1.5 rounded-lg text-xs font-medium z-50 whitespace-nowrap">
+          NFC Permission Denied
+        </div>
+      )}
+      {/* Active badge — auto-hides after 3s with fade */}
+      <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 bg-emerald-500/90 text-black px-3 py-1.5 rounded-lg text-xs font-medium z-50 whitespace-nowrap transition-opacity duration-700 ${nfcBadgeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        ✓ NFC Scanner Active
+      </div>
+    </>
+  );
 }

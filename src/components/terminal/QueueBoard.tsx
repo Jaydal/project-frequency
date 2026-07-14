@@ -66,6 +66,9 @@ export function QueueBoard() {
   }, []);
 
   const fetchInitial = useCallback(async () => {
+    // Trigger queue processor tick asynchronously to advance/expire games
+    fetch('/api/queue/tick').catch(() => {});
+
     const { data: settings } = await supabase.from('settings').select('key, value').eq('key', 'preparationTime').single();
     if (settings) {
       const v = parseInt(settings.value, 10);

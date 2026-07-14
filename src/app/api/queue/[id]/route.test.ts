@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockSupabaseResult = vi.hoisted(() => ({ data: null, error: null }));
+const mockSupabaseResult = vi.hoisted(() => ({ data: null as any, error: null as any }));
 const mockPublishDisplay = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn(() => {
   const chain: any = {

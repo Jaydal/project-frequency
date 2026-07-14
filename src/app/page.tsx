@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { redirect } from "next/navigation";
 
-export default function LandingPage() {
+export default async function LandingPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
+  const { code } = await searchParams;
+  if (code) {
+    redirect(`/update-password?code=${code}`);
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="px-6 py-4 flex justify-between items-center bg-white border-b">

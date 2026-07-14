@@ -25,6 +25,9 @@ export function CourtOverview() {
   const supabase = createClient();
 
   async function fetchAll() {
+    // Trigger queue processor tick asynchronously to advance/expire games
+    fetch('/api/queue/tick').catch(() => {});
+
     const { data: settings } = await supabase.from('settings').select('key, value').eq('key', 'preparationTime').single();
     if (settings) {
       const v = parseInt(settings.value, 10);
@@ -80,21 +83,21 @@ export function CourtOverview() {
   }, []);
 
   return (
-    <div className="h-full flex flex-col p-3 gap-1.5">
-      <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Courts</h2>
-      <div className="flex-1 space-y-1 overflow-y-auto">
+    <div className="h-full flex flex-col p-3 gap-1.5 bg-zinc-950">
+      <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider hidden sm:block">Courts</h2>
+      <div className="flex sm:flex-col gap-2 sm:gap-1 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto pb-1 sm:pb-0 no-scrollbar">
         {courts.map(c => {
           const effectivePrep = c.duration ? effectivePrepSec(c.duration, prepTimeSec) : prepTimeSec;
           const phase = phaseForElapsed(c.elapsed, effectivePrep);
           return (
-            <div key={c.id} className={`rounded px-2 py-1.5 border ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-zinc-900 border-amber-500/20' : 'bg-zinc-900 border-emerald-500/20') : 'bg-zinc-900/50 border-zinc-800'}`}>
+            <div key={c.id} className={`shrink-0 w-[140px] sm:w-auto rounded px-2 py-1.5 border ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-zinc-900 border-amber-500/20' : 'bg-zinc-900 border-emerald-500/20') : 'bg-zinc-900/50 border-zinc-800'}`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className={`size-1.5 rounded-full ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-zinc-600'}`} />
-                  <span className="text-xs font-medium text-zinc-300">{c.name}</span>
+                <div className="flex items-center gap-1.5 overflow-hidden">
+                  <span className={`size-1.5 shrink-0 rounded-full ${c.status === 'In Progress' ? (phase === 'preparing' ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-zinc-600'}`} />
+                  <span className="text-xs font-medium text-zinc-300 truncate">{c.name}</span>
                 </div>
                 {c.status === 'In Progress' && (
-                  <span className="text-xs font-mono text-zinc-400 tabular-nums">{formatTime(c.elapsed)}</span>
+                  <span className="text-xs font-mono text-zinc-400 tabular-nums shrink-0 ml-2">{formatTime(c.elapsed)}</span>
                 )}
               </div>
             </div>

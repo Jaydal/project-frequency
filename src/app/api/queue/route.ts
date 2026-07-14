@@ -37,7 +37,7 @@ const joinSchema = z.object({
   duration: z.number().int().positive(),
   partySize: z.union([z.literal(2), z.literal(4)]),
   playerIds: z.array(z.string().uuid()).min(1).max(4),
-  courtId: z.string().uuid().optional(),
+  courtId: z.string().optional(),
   matchTitle: z.string().optional(),
 });
 

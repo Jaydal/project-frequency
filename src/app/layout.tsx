@@ -3,16 +3,6 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/features/auth/components/providers";
 import { Toaster } from "@/components/ui/sonner";
-import { startExpiryProcessor } from "@/lib/queue/queue-processor";
-import { startBoardPublisher } from "@/lib/queue/board-publisher";
-
-if (typeof globalThis !== 'undefined' && typeof window === 'undefined') {
-  if (!(globalThis as any)._queueProcessorStarted) {
-    (globalThis as any)._queueProcessorStarted = true;
-    startExpiryProcessor();
-  }
-  startBoardPublisher();
-}
 
 const inter = Inter({ subsets: ["latin"] });
 
