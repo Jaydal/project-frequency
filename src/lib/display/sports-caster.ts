@@ -66,11 +66,23 @@ export function generatePayload(courtId: string, schedule: ScheduleData): Displa
     }
   }
 
+  const mappedSchedule = {
+    current: schedule.current
+      ? {
+          name: schedule.current.name,
+          startTime: schedule.current.startTime,
+          startTimeEpoch: Math.floor(new Date(schedule.current.startTime).getTime() / 1000),
+          durationMinutes: schedule.current.durationMinutes,
+        }
+      : null,
+    upcoming: schedule.upcoming,
+  };
+
   return {
     courtId,
     action: 'QUEUE_UPDATE',
     state,
-    schedule,
+    schedule: mappedSchedule,
     display: {
       pages
     }

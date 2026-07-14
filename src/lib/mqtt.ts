@@ -20,7 +20,7 @@ export interface DisplayPayload {
   action?: string;
   state: 'OPEN' | 'PLAYING' | 'MAINTENANCE';
   schedule: {
-    current?: { name: string; startTime: string; durationMinutes: number } | null;
+    current?: { name: string; startTime: string; startTimeEpoch?: number; durationMinutes: number } | null;
     upcoming: { name: string }[];
   };
   display: {
