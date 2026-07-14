@@ -49,7 +49,7 @@ export type KioskStep =
 const SUCCESS_DELAY_MS = 5000;
 
 export function TerminalKiosk() {
-  const [step, setStep] = useState<KioskStep>('booting');
+  const [step, setStep] = useState<KioskStep>('idle');
   const [member, setMember] = useState<Player | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<CourtOption | null>(null);
   const [gameType, setGameType] = useState<'1v1' | '2v2' | null>(null);
@@ -174,7 +174,9 @@ export function TerminalKiosk() {
       if (!cancelled) await fetchCourts();
     };
     run();
-    const id = setInterval(run, 10_000);
+    const id = setInterval(() => {
+      fetch('/api/queue/tick').catch(() => {});
+    }, 10_000);
     const realtime = supabase.channel('kiosk-processor');
     realtime.on('postgres_changes',
       { event: '*', schema: 'public', table: 'games' },
@@ -479,16 +481,7 @@ export function TerminalKiosk() {
 
   const renderStep = () => {
     switch (step) {
-      case 'booting':
-        return (
-          <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center p-8">
-            <div className="w-16 h-16 border-4 border-zinc-800 border-t-emerald-500 rounded-full animate-spin mb-8"></div>
-            <h1 className="text-2xl font-bold text-zinc-100 mb-2">Connecting to Network...</h1>
-            <p className="text-zinc-500">Performing system health checks before starting</p>
-          </div>
-        );
-
-    case 'idle':
+      case 'idle':
       return (
         <div className="relative min-h-screen bg-black">
           <QueueBoard />

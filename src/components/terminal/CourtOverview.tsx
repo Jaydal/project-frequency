@@ -11,6 +11,7 @@ interface CourtState {
   status: string;
   elapsed: number;
   duration?: number;
+  start_time?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -22,12 +23,15 @@ function formatTime(seconds: number): string {
 export function CourtOverview() {
   const [courts, setCourts] = useState<CourtState[]>([]);
   const [prepTimeSec, setPrepTimeSec] = useState(300);
+  const [tick, setTick] = useState(0);
   const supabase = createClient();
 
-  async function fetchAll() {
-    // Trigger queue processor tick asynchronously to advance/expire games
-    fetch('/api/queue/tick').catch(() => {});
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
+  async function fetchAll() {
     const { data: settings } = await supabase.from('settings').select('key, value').eq('key', 'preparationTime').single();
     if (settings) {
       const v = parseInt(settings.value, 10);
@@ -57,6 +61,7 @@ export function CourtOverview() {
             ? Math.floor((now - new Date(game.start_time).getTime()) / 1000)
             : 0,
           duration: game.duration,
+          start_time: game.start_time,
         };
       }
       return { id: c.id, name: c.name, status: 'Available', elapsed: 0 };
@@ -65,7 +70,12 @@ export function CourtOverview() {
 
   useEffect(() => {
     fetchAll();
-    const interval = setInterval(fetchAll, 5000);
+    
+    // Light ping to background queue processor to handle timeouts/expires
+    const tickInterval = setInterval(() => {
+      fetch('/api/queue/tick').catch(() => {});
+    }, 5000);
+
     const channel = supabase.channel('court-overview');
     channel.on('postgres_changes',
       { event: '*', schema: 'public', table: 'games' },
@@ -77,16 +87,27 @@ export function CourtOverview() {
     );
     channel.subscribe();
     return () => {
-      clearInterval(interval);
+      clearInterval(tickInterval);
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const now = Date.now();
+  const liveCourts = courts.map(c => {
+    if (c.status === 'In Progress' && c.start_time) {
+      return {
+        ...c,
+        elapsed: Math.max(0, Math.floor((now - new Date(c.start_time).getTime()) / 1000)),
+      };
+    }
+    return c;
+  });
 
   return (
     <div className="h-full flex flex-col p-3 gap-1.5 bg-zinc-950">
       <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider hidden sm:block">Courts</h2>
       <div className="flex sm:flex-col gap-2 sm:gap-1 overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto pb-1 sm:pb-0 no-scrollbar">
-        {courts.map(c => {
+        {liveCourts.map(c => {
           const effectivePrep = c.duration ? effectivePrepSec(c.duration, prepTimeSec) : prepTimeSec;
           const phase = phaseForElapsed(c.elapsed, effectivePrep);
           return (

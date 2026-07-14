@@ -59,11 +59,11 @@ export function QueueBoard() {
 
   useEffect(() => {
     fetchInitial();
-    const id = setInterval(async () => {
-      await fetchInitial();
+    const id = setInterval(() => {
+      fetch('/api/queue/tick').catch(() => {});
     }, 5_000);
     return () => clearInterval(id);
-  }, []);
+  }, [fetchInitial]);
 
   const fetchInitial = useCallback(async () => {
     // Trigger queue processor tick asynchronously to advance/expire games
