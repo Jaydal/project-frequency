@@ -51,13 +51,6 @@ export function QueueBoard() {
   const [prepTimeSec, setPrepTimeSec] = useState(300);
   const supabase = createClient();
 
-  useEffect(() => {
-    fetchInitial();
-    const id = setInterval(() => {
-      fetch('/api/queue/tick').catch(() => {});
-    }, 5_000);
-    return () => clearInterval(id);
-  }, [fetchInitial]);
 
   const fetchInitial = useCallback(async () => {
     // Trigger queue processor tick asynchronously to advance/expire games
@@ -142,6 +135,14 @@ export function QueueBoard() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    fetchInitial();
+    const id = setInterval(() => {
+      fetch('/api/queue/tick').catch(() => {});
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [fetchInitial]);
 
   useEffect(() => {
     const channel = supabase.channel('queue-board');
