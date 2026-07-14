@@ -31,6 +31,7 @@ export async function GET() {
     env: process.env.NODE_ENV ?? 'development',
     connections: {
       broker: brokerOk ? 'connected' : 'disconnected',
+      brokerConfigured: !!process.env.MQTT_BROKER_URL,
       supabase: supabaseDb,
     },
     courtDevices: Object.fromEntries(

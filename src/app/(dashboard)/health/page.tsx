@@ -94,7 +94,17 @@ export default function HealthPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Wifi} label="MQTT Broker" value={<span className="flex items-center gap-2"><Badge status={data.connections.broker} /><span className="text-card-foreground">{data.connections.broker}</span></span>} />
+        <StatCard 
+          icon={Wifi} 
+          label="MQTT Broker" 
+          value={
+            <span className="flex items-center gap-2">
+              <Badge status={data.connections.broker} />
+              <span className="text-card-foreground">{data.connections.broker}</span>
+            </span>
+          } 
+          sub={(data.connections as any).brokerConfigured ? "Credentials Loaded" : "Missing Vercel Env Variables"}
+        />
         <StatCard icon={Database} label="Supabase DB" value={<span className="flex items-center gap-2"><Badge status={data.connections.supabase} /><span className="text-card-foreground">{data.connections.supabase}</span></span>} />
         <StatCard icon={Monitor} label="Court Devices" value={`${onlineCourts}/${courtCount} online`} />
       </div>
