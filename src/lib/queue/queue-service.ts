@@ -83,15 +83,13 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
   const supabase = await createClient();
 
   // Run independent checks in parallel to reduce round trips
-  const [memberRes, existingQueueRes, ratesRes, waitingRes] = await Promise.all([
+  const [memberRes, ratesRes, waitingRes] = await Promise.all([
     supabase.from('members').select('status').eq('id', params.memberId).single(),
-    supabase.from('queue_entries').select('id').eq('member_id', params.memberId).in('status', ['waiting', 'offered']).limit(1),
     getRates(supabase),
     supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
   ]);
 
   if (!memberRes.data || memberRes.data.status !== 'Active') throw new Error('Member not active');
-  if (existingQueueRes.data && existingQueueRes.data.length > 0) throw new Error('Already in queue');
 
   const rates = ratesRes;
   const charge = calcCharge(rates, params.duration, params.partySize);

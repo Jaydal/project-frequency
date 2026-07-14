@@ -256,8 +256,6 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_queue_entries_member_waiting
-  ON queue_entries (member_id) WHERE status = 'waiting';
 
 -- Seed courts
 INSERT INTO courts (id, name, status) VALUES
