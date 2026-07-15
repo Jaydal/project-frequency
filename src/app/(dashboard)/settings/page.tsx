@@ -20,54 +20,59 @@ export default async function SettingsPage() {
   const prepTimeSec = parseInt(prepRow?.value ?? '300', 10);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">System Settings</h1>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">System Settings</h1>
+        <p className="text-sm text-zinc-500 mt-1">Configure pickleball court products, rates, display layouts, and device parameters</p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Products</CardTitle>
-          <CardDescription>Configure available match types, durations, rates, and preparation time.</CardDescription>
+      <Card className="border-zinc-800 bg-zinc-900/30">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-zinc-200">Products & Match Rules</CardTitle>
+          <CardDescription className="text-zinc-500">Configure available match types, durations, rates, and preparation time.</CardDescription>
         </CardHeader>
         <CardContent>
           <ProductsEditor matchTypes={matchTypes} durations={durations} rates={rates} prepTimeSec={prepTimeSec} />
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Display Sequence</CardTitle>
-          <CardDescription>Configure what the LED panels show and how they cycle. Each state (idle, prep, game) has a sequence of pages that rotate at the configured interval.</CardDescription>
+      <Card className="border-zinc-800 bg-zinc-900/30">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-zinc-200">Display Sequence</CardTitle>
+          <CardDescription className="text-zinc-500">Configure what the LED panels show and how they cycle. Each state (idle, prep, game) has a sequence of pages that rotate at the configured interval.</CardDescription>
         </CardHeader>
         <CardContent>
           <DisplaySequenceEditor sequence={sequenceRow?.value ?? ''} />
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Settings</CardTitle>
-          <CardDescription>These settings are synced with the RFID controller hardware.</CardDescription>
+      <Card className="border-zinc-800 bg-zinc-900/30 overflow-hidden">
+        <CardHeader className="pb-4 border-b border-zinc-800/50 bg-zinc-950/20">
+          <CardTitle className="text-zinc-200">Raw Settings Sync</CardTitle>
+          <CardDescription className="text-zinc-500">These configurations are synchronized with the physical RFID kiosk terminal and LED matrix controllers.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Key</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Description</TableHead>
+            <TableHeader className="bg-zinc-950/40">
+              <TableRow className="border-b border-zinc-800 hover:bg-transparent">
+                <TableHead className="text-zinc-400 font-semibold h-11">Key</TableHead>
+                <TableHead className="text-zinc-400 font-semibold h-11">Value</TableHead>
+                <TableHead className="text-zinc-400 font-semibold h-11 pr-6">Description</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="divide-y divide-zinc-800">
               {!settings?.length ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center">No settings configured yet.</TableCell>
+                  <TableCell colSpan={3} className="text-center text-zinc-500 py-8">
+                    No settings configured yet.
+                  </TableCell>
                 </TableRow>
               ) : (
                 settings.map((s: any) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.key}</TableCell>
-                    <TableCell>{s.value}</TableCell>
-                    <TableCell>{s.description}</TableCell>
+                  <TableRow key={s.id} className="border-zinc-800 hover:bg-zinc-800/10 transition-colors">
+                    <TableCell className="font-semibold text-zinc-200 py-3.5">{s.key}</TableCell>
+                    <TableCell className="font-mono text-zinc-400 text-xs py-3.5 max-w-[250px] truncate">{s.value}</TableCell>
+                    <TableCell className="text-zinc-400 py-3.5 pr-6">{s.description}</TableCell>
                   </TableRow>
                 ))
               )}

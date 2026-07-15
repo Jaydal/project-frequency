@@ -51,3 +51,56 @@ export async function assignRFID(data: { memberId: string | null; uid: string })
   revalidatePath('/rfid');
   revalidatePath('/members');
 }
+
+export async function unassignRFID(cardId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('rfid_cards')
+    .update({
+      member_id: null,
+      status: 'Unassigned',
+      assigned_date: null,
+    })
+    .eq('id', cardId);
+
+  if (error) throw new Error(error.message);
+  revalidatePath('/rfid');
+  revalidatePath('/members');
+}
+
+export async function deleteRFID(cardId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('rfid_cards')
+    .delete()
+    .eq('id', cardId);
+
+  if (error) throw new Error(error.message);
+  revalidatePath('/rfid');
+  revalidatePath('/members');
+}
+
+export async function updateRFID(cardId: string, data: {
+  status: string;
+  memberId: string | null;
+}) {
+  const supabase = await createClient();
+  const updateData: any = {
+    status: data.status,
+    member_id: data.memberId,
+  };
+  if (data.memberId) {
+    updateData.assigned_date = new Date().toISOString();
+  } else {
+    updateData.assigned_date = null;
+  }
+  
+  const { error } = await supabase
+    .from('rfid_cards')
+    .update(updateData)
+    .eq('id', cardId);
+
+  if (error) throw new Error(error.message);
+  revalidatePath('/rfid');
+  revalidatePath('/members');
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Activity, Wifi, Database, Monitor, Server, Clock } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 type HealthData = {
   ok: boolean;
@@ -33,23 +34,25 @@ function formatUptime(sec: number): string {
 
 function Badge({ status }: { status: string }) {
   const color = status === 'connected' || status === 'ok'
-    ? 'bg-emerald-500'
+    ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.4)]'
     : status === 'disconnected' || status.startsWith('error')
-    ? 'bg-red-500'
-    : 'bg-amber-500';
-  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color} shrink-0`} />;
+    ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+    : 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.4)]';
+  return <span className={`inline-block w-2 h-2 rounded-full ${color} shrink-0`} />;
 }
 
 function StatCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: React.ReactNode; sub?: string }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4 flex items-start gap-3">
-      <Icon size={18} className="text-muted-foreground mt-0.5 shrink-0" />
-      <div className="min-w-0">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="text-base font-semibold text-card-foreground truncate">{value}</div>
-        {sub && <div className="text-xs text-muted-foreground/70 mt-0.5">{sub}</div>}
-      </div>
-    </div>
+    <Card className="border-zinc-800 bg-zinc-900/20 hover:border-zinc-700/50 transition-all">
+      <CardContent className="p-4 flex items-start gap-3">
+        <Icon size={18} className="text-zinc-500 mt-0.5 shrink-0" />
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{label}</div>
+          <div className="text-base font-bold text-zinc-200 truncate mt-0.5">{value}</div>
+          {sub && <div className="text-[10px] text-zinc-500 mt-0.5">{sub}</div>}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -75,79 +78,100 @@ export default function HealthPage() {
     return () => clearInterval(id);
   }, [fetchHealth]);
 
-  if (loading) return <div className="text-center py-12 text-muted-foreground">Loading health data...</div>;
+  if (loading) return <div className="text-center py-12 text-zinc-500">Loading health data...</div>;
   if (!data) return <div className="text-center py-12 text-red-500">Failed to load health data</div>;
 
   const courtCount = Object.keys(data.courtDevices).length;
   const onlineCourts = Object.values(data.courtDevices).filter(d => d.status === 'online').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center gap-3">
         <Activity size={22} className={data.ok ? 'text-emerald-400' : 'text-red-400'} />
-        <h1 className="text-2xl font-bold text-foreground">System Health</h1>
-        <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-          data.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">System Health</h1>
+        <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
+          data.ok
+            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+            : 'bg-red-500/10 text-red-400 border-red-500/20'
         }`}>
           {data.ok ? 'All Systems Operational' : 'Degraded'}
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard 
           icon={Wifi} 
           label="MQTT Broker" 
           value={
             <span className="flex items-center gap-2">
               <Badge status={data.connections.broker} />
-              <span className="text-card-foreground">{data.connections.broker}</span>
+              <span className="text-zinc-200 capitalize">{data.connections.broker}</span>
             </span>
           } 
           sub={(data.connections as any).brokerConfigured ? "Credentials Loaded" : "Missing Vercel Env Variables"}
         />
-        <StatCard icon={Database} label="Supabase DB" value={<span className="flex items-center gap-2"><Badge status={data.connections.supabase} /><span className="text-card-foreground">{data.connections.supabase}</span></span>} />
-        <StatCard icon={Monitor} label="Court Devices" value={`${onlineCourts}/${courtCount} online`} />
+        <StatCard 
+          icon={Database} 
+          label="Supabase DB" 
+          value={
+            <span className="flex items-center gap-2">
+              <Badge status={data.connections.supabase} />
+              <span className="text-zinc-200 capitalize">{data.connections.supabase}</span>
+            </span>
+          } 
+        />
+        <StatCard icon={Monitor} label="Court Devices" value={`${onlineCourts} / ${courtCount} Online`} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon={Clock} label="Uptime" value={formatUptime(data.uptime)} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatCard icon={Clock} label="Server Uptime" value={formatUptime(data.uptime)} />
         <StatCard icon={Server} label="Memory (RSS)" value={`${(data.memory.rss / 1024 / 1024).toFixed(0)} MB`} sub={`Heap: ${(data.memory.heapUsed / 1024 / 1024).toFixed(0)} / ${(data.memory.heapTotal / 1024 / 1024).toFixed(0)} MB`} />
         <StatCard icon={Server} label="Environment" value={data.env} sub={`Node ${data.node}`} />
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-5">
-        <h2 className="font-semibold text-card-foreground mb-3 flex items-center gap-2 text-sm"><Monitor size={16} /> Court Device Status</h2>
-        {courtCount === 0 ? (
-          <p className="text-sm text-muted-foreground">No court devices have sent a heartbeat yet.</p>
-        ) : (
-          <div className="overflow-x-auto -mx-5 px-5">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b border-border">
-                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">Court</th>
-                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">Status</th>
-                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">IP</th>
-                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">RSSI</th>
-                  <th className="pb-2 pr-4 font-medium whitespace-nowrap">Seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(data.courtDevices).map(([id, device]) => (
-                  <tr key={id} className="border-b border-border/50 last:border-0">
-                    <td className="py-2.5 pr-4 font-medium text-foreground whitespace-nowrap">{device.court || id}</td>
-                    <td className="py-2.5 pr-4 whitespace-nowrap"><Badge status={device.status} /><span className="ml-2 text-card-foreground">{device.status}</span></td>
-                    <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap font-mono text-xs">{device.ip || '-'}</td>
-                    <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap">{device.rssi ?? '-'}</td>
-                    <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap">{device.ago}</td>
+      <Card className="border-zinc-800 bg-zinc-900/30 overflow-hidden">
+        <div className="px-5 py-4 border-b border-zinc-800/50 bg-zinc-950/20 flex items-center gap-2">
+          <Monitor size={16} className="text-zinc-400" />
+          <h2 className="font-semibold text-zinc-250 text-sm">Court Device Registry</h2>
+        </div>
+        <CardContent className="p-0">
+          {courtCount === 0 ? (
+            <p className="text-sm text-zinc-500 py-8 text-center">No court devices have reported heartbeats yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-zinc-950/40">
+                  <tr className="text-zinc-400 font-semibold border-b border-zinc-800">
+                    <th className="py-3 px-4">Court Name</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">IP Address</th>
+                    <th className="py-3 px-4">Signal (RSSI)</th>
+                    <th className="py-3 px-4 pr-6">Last Heartbeat</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody className="divide-y divide-zinc-800 text-zinc-300">
+                  {Object.entries(data.courtDevices).map(([id, device]) => (
+                    <tr key={id} className="border-zinc-800 hover:bg-zinc-800/10 transition-colors">
+                      <td className="py-3.5 px-4 font-semibold text-zinc-200">{device.court || id}</td>
+                      <td className="py-3.5 px-4">
+                        <span className="flex items-center gap-2">
+                          <Badge status={device.status} />
+                          <span className="capitalize">{device.status}</span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-xs text-zinc-400">{device.ip || '—'}</td>
+                      <td className="py-3.5 px-4 text-zinc-400">{device.rssi ? `${device.rssi} dBm` : '—'}</td>
+                      <td className="py-3.5 px-4 text-zinc-500 pr-6">{device.ago}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      <p className="text-xs text-muted-foreground/60">Last refreshed: {new Date(data.timestamp).toLocaleTimeString()} (auto-updates every 5s)</p>
+      <p className="text-xs text-zinc-500">Last refreshed: {new Date(data.timestamp).toLocaleTimeString()} &bull; Auto-updates every 5s</p>
     </div>
   );
 }

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AssignRFIDDialog } from './assign-rfid-dialog';
+import { EditRfidButton, UnassignRfidButton, DeleteRfidButton } from './rfid-actions';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default async function RFIDPage() {
@@ -29,13 +30,14 @@ export default async function RFIDPage() {
                 <TableHead className="text-zinc-400 font-semibold h-11">Card UID</TableHead>
                 <TableHead className="text-zinc-400 font-semibold h-11">Assigned Member</TableHead>
                 <TableHead className="text-zinc-400 font-semibold h-11">Assignment Date</TableHead>
-                <TableHead className="text-zinc-400 font-semibold h-11 pr-6">Status</TableHead>
+                <TableHead className="text-zinc-400 font-semibold h-11">Status</TableHead>
+                <TableHead className="text-zinc-400 font-semibold text-right h-11 pr-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-zinc-800">
               {!cards?.length ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-zinc-500 py-8">
+                  <TableCell colSpan={5} className="text-center text-zinc-500 py-8">
                     No RFID cards registered yet.
                   </TableCell>
                 </TableRow>
@@ -66,7 +68,7 @@ export default async function RFIDPage() {
                             })
                           : <span className="text-zinc-600">—</span>}
                       </TableCell>
-                      <TableCell className="py-3.5 pr-6">
+                      <TableCell className="py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                           isActive
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
@@ -74,6 +76,15 @@ export default async function RFIDPage() {
                         }`}>
                           {card.status}
                         </span>
+                      </TableCell>
+                      <TableCell className="py-3.5 text-right pr-6">
+                        <div className="flex gap-1.5 justify-end items-center">
+                          {!isUnassigned && (
+                            <UnassignRfidButton cardId={card.id} cardUid={card.uid} />
+                          )}
+                          <EditRfidButton card={card} />
+                          <DeleteRfidButton cardId={card.id} cardUid={card.uid} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
