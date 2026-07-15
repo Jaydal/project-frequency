@@ -26,6 +26,8 @@ export interface BoardCourt {
 
 export interface BoardNowServing {
   hasOffer: boolean;
+  queueEntryId: string; // queue entry UUID
+  memberId: string; // member UUID
   playerFirstName: string;
   courtName: string;
   durationMin: number;
@@ -33,7 +35,8 @@ export interface BoardNowServing {
 }
 
 export interface BoardQueueRow {
-  id: string;
+  id: string; // queue entry UUID
+  memberId: string; // member UUID
   position: number;
   firstName: string;
   lastName: string;
@@ -131,15 +134,18 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
   const nowServing: BoardNowServing = prioritizedOffer
     ? {
         hasOffer: true,
+        queueEntryId: prioritizedOffer.id,
+        memberId: prioritizedOffer.member_id,
         playerFirstName: nameById.get(prioritizedOffer.member_id)?.first ?? 'Player',
         courtName: prioritizedOffer.court_id ? (courtNameById.get(prioritizedOffer.court_id) ?? 'Court') : 'Court',
         durationMin: prioritizedOffer.duration ?? 0,
         expiresAt: prioritizedOffer.expires_at ? Math.floor(new Date(prioritizedOffer.expires_at).getTime() / 1000) : 0,
       }
-    : { hasOffer: false, playerFirstName: '', courtName: '', durationMin: 0, expiresAt: 0 };
+    : { hasOffer: false, queueEntryId: '', memberId: '', playerFirstName: '', courtName: '', durationMin: 0, expiresAt: 0 };
 
   const queue: BoardQueueRow[] = (waiting ?? []).map((q: any, i: number) => ({
     id: q.id,
+    memberId: q.member_id,
     position: i + 1,
     firstName: nameById.get(q.member_id)?.first ?? '?',
     lastName: nameById.get(q.member_id)?.last ?? '',
