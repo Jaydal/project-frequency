@@ -22,7 +22,7 @@ export async function GET(
 
   // Development/Test Mode: Intercept TEST001, test, etc. and map to real active members
   const upperRfid = rfid.toUpperCase();
-  if (upperRfid.startsWith('TEST')) {
+  if (upperRfid.startsWith('TEST') || upperRfid === '11EB7906') {
     const testIndex = parseInt(upperRfid.replace('TEST', '')) || 1;
     const { data: members } = await supabase
       .from('members')
