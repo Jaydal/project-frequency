@@ -97,7 +97,7 @@ export function CourtOverview() {
     fetchAll();
 
     const es = new EventSource('/api/queue/events');
-    es.onmessage = () => fetchAll();
+    es.onmessage = () => { fetch('/api/queue/tick').catch(() => {}); fetchAll(); };
     es.onerror = () => es.close();
 
     const channel = supabase.channel('court-overview');
