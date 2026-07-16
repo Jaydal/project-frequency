@@ -89,9 +89,12 @@ export async function acceptOffer(entryId: string, options?: { bookCourt?: boole
   if (gameErr) {
     if (gameErr.message?.toLowerCase().includes('insufficient')) {
       await supabase.from('queue_entries').update({ status: 'insufficient_credits', updated_at: new Date().toISOString() }).eq('id', entryId);
-      if (entry.court_id) await processCourt(entry.court_id);
-      return { success: false, error: 'Insufficient credits' };
+    } else {
+      // For any other register_game failure (e.g. missing RFID card), expire
+      // the entry so the queue can advance to the next waiting person.
+      await supabase.from('queue_entries').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', entryId);
     }
+    if (entry.court_id) await processCourt(entry.court_id);
     return { success: false, error: gameErr.message };
   }
 
