@@ -20,9 +20,10 @@ export async function GET(
   const { rfid } = await context.params;
   const supabase = await createClient();
 
-  // Development/Test Mode: Intercept TEST001, TEST002, etc. and map to real active members
-  if (rfid.startsWith('TEST')) {
-    const testIndex = parseInt(rfid.replace('TEST', '')) || 1;
+  // Development/Test Mode: Intercept TEST001, test, etc. and map to real active members
+  const upperRfid = rfid.toUpperCase();
+  if (upperRfid.startsWith('TEST')) {
+    const testIndex = parseInt(upperRfid.replace('TEST', '')) || 1;
     const { data: members } = await supabase
       .from('members')
       .select('*, wallets(*)')
