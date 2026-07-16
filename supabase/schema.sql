@@ -241,7 +241,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   member_id       UUID NOT NULL REFERENCES members(id),
   requested_start TIMESTAMPTZ NOT NULL,
-  duration        INTEGER NOT NULL CHECK (duration IN (30, 60, 90)),
+  duration        INTEGER NOT NULL CHECK (duration > 0),
   party_size      INTEGER NOT NULL CHECK (party_size IN (2, 4)),
   player_ids      JSONB NOT NULL DEFAULT '[]',
   court_id        TEXT REFERENCES courts(id) ON UPDATE CASCADE,

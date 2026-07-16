@@ -63,6 +63,7 @@ export interface BoardSnapshot {
 }
 
 export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardSnapshot> {
+  // W14: TODO - Replace `any` casts with generated Database types from Supabase CLI
   const [{ data: settingsRows }, { data: games }, { data: allCourts }, { data: waiting }, { data: offers }] =
     await Promise.all([
       supabase.from('settings').select('key, value').in('key', ['products', 'prices', 'preparationTime']),
@@ -104,7 +105,8 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
         prepTimeSec,
         players: (game.game_players ?? []).map((gp: any) => ({
           firstName: gp.members?.first_name ?? '',
-          lastName: gp.members?.last_name ?? '',
+          // W9: Truncate last name to initial only for privacy on public MQTT
+          lastName: gp.members?.last_name ? gp.members.last_name.charAt(0) : '',
         })),
       };
     }
@@ -148,7 +150,8 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
     memberId: q.member_id,
     position: i + 1,
     firstName: nameById.get(q.member_id)?.first ?? '?',
-    lastName: nameById.get(q.member_id)?.last ?? '',
+    // W9: Truncate last name to initial only
+    lastName: nameById.get(q.member_id)?.last ? nameById.get(q.member_id)!.last.charAt(0) : '',
     matchType: q.party_size === 4 ? '2v2' : '1v1',
     matchTitle: q.match_title ?? '',
     courtName: q.court_id ? (courtNameById.get(q.court_id) ?? '') : '',
@@ -158,7 +161,6 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
 
   // effectivePrepSec is applied per-court on the client using durationMin; we
   // pass the raw configured prepTimeSec so the kiosk applies the same rule.
-  void effectivePrepSec;
 
   return { config, courts, nowServing, queue };
 }

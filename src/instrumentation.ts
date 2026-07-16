@@ -10,6 +10,9 @@ export async function register() {
   // Only run on the server runtime, not during static builds
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
+  // Validate environment variables on startup
+  await import('@/lib/env');
+
   const { startExpiryProcessor } = await import('@/lib/queue/queue-processor');
   const { startBoardPublisher } = await import('@/lib/queue/board-publisher');
 

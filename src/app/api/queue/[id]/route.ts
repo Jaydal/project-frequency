@@ -8,15 +8,25 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
 
+  const apiKey = _request.headers.get('X-API-Key');
+  if (!apiKey || apiKey !== process.env.INTERNAL_API_KEY) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: game } = await supabase.from('games').select('status').eq('id', id).single();
+  const { data: game } = await supabase.from('games').select('status, court_id').eq('id', id).single();
   if (!game || game.status !== 'Scheduled')
     return NextResponse.json({ error: 'Queue entry not found' }, { status: 404 });
 
   const { error } = await supabase.from('games').delete().eq('id', id);
   if (error) return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
+
+  if (game.court_id) {
+    await supabase.from('courts').update({ status: 'Available' }).eq('id', game.court_id);
+    await publishDisplay(game.court_id, generatePayload(game.court_id, { current: null, upcoming: [] }));
+  }
 
   return NextResponse.json({ ok: true });
 }
@@ -25,6 +35,11 @@ export async function PATCH(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+
+  const apiKey = _request.headers.get('X-API-Key');
+  if (!apiKey || apiKey !== process.env.INTERNAL_API_KEY) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const { id } = await params;
   const supabase = await createClient();

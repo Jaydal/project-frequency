@@ -33,6 +33,7 @@ const g = global as typeof globalThis & {
   _mqttConnected?: boolean;
   _courtStatuses?: Map<string, CourtStatus>;
   _displayStates?: Map<string, DisplayPayload>;
+  _connectingPromise?: Promise<MqttClient | null> | null;
 };
 
 if (!g._courtStatuses) g._courtStatuses = new Map();
@@ -46,9 +47,13 @@ export async function connectMqtt(): Promise<MqttClient | null> {
     return g._mqttClient;
   }
 
+  if (g._connectingPromise) {
+    return g._connectingPromise;
+  }
+
   if (!g._mqttClient) {
     g._mqttClient = mqtt.connect(url, {
-      clientId: `freq-web-${Math.random().toString(16).slice(2, 8)}`,
+      clientId: `freq-web-${crypto.randomUUID().slice(0, 12)}`,
       reconnectPeriod: 5000,
       connectTimeout: 5000,
       username: process.env.MQTT_USERNAME,
@@ -93,13 +98,14 @@ export async function connectMqtt(): Promise<MqttClient | null> {
     return g._mqttClient;
   }
 
-  return new Promise((resolve) => {
+  g._connectingPromise = new Promise((resolve) => {
     let resolved = false;
 
     const onConnect = () => {
       if (resolved) return;
       resolved = true;
       cleanup();
+      g._connectingPromise = null;
       resolve(g._mqttClient!);
     };
 
@@ -107,6 +113,7 @@ export async function connectMqtt(): Promise<MqttClient | null> {
       if (resolved) return;
       resolved = true;
       cleanup();
+      g._connectingPromise = null;
       resolve(null);
     };
 
@@ -114,6 +121,7 @@ export async function connectMqtt(): Promise<MqttClient | null> {
       if (resolved) return;
       resolved = true;
       cleanup();
+      g._connectingPromise = null;
       resolve(null);
     }, 4000);
 
@@ -128,6 +136,8 @@ export async function connectMqtt(): Promise<MqttClient | null> {
     g._mqttClient?.once('error', onError);
     g._mqttClient?.once('close', onError);
   });
+
+  return g._connectingPromise;
 }
 
 // ── Health helpers ────────────────────────────────────────────────────────────

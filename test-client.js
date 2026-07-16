@@ -1,7 +1,8 @@
 const mqtt = require('mqtt');
 
 // Setup: Ensure you have Mosquitto running locally (or change this to your broker URL)
-const broker = 'mqtts://frequency:Frequency@123@594d608708f34a7b9607e86258c3b3ae.s1.eu.hivemq.cloud:8883'; 
+require('dotenv').config({ path: '.env.local' });
+const broker = process.env.NEXT_PUBLIC_MQTT_BROKER || 'mqtts://localhost:8883'; 
 const courtId = 'court-1'; // Example court ID from the dashboard
 
 console.log(`[TEST CLIENT] Connecting to MQTT Broker at ${broker}...`);

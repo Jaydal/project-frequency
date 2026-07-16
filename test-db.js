@@ -6,7 +6,7 @@ const path = require('path');
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // URL is https://iqkebvbcspnohjxanehl.supabase.co
 const projectId = 'iqkebvbcspnohjxanehl';
-const password = 'gemini';
+const password = process.env.DB_PASSWORD || '';
 
 const connectionString = `postgresql://postgres.${projectId}:${password}@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`;
 

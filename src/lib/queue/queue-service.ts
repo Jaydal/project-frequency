@@ -3,6 +3,7 @@ import type { QueueEntry } from './index';
 import { findAvailableCourt, isSlotAvailable } from './booking-engine';
 import { publishDisplay } from '@/lib/mqtt';
 import { generatePayload } from '@/lib/display/sports-caster';
+import { getCost, ProductsConfig } from '@/lib/products-config-types';
 
 export interface JoinQueueParams {
   memberId: string;
@@ -20,9 +21,10 @@ async function getRates(supabase: Awaited<ReturnType<typeof createClient>>): Pro
 }
 
 function calcCharge(rates: Record<string, number>, duration: number, partySize: number): number {
-  const rate = rates[String(duration)];
-  if (!rate) throw new Error(`No price configured for ${duration} min`);
-  return Math.round((rate * (duration / 30)) / (partySize === 4 ? 2 : 1));
+  const config: ProductsConfig = { matchTypes: [], durations: [], rates, prepTimeSec: 0 };
+  const cost = getCost(config, duration, partySize);
+  if (cost === 0) throw new Error(`No price configured for ${duration} min`);
+  return cost;
 }
 
 async function deductWallet(memberId: string, amount: number, gameId: string): Promise<void> {

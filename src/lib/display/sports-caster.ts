@@ -1,6 +1,7 @@
 import { DisplayPayload, DisplayPage } from '../mqtt';
 
 export interface ScheduleData {
+  maintenance?: boolean;
   current?: {
     name: string;
     startTime: string;
@@ -13,9 +14,17 @@ export function generatePayload(courtId: string, schedule: ScheduleData): Displa
   const pages: DisplayPage[] = [];
   let state: 'OPEN' | 'PLAYING' | 'MAINTENANCE' = 'OPEN';
 
-  const courtNumStr = courtId.replace('court-', '').toUpperCase();
+  const courtNumStr = courtId.startsWith('court-') ? courtId.replace('court-', '').toUpperCase() : courtId.slice(-4).toUpperCase();
 
-  if (!schedule.current) {
+  if (schedule.maintenance) {
+    state = 'MAINTENANCE';
+    pages.push({
+      text: `COURT ${courtNumStr} CLOSED FOR MAINTENANCE`,
+      color: "#FF0000",
+      effect: "SCROLL",
+      durationSeconds: 10
+    });
+  } else if (!schedule.current) {
     state = 'OPEN';
     pages.push({
       text: `COURT ${courtNumStr} AVAILABLE`,
@@ -71,7 +80,10 @@ export function generatePayload(courtId: string, schedule: ScheduleData): Displa
       ? {
           name: schedule.current.name,
           startTime: schedule.current.startTime,
-          startTimeEpoch: Math.floor(new Date(schedule.current.startTime).getTime() / 1000),
+          startTimeEpoch: (() => {
+            const t = Math.floor(new Date(schedule.current.startTime).getTime() / 1000);
+            return isNaN(t) ? Math.floor(Date.now() / 1000) : t;
+          })(),
           durationMinutes: schedule.current.durationMinutes,
         }
       : null,
