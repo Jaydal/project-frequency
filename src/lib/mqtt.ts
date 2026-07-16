@@ -1,4 +1,5 @@
 import mqtt, { MqttClient } from 'mqtt';
+import { boardEmitter, BOARD_UPDATE_EVENT } from '@/lib/queue/board-emitter';
 
 type CourtStatus = {
   status: 'online' | 'offline';
@@ -181,6 +182,7 @@ export async function publishBoard(snapshotJson: string): Promise<boolean> {
           console.error('[mqtt] publishBoard callback error:', err);
           resolve(false);
         } else {
+          boardEmitter.emit(BOARD_UPDATE_EVENT, snapshotJson);
           resolve(true);
         }
       });

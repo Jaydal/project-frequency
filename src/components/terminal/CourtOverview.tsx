@@ -95,11 +95,10 @@ export function CourtOverview() {
 
   useEffect(() => {
     fetchAll();
-    
-    // Light ping to background queue processor to handle timeouts/expires
-    const tickInterval = setInterval(() => {
-      fetch('/api/queue/tick').catch(() => {});
-    }, 5000);
+
+    const es = new EventSource('/api/queue/events');
+    es.onmessage = () => fetchAll();
+    es.onerror = () => es.close();
 
     const channel = supabase.channel('court-overview');
     channel.on('postgres_changes',
@@ -112,7 +111,7 @@ export function CourtOverview() {
     );
     channel.subscribe();
     return () => {
-      clearInterval(tickInterval);
+      es.close();
       supabase.removeChannel(channel);
     };
   }, []);

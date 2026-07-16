@@ -174,9 +174,9 @@ export function TerminalKiosk() {
       if (!cancelled) await fetchCourts();
     };
     run();
-    const id = setInterval(() => {
-      fetch('/api/queue/tick').catch(() => {});
-    }, 10_000);
+    const es = new EventSource('/api/queue/events');
+    es.onmessage = () => { if (!cancelled) fetchCourts(); };
+    es.onerror = () => es.close();
     const realtime = supabase.channel('kiosk-processor');
     realtime.on('postgres_changes',
       { event: '*', schema: 'public', table: 'games' },
@@ -187,7 +187,7 @@ export function TerminalKiosk() {
       () => { if (!cancelled) { fetchCourts(); } }
     );
     realtime.subscribe();
-    return () => { cancelled = true; clearInterval(id); supabase.removeChannel(realtime); };
+    return () => { cancelled = true; es.close(); supabase.removeChannel(realtime); };
   }, []);
 
   async function fetchInitial() {

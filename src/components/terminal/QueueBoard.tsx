@@ -138,10 +138,16 @@ export function QueueBoard() {
 
   useEffect(() => {
     fetchInitial();
-    const id = setInterval(() => {
-      fetch('/api/queue/tick').catch(() => {});
-    }, 5_000);
-    return () => clearInterval(id);
+
+    const es = new EventSource('/api/queue/events');
+    es.onmessage = () => {
+      fetchInitial();
+    };
+    es.onerror = () => {
+      es.close();
+    };
+
+    return () => es.close();
   }, [fetchInitial]);
 
   useEffect(() => {
