@@ -162,5 +162,7 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
   // effectivePrepSec is applied per-court on the client using durationMin; we
   // pass the raw configured prepTimeSec so the kiosk applies the same rule.
 
-  return { config, courts, nowServing, queue };
+  const serverTime = Math.floor(Date.now() / 1000);
+
+  return { config, courts, nowServing, queue, serverTime };
 }
