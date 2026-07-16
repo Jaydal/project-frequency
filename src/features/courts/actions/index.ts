@@ -69,6 +69,40 @@ export async function endGame(gameId: string, courtId: string, refund: boolean =
   revalidatePath('/courts');
 }
 
+export async function reorderQueue(entryId: string, targetIndex: number) {
+  const supabase = await createClient();
+
+  const { data: allWaiting } = await supabase
+    .from('queue_entries')
+    .select('id, created_at')
+    .eq('status', 'waiting')
+    .order('created_at', { ascending: true });
+
+  const others = (allWaiting ?? []).filter(e => e.id !== entryId);
+  if (others.length === 0) throw new Error('No other waiting entries to reorder against');
+
+  const clampedIndex = Math.max(0, Math.min(targetIndex, others.length));
+
+  let insertTime: Date;
+  if (clampedIndex === 0) {
+    insertTime = new Date(new Date(others[0].created_at).getTime() - 1000);
+  } else if (clampedIndex >= others.length) {
+    insertTime = new Date(new Date(others[others.length - 1].created_at).getTime() + 1000);
+  } else {
+    const before = new Date(others[clampedIndex - 1].created_at).getTime();
+    const after = new Date(others[clampedIndex].created_at).getTime();
+    insertTime = new Date((before + after) / 2);
+  }
+
+  const { error } = await supabase
+    .from('queue_entries')
+    .update({ created_at: insertTime.toISOString() })
+    .eq('id', entryId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/courts');
+}
+
 export async function requeueGame(gameId: string, courtId: string, position: number) {
   const supabase = await createClient();
   const now = new Date().toISOString();

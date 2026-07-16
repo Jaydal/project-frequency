@@ -6,6 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
+import { reorderQueue } from '@/features/courts/actions';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 type QueueEntry = {
   id: string;
@@ -33,6 +49,71 @@ const STATUS_COLORS: Record<string, string> = {
   insufficient_credits: 'bg-orange-100 text-orange-800',
 };
 
+function SortableItem({
+  entry,
+  busy,
+  onExtend,
+  onRemove,
+}: {
+  entry: QueueEntry;
+  busy: string | null;
+  onExtend: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: entry.id,
+    disabled: entry.status !== 'waiting',
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="rounded border p-3 text-sm space-y-2 bg-card">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {entry.status === 'waiting' && (
+            <button
+              className="cursor-grab active:cursor-grabbing touch-none text-muted-foreground hover:text-foreground shrink-0"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
+          <div className="space-y-0.5 min-w-0">
+            <div className="font-medium truncate">
+              #{entry.id.slice(0, 8)} · {entry.duration} min · {entry.party_size === 4 ? '2v2' : '1v1'}
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={STATUS_COLORS[entry.status] ?? ''}>{entry.status}</Badge>
+              {entry.expires_at && (
+                <span className="text-xs text-muted-foreground">
+                  Expires: {new Date(entry.expires_at).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {entry.status === 'offered' && (
+          <Button size="sm" disabled={busy === entry.id} onClick={() => onExtend(entry.id)}>
+            Extend
+          </Button>
+        )}
+        <Button size="sm" variant="outline" disabled={busy === entry.id} onClick={() => onRemove(entry.id)}>
+          Remove
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function QueuePanel({ courts }: Props) {
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -59,6 +140,39 @@ export default function QueuePanel({ courts }: Props) {
     if (filterCourt !== 'all' && e.court_id !== filterCourt) return false;
     return true;
   });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const sortedWaiting = entries.filter(e => e.status === 'waiting').sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const oldIndex = sortedWaiting.findIndex(e => e.id === active.id);
+    const newIndex = sortedWaiting.findIndex(e => e.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Optimistically reorder entries in local state
+    setEntries(prev => {
+      const reordered = [...prev];
+      const dndIds = sortedWaiting.map(e => e.id);
+      dndIds.splice(oldIndex, 1);
+      dndIds.splice(newIndex, 0, active.id as string);
+      const orderMap = new Map(dndIds.map((id, i) => [id, i]));
+      return reordered.sort((a, b) => {
+        const ai = orderMap.get(a.id);
+        const bi = orderMap.get(b.id);
+        if (ai !== undefined && bi !== undefined) return ai - bi;
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
+    });
+
+    await reorderQueue(active.id as string, newIndex).catch(console.error);
+  }
 
   async function extendOffer(id: string) {
     setBusy(id);
@@ -108,37 +222,21 @@ export default function QueuePanel({ courts }: Props) {
         {visible.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">No entries</p>
         ) : (
-          <div className="space-y-2">
-            {visible.map(entry => (
-              <div key={entry.id} className="rounded border p-3 text-sm space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="font-medium truncate">
-                      #{entry.id.slice(0, 8)} · {entry.duration} min · {entry.party_size === 4 ? '2v2' : '1v1'}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={STATUS_COLORS[entry.status] ?? ''}>{entry.status}</Badge>
-                      {entry.expires_at && (
-                        <span className="text-xs text-muted-foreground">
-                          Expires: {new Date(entry.expires_at).toLocaleTimeString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-1.5 flex-wrap">
-                  {entry.status === 'offered' && (
-                    <Button size="sm" disabled={busy === entry.id} onClick={() => extendOffer(entry.id)}>
-                      Extend
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" disabled={busy === entry.id} onClick={() => remove(entry.id)}>
-                    Remove
-                  </Button>
-                </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={visible.map(e => e.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {visible.map(entry => (
+                  <SortableItem
+                    key={entry.id}
+                    entry={entry}
+                    busy={busy}
+                    onExtend={extendOffer}
+                    onRemove={remove}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
       </CardContent>
     </Card>
