@@ -19,6 +19,30 @@ export async function GET(
 
   const { rfid } = await context.params;
   const supabase = await createClient();
+
+  // Development/Test Mode: Intercept TEST001, TEST002, etc. and map to real active members
+  if (rfid.startsWith('TEST')) {
+    const testIndex = parseInt(rfid.replace('TEST', '')) || 1;
+    const { data: members } = await supabase
+      .from('members')
+      .select('*, wallets(*)')
+      .eq('status', 'Active')
+      .limit(10);
+      
+    if (members && members.length > 0) {
+      const member = members[(testIndex - 1) % members.length];
+      const wallet = Array.isArray(member.wallets) ? member.wallets[0] : member.wallets;
+      return NextResponse.json({
+        id: member.id,
+        memberId: member.member_id,
+        firstName: member.first_name + " (TEST)",
+        lastName: member.last_name,
+        balance: wallet?.balance ?? 0,
+        status: member.status,
+      });
+    }
+  }
+
   const formats = getRfidFormats(rfid);
 
   const { data: card } = await supabase
