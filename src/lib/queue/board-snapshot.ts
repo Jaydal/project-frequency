@@ -60,6 +60,7 @@ export interface BoardSnapshot {
   courts: BoardCourt[];
   nowServing: BoardNowServing;
   queue: BoardQueueRow[];
+  serverTime: number;
 }
 
 export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardSnapshot> {
