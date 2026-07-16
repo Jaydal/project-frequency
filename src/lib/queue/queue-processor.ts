@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server';
 import { isSlotAvailable } from './booking-engine';
 import { publishDisplay } from '@/lib/mqtt';
 import { generatePayload } from '@/lib/display/sports-caster';
-import { QUEUE_DEFAULT_TIMEOUT_MS } from './index';
 import { effectivePrepSec } from '@/lib/products-config-types';
 import { acceptOffer } from './reservation-service';
 
@@ -13,56 +12,16 @@ const g = global as typeof globalThis & {
 
 export function startExpiryProcessor(): void {
   if (g._queueExpiryInterval) return;
-  g._queueExpiryInterval = setInterval(async () => {
-    // W1: Run sequentially to avoid concurrent DB mutations on the same rows.
-    await processExpiredOffers();
-    await processExpiredGames();
+  g._queueExpiryInterval = setInterval(() => {
+    processExpiredGames().catch((err) => console.error('[queue-processor] Expiry cycle failed:', err));
   }, 30_000);
-  // Fire immediately on startup (sequentially).
-  processExpiredOffers()
-    .then(() => processExpiredGames())
-    .catch((err) => console.error('[queue-processor] Startup expiry processor failed:', err));
+  processExpiredGames().catch((err) => console.error('[queue-processor] Startup expiry failed:', err));
 }
 
 export function stopExpiryProcessor(): void {
   if (g._queueExpiryInterval) {
     clearInterval(g._queueExpiryInterval);
     g._queueExpiryInterval = undefined;
-  }
-}
-
-export async function processExpiredOffers(): Promise<void> {
-  const supabase = await createClient();
-  const now = new Date().toISOString();
-
-  const { data: expired } = await supabase
-    .from('queue_entries')
-    .select('id, court_id')
-    .eq('status', 'offered')
-    .lt('expires_at', now);
-
-  if (!expired || expired.length === 0) return;
-
-  for (const entry of expired) {
-    try {
-      // Atomically claim: only succeeds if entry is still 'offered'.
-      // This prevents a TOCTOU race with the user's manual PATCH accept.
-      const { data: claimed } = await supabase
-        .from('queue_entries')
-        .update({ status: 'accepted', updated_at: now })
-        .eq('id', entry.id)
-        .eq('status', 'offered')
-        .select();
-
-      if (!claimed || claimed.length === 0) continue;
-
-      const result = await acceptOffer(entry.id, { bookCourt: true });
-      if (!result.success) {
-        console.error(`[queue-processor] Failed to book court for offer ${entry.id}:`, result.error);
-      }
-    } catch (err) {
-      console.error(`[queue-processor] Error processing expired offer ${entry.id}:`, err);
-    }
   }
 }
 
@@ -73,9 +32,6 @@ export async function processCourt(courtId: string): Promise<void> {
   const rawPrepSec = parseInt(settings?.value ?? '300', 10);
   const prepSec = isNaN(rawPrepSec) ? 300 : rawPrepSec;
 
-  // C1: Only fetch entries that target this specific court OR are court-agnostic
-  // (court_id IS NULL). This prevents offering the same entry to multiple courts
-  // simultaneously.
   const { data: waiting } = await supabase
     .from('queue_entries')
     .select('*')
@@ -95,8 +51,6 @@ export async function processCourt(courtId: string): Promise<void> {
     const available = await isSlotAvailable(courtId, start, end);
 
     if (available) {
-      // C1: Re-read entry status to verify no other court has already offered
-      // to this entry between our SELECT and now.
       const { data: freshEntry } = await supabase
         .from('queue_entries')
         .select('status')
@@ -104,22 +58,22 @@ export async function processCourt(courtId: string): Promise<void> {
         .single();
 
       if (!freshEntry || freshEntry.status !== 'waiting') {
-        // Entry was already claimed by another court processor — skip it.
         continue;
       }
 
-      const expiresAt = new Date(Date.now() + QUEUE_DEFAULT_TIMEOUT_MS);
-      await supabase
+      const { data: claimed } = await supabase
         .from('queue_entries')
-        .update({
-          status: 'offered',
-          court_id: courtId,
-          expires_at: expiresAt.toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', entry.id);
+        .update({ status: 'accepted', court_id: courtId, updated_at: new Date().toISOString() })
+        .eq('id', entry.id)
+        .eq('status', 'waiting')
+        .select();
 
-      await publishDisplay(courtId, generatePayload(courtId, { current: null, upcoming: [] }));
+      if (claimed && claimed.length > 0) {
+        const result = await acceptOffer(entry.id, { bookCourt: true });
+        if (!result.success) {
+          console.error(`[queue-processor] Auto-book failed for entry ${entry.id}:`, result.error);
+        }
+      }
 
       return;
     }
