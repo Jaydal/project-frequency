@@ -172,19 +172,21 @@ export default function QueuePanel({ courts }: Props) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
+    const prevEntries = entries;
     const sortedWaiting = entries.filter(e => e.status === 'waiting').sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
     const oldIndex = sortedWaiting.findIndex(e => e.id === active.id);
-    const newIndex = sortedWaiting.findIndex(e => e.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
+    if (oldIndex === -1) return;
 
     // Optimistically reorder entries in local state
     setEntries(prev => {
       const reordered = [...prev];
       const dndIds = sortedWaiting.map(e => e.id);
+      const targetIndex = dndIds.indexOf(over.id as string);
+      if (targetIndex === -1) return prev;
       dndIds.splice(oldIndex, 1);
-      dndIds.splice(newIndex, 0, active.id as string);
+      dndIds.splice(targetIndex, 0, active.id as string);
       const orderMap = new Map(dndIds.map((id, i) => [id, i]));
       return reordered.sort((a, b) => {
         const ai = orderMap.get(a.id);
@@ -194,12 +196,22 @@ export default function QueuePanel({ courts }: Props) {
       });
     });
 
-    await reorderQueue(active.id as string, newIndex).catch(console.error);
+    try {
+      await reorderQueue(active.id as string, over.id as string);
+    } catch {
+      setEntries(prevEntries);
+    }
   }
 
   async function handleChangeCourt(entryId: string, courtId: string | null) {
-    await reassignQueueEntry(entryId, courtId);
+    setBusy(entryId);
+    try {
+      await reassignQueueEntry(entryId, courtId);
+    } catch (err) {
+      console.error('Failed to reassign court:', err);
+    }
     await fetchQueue();
+    setBusy(null);
   }
 
   async function extendOffer(id: string) {
@@ -251,7 +263,7 @@ export default function QueuePanel({ courts }: Props) {
           <p className="text-sm text-muted-foreground text-center py-6">No entries</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={visible.map(e => e.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={visible.filter(e => e.status === 'waiting').map(e => e.id)} strategy={verticalListSortingStrategy}>
               <div className="space-y-2">
                 {visible.map(entry => (
                   <SortableItem

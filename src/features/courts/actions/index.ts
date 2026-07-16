@@ -70,8 +70,9 @@ export async function endGame(gameId: string, courtId: string, refund: boolean =
   revalidatePath('/courts');
 }
 
-export async function reorderQueue(entryId: string, targetIndex: number) {
+export async function reorderQueue(entryId: string, overId: string) {
   const supabase = await createClient();
+  if (entryId === overId) return;
 
   const { data: allWaiting } = await supabase
     .from('queue_entries')
@@ -80,18 +81,17 @@ export async function reorderQueue(entryId: string, targetIndex: number) {
     .order('created_at', { ascending: true });
 
   const others = (allWaiting ?? []).filter(e => e.id !== entryId);
-  if (others.length === 0) throw new Error('No other waiting entries to reorder against');
-
-  const clampedIndex = Math.max(0, Math.min(targetIndex, others.length));
+  const overIndex = others.findIndex(e => e.id === overId);
+  if (overIndex === -1) throw new Error('Target entry not found');
 
   let insertTime: Date;
-  if (clampedIndex === 0) {
+  if (overIndex === 0) {
     insertTime = new Date(new Date(others[0].created_at).getTime() - 1000);
-  } else if (clampedIndex >= others.length) {
+  } else if (overIndex >= others.length - 1) {
     insertTime = new Date(new Date(others[others.length - 1].created_at).getTime() + 1000);
   } else {
-    const before = new Date(others[clampedIndex - 1].created_at).getTime();
-    const after = new Date(others[clampedIndex].created_at).getTime();
+    const before = new Date(others[overIndex - 1].created_at).getTime();
+    const after = new Date(others[overIndex].created_at).getTime();
     insertTime = new Date((before + after) / 2);
   }
 
@@ -114,7 +114,7 @@ export async function reassignQueueEntry(entryId: string, courtId: string | null
   if (error) throw new Error(error.message);
 
   if (courtId) {
-    processCourt(courtId).catch(() => {});
+    await processCourt(courtId);
   }
   publishBoardOnce().catch(() => {});
   revalidatePath('/courts');
