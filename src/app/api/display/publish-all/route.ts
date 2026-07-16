@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { publishDisplay } from '@/lib/mqtt';
 import { generatePayload } from '@/lib/display/sports-caster';
+import { publishBoardOnce } from '@/lib/queue/board-publisher';
 
 export async function POST() {
   const supabase = await createClient();
@@ -32,6 +33,8 @@ export async function POST() {
     const payload = generatePayload(court.id, { current, upcoming });
     await publishDisplay(court.id, payload);
   }
+
+  await publishBoardOnce();
 
   return NextResponse.json({ ok: true, courts: courts?.length ?? 0 });
 }
