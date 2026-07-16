@@ -2,6 +2,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { processCourt } from '@/lib/queue/queue-processor';
+import { publishBoardOnce } from '@/lib/queue/board-publisher';
 
 export async function updateCourt(courtId: string, name: string, newId?: string) {
   const supabase = await createClient();
@@ -100,6 +101,22 @@ export async function reorderQueue(entryId: string, targetIndex: number) {
     .eq('id', entryId);
   if (error) throw new Error(error.message);
 
+  publishBoardOnce().catch(() => {});
+  revalidatePath('/courts');
+}
+
+export async function reassignQueueEntry(entryId: string, courtId: string | null) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('queue_entries')
+    .update({ court_id: courtId, updated_at: new Date().toISOString() })
+    .eq('id', entryId);
+  if (error) throw new Error(error.message);
+
+  if (courtId) {
+    processCourt(courtId).catch(() => {});
+  }
+  publishBoardOnce().catch(() => {});
   revalidatePath('/courts');
 }
 

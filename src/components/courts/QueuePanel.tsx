@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
-import { reorderQueue } from '@/features/courts/actions';
+import { reorderQueue, reassignQueueEntry } from '@/features/courts/actions';
 import {
   DndContext,
   closestCenter,
@@ -52,13 +52,17 @@ const STATUS_COLORS: Record<string, string> = {
 function SortableItem({
   entry,
   busy,
+  courts,
   onExtend,
   onRemove,
+  onChangeCourt,
 }: {
   entry: QueueEntry;
   busy: string | null;
+  courts: { id: string; name: string }[];
   onExtend: (id: string) => void;
   onRemove: (id: string) => void;
+  onChangeCourt: (id: string, courtId: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
@@ -99,6 +103,25 @@ function SortableItem({
             </div>
           </div>
         </div>
+        {entry.status === 'waiting' && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground shrink-0">Court:</span>
+            <Select
+              value={entry.court_id ?? ''}
+              onValueChange={v => onChangeCourt(entry.id, v || null)}
+            >
+              <SelectTrigger className="h-6 text-xs w-28">
+                <SelectValue placeholder="Any" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Any court</SelectItem>
+                {courts.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
       <div className="flex gap-1.5 flex-wrap">
         {entry.status === 'offered' && (
@@ -174,6 +197,11 @@ export default function QueuePanel({ courts }: Props) {
     await reorderQueue(active.id as string, newIndex).catch(console.error);
   }
 
+  async function handleChangeCourt(entryId: string, courtId: string | null) {
+    await reassignQueueEntry(entryId, courtId);
+    await fetchQueue();
+  }
+
   async function extendOffer(id: string) {
     setBusy(id);
     const supabase = createClient();
@@ -230,8 +258,10 @@ export default function QueuePanel({ courts }: Props) {
                     key={entry.id}
                     entry={entry}
                     busy={busy}
+                    courts={courts}
                     onExtend={extendOffer}
                     onRemove={remove}
+                    onChangeCourt={handleChangeCourt}
                   />
                 ))}
               </div>
