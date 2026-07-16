@@ -19,6 +19,14 @@ export function decToHex(dec: string): string {
   return num.toString(16).toUpperCase().padStart(8, '0');
 }
 
+export function reverseHexBytes(hex: string): string {
+  const cleanHex = hex.replace(/[:\s]/g, '').trim();
+  if (cleanHex.length % 2 !== 0) return '';
+  const pairs = cleanHex.match(/.{1,2}/g);
+  if (!pairs) return '';
+  return pairs.reverse().join('').toUpperCase();
+}
+
 /**
  * Returns an array of possible representations of the given card UID.
  * If the input is decimal, it adds the hexadecimal and the unpadded/padded decimals.
@@ -46,6 +54,22 @@ export function getRfidFormats(uid: string): string[] {
       formats.add(dec);
       const num = parseInt(dec, 10);
       formats.add(String(num));
+    }
+  }
+
+  // Also add the reverse byte order (Endianness swap) which happens between 
+  // USB desktop scanners vs I2C embedded scanners.
+  const isHex = !/^\d+$/.test(cleaned) || cleaned.length === 8;
+  const hexStr = isHex ? cleaned : decToHex(cleaned);
+  if (hexStr) {
+    const reversed = reverseHexBytes(hexStr);
+    if (reversed) {
+      formats.add(reversed);
+      const revDec = hexToDec(reversed);
+      if (revDec) {
+        formats.add(revDec);
+        formats.add(String(parseInt(revDec, 10)));
+      }
     }
   }
 
