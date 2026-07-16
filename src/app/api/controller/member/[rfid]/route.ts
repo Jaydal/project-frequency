@@ -4,6 +4,8 @@ import { checkControllerKey } from '@/lib/controller-auth';
 import { processExpiredGames, processExpiredOffers } from '@/lib/queue/queue-processor';
 import { getRfidFormats } from '@/lib/rfid';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ rfid: string }> }
