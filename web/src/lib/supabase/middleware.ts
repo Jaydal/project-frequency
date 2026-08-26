@@ -65,7 +65,8 @@ export async function updateSession(request: NextRequest) {
                         request.nextUrl.pathname.startsWith('/health') ||
                         request.nextUrl.pathname.startsWith('/terminal') ||
                         process.env.PLAYWRIGHT_TEST_BYPASS_AUTH === '1' ||
-                        path === '/';
+                        path === '/' ||
+                        path === '/book';
 
   console.log(`[middleware] path=${path} user=${user !== null} public=${isPublicRoute}`);
 
