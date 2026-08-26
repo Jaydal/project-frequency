@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { deductWallet, refundTransaction } from './queue-service';
-import { isOverlapping } from './index';
+import { isSlotAvailable } from './booking-engine';
+import { getCost } from '../products-config-types';
 
 const MAX_ADVANCE_DAYS = 7;
 const CANCEL_REFUND_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -38,11 +39,11 @@ export async function createAdvancedBooking(input: CreateBookingInput): Promise<
   if (!courtId) {
     const { data: courts } = await supabase.from('courts').select('id').eq('status', 'Available');
     for (const c of courts ?? []) {
-      const slotFree = await isSlotAvailable(supabase, c.id, start, end);
+      const slotFree = await isSlotAvailable(c.id, start, end);
       if (slotFree) { courtId = c.id; break; }
     }
   } else {
-    const slotFree = await isSlotAvailable(supabase, courtId, start, end);
+    const slotFree = await isSlotAvailable(courtId, start, end);
     if (!slotFree) {
       return { booking: { id: '', status: '', court_id: null }, error: 'Court is not available for the selected time' };
     }
@@ -53,8 +54,13 @@ export async function createAdvancedBooking(input: CreateBookingInput): Promise<
   }
 
   const { data: pricesRow } = await supabase.from('settings').select('value').eq('key', 'prices').single();
-  const rates: Record<string, number> = pricesRow?.value ? JSON.parse(pricesRow.value) : { '30': 150, '60': 300, '90': 450 };
-  const { getCost } = await import('../products-config-types');
+  const defaultRates = { '30': 150, '60': 300, '90': 450 };
+  let rates: Record<string, number> = defaultRates;
+  try {
+    rates = pricesRow?.value ? JSON.parse(pricesRow.value) : defaultRates;
+  } catch {
+    rates = defaultRates;
+  }
   const config = { matchTypes: [], durations: [30, 60, 90], rates };
   const charge = getCost(config, input.duration, input.partySize);
   if (!charge) return { booking: { id: '', status: '', court_id: null }, error: 'No price configured for this duration' };
@@ -107,7 +113,7 @@ export async function cancelBooking(bookingId: string, isGame: boolean): Promise
 
   const { data: entry } = await supabase.from('queue_entries').select('requested_start, deposit_tx_id, status').eq('id', bookingId).single();
   if (!entry) return { success: false, refunded: false, error: 'Booking not found' };
-  if (!['scheduled', 'waiting'].includes(entry.status)) {
+  if (!['Scheduled', 'waiting'].includes(entry.status)) {
     return { success: false, refunded: false, error: 'Booking cannot be cancelled' };
   }
 
@@ -155,30 +161,4 @@ export async function getUpcomingBookings(memberId?: string, date?: string): Pro
   return games ?? [];
 }
 
-async function isSlotAvailable(supabase: Awaited<ReturnType<typeof createClient>>, courtId: string, start: Date, end: Date, excludeId?: string): Promise<boolean> {
-  const { data: overlapping } = await supabase
-    .from('games')
-    .select('id')
-    .eq('court_id', courtId)
-    .in('status', ['Scheduled', 'In Progress'])
-    .gte('start_time', start.toISOString())
-    .lt('start_time', end.toISOString());
 
-  if (overlapping && overlapping.length > 0) return false;
-
-  const { data: straddling } = await supabase
-    .from('games')
-    .select('id, start_time, duration, status')
-    .eq('court_id', courtId)
-    .in('status', ['Scheduled', 'In Progress'])
-    .lt('start_time', start.toISOString());
-
-  if (!straddling) return true;
-  for (const g of straddling) {
-    if ((g as any).status === 'Scheduled' && new Date(g.start_time).getTime() <= start.getTime()) continue;
-    const gameEnd = new Date(new Date(g.start_time).getTime() + ((g as any).duration || 30) * 60_000);
-    if (isOverlapping(start, end, new Date(g.start_time), gameEnd)) return false;
-  }
-
-  return true;
-}

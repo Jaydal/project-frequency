@@ -137,6 +137,7 @@ describe('createAdvancedBooking', () => {
   })
 
   it('creates a Scheduled game when court is available', async () => {
+    let gamePlayersInsert: ReturnType<typeof vi.fn> | undefined;
     const db = withGamePlayers(withGames(withWallet(withCourts(makeDb()))))
     db.from = vi.fn((t: string) => {
       if (t === 'settings') {
@@ -167,7 +168,8 @@ describe('createAdvancedBooking', () => {
       }
       if (t === 'game_players') {
         const c = makeChain()
-        c.insert = vi.fn(() => c)
+        gamePlayersInsert = vi.fn(() => c)
+        c.insert = gamePlayersInsert
         return c
       }
       return makeChain()
@@ -189,5 +191,8 @@ describe('createAdvancedBooking', () => {
     expect(result.booking.status).toBe('Scheduled')
     expect(result.booking.id).toBe('game-1')
     expect(result.booking.court_id).toBe('court-1')
+    expect(gamePlayersInsert).toHaveBeenCalledWith([
+      { game_id: 'game-1', member_id: 'member-1', team: null }
+    ])
   })
 })

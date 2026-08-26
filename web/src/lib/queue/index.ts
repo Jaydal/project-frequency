@@ -16,12 +16,15 @@ export interface QueueEntry {
   requested_start: string;
   duration: number;
   party_size: number;
-  player_ids: string[];
+  player_ids: string | string[];
   court_id: string | null;
   status: QueueStatus;
   expires_at: string | null;
   created_at: string;
   updated_at: string;
+  deposit_tx_id?: string | null;
+  match_title?: string | null;
+  match_type?: string | null;
 }
 
 export const QUEUE_DEFAULT_TIMEOUT_MS = 30_000; // 30s offer confirmation, part of 5min prep time
