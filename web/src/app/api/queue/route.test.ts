@@ -117,6 +117,20 @@ describe('POST /api/queue', () => {
     expect(res.status).toBe(409);
     expect(data.error).toBe('Already in queue');
   });
+
+  it('creates scheduled entry when start is in the future', async () => {
+    const future = new Date(Date.now() + 86400000).toISOString();
+    mockJoinQueue.mockResolvedValue({
+      id: 'q3', member_id: 'm1', status: 'scheduled',
+      court_id: null, duration: 60, party_size: 2,
+      player_ids: ['p1'], created_at: new Date().toISOString(),
+      requested_start: future, expires_at: null, updated_at: new Date().toISOString(),
+    });
+    const res = await POST(makeReq({ ...validBody, start: future }));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.status).toBe('scheduled');
+  });
 });
 
 describe('PATCH /api/queue', () => {
