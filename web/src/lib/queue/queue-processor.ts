@@ -50,11 +50,11 @@ export async function processCourtQueue(courtId: string): Promise<boolean> {
 
   if (isOccupied) return false;
 
-  // Get the oldest waiting entries ordered by created_at
+  // Get the oldest waiting/scheduled entries ordered by created_at
   const { data: waiting } = await supabase
     .from('queue_entries')
     .select('*')
-    .eq('status', 'waiting')
+    .in('status', ['waiting', 'scheduled'])
     .order('created_at', { ascending: true });
 
   if (!waiting || waiting.length === 0) {
