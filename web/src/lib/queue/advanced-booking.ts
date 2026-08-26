@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { deductWallet, refundTransaction } from './queue-service';
+import { isOverlapping } from './index';
 
 const MAX_ADVANCE_DAYS = 7;
 const CANCEL_REFUND_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -122,7 +123,19 @@ export async function cancelBooking(bookingId: string, isGame: boolean): Promise
   return { success: true, refunded: false };
 }
 
-export async function getUpcomingBookings(memberId?: string, date?: string): Promise<any[]> {
+export interface Game {
+  id: string;
+  court_id: string;
+  match_type: string;
+  match_title?: string | null;
+  duration: number;
+  status: string;
+  start_time: string;
+  charge_amount: number;
+  game_players?: any[];
+}
+
+export async function getUpcomingBookings(memberId?: string, date?: string): Promise<Game[]> {
   const supabase = await createClient();
   const now = new Date().toISOString();
 
@@ -155,7 +168,7 @@ async function isSlotAvailable(supabase: Awaited<ReturnType<typeof createClient>
 
   const { data: straddling } = await supabase
     .from('games')
-    .select('id, start_time, status')
+    .select('id, start_time, duration, status')
     .eq('court_id', courtId)
     .in('status', ['Scheduled', 'In Progress'])
     .lt('start_time', start.toISOString());
@@ -163,8 +176,8 @@ async function isSlotAvailable(supabase: Awaited<ReturnType<typeof createClient>
   if (!straddling) return true;
   for (const g of straddling) {
     if ((g as any).status === 'Scheduled' && new Date(g.start_time).getTime() <= start.getTime()) continue;
-    const gameEnd = new Date(new Date(g.start_time).getTime() + 30 * 60_000);
-    if (start < gameEnd && end > new Date(g.start_time)) return false;
+    const gameEnd = new Date(new Date(g.start_time).getTime() + ((g as any).duration || 30) * 60_000);
+    if (isOverlapping(start, end, new Date(g.start_time), gameEnd)) return false;
   }
 
   return true;
