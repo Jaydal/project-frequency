@@ -1,7 +1,8 @@
 export type QueueStatus =
   | 'waiting' | 'offered' | 'accepted'
   | 'declined' | 'expired' | 'cancelled'
-  | 'completed' | 'insufficient_credits';
+  | 'completed' | 'insufficient_credits'
+  | 'scheduled';
 
 export interface CourtInfo {
   id: string;
