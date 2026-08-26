@@ -152,9 +152,6 @@ void esp32_display_set_lvgl_task(TaskHandle_t handle) {
   s_lvgl_task_handle = handle;
 }
 
-/* Called from the RGB LCD ISR when a bounce frame finishes transmitting
- * (VSYNC, since a bounce buffer is present). Unblocks the LVGL task that is
- * parked in disp_flush_cb() waiting for the frame to be displayed. */
 static IRAM_ATTR bool lvgl_vsync_notify_cb(esp_lcd_panel_handle_t panel,
                                  const esp_lcd_rgb_panel_event_data_t *edata,
                                  void *user_ctx) {
@@ -172,6 +169,8 @@ static void lcd_panel_init(void) {
   const esp_lcd_rgb_panel_config_t panel_cfg = {
       .clk_src = LCD_CLK_SRC_DEFAULT,
       .timings = {
+          /* Use the panel vendor's required timing. Lowering this clock caused
+           * the physical 7B panel to remain black. */
           .pclk_hz           = 30 * 1000 * 1000,
           .h_res              = LCD_H_RES,
           .v_res              = LCD_V_RES,
@@ -230,18 +229,19 @@ static void lcd_panel_init(void) {
 
 static void disp_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area,
                             lv_color_t *color_p) {
-  /* In direct_mode = 1, LVGL draws directly into the PSRAM framebuffer. 
-   * The ESP32 RGB peripheral continuously scans out this buffer via DMA. 
-   * We just need to tell LVGL we are done. */
+  (void)area;
+  (void)color_p;
+  /* LVGL draws directly into the panel-owned PSRAM framebuffer. No second
+   * full-screen copy is needed, which avoids competing with RGB scanout. */
   lv_disp_flush_ready(drv);
 }
 
 static void lvgl_display_init(void) {
-  /* Obtain the PSRAM-backed frame-buffer pointer from the panel. */
   void *fb0 = NULL;
   ESP_ERROR_CHECK(esp_lcd_rgb_panel_get_frame_buffer(s_panel, 1, &fb0));
 
-  /* AGENTS.md constraint: Use single PSRAM framebuffer with direct_mode = 1 */
+  /* Keep exactly one PSRAM framebuffer. The RGB driver scans it through its
+   * internal-RAM bounce buffers while LVGL updates invalidated regions. */
   lv_disp_draw_buf_init(&s_draw_buf, fb0, NULL, LCD_H_RES * LCD_V_RES);
 
   lv_disp_drv_init(&s_disp_drv);
@@ -252,10 +252,6 @@ static void lvgl_display_init(void) {
   s_disp_drv.direct_mode = 1;
   lv_disp_drv_register(&s_disp_drv);
 
-  /* Unblock the LVGL task (parked in disp_flush_cb) when the RGB bounce frame
-   * finishes transmitting. A bounce buffer is present, so the correct sync
-   * event is on_bounce_frame_finish (not on_vsync). Registering here (after
-   * the display driver exists) in a single call avoids clobbering the table. */
   esp_lcd_rgb_panel_event_callbacks_t rgb_cbs = {
       .on_bounce_frame_finish = lvgl_vsync_notify_cb,
       .on_vsync = lvgl_vsync_notify_cb,
@@ -267,8 +263,6 @@ static void lvgl_display_init(void) {
 }
 
 /* ── Touch input ───────────────────────────────────────────────────────── */
-
-static lv_obj_t *s_touch_cursor = NULL;
 
 static void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
   (void)drv;
@@ -313,13 +307,6 @@ static void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
   data->point.y = last_y;
   data->state   = actually_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 
-  if (s_touch_cursor) {
-      if (data->state == LV_INDEV_STATE_PRESSED) {
-          lv_obj_clear_flag(s_touch_cursor, LV_OBJ_FLAG_HIDDEN);
-      } else {
-          lv_obj_add_flag(s_touch_cursor, LV_OBJ_FLAG_HIDDEN);
-      }
-  }
 }
 
 static void touch_init(void) {
@@ -355,21 +342,7 @@ static void touch_init(void) {
   s_indev_drv.read_cb = touch_read_cb;
   s_indev_drv.scroll_limit = 50;  /* Require 50px of movement before scrolling, prevents jitter clicks */
   s_indev_drv.scroll_throw = 10;  /* Reduce scroll momentum */
-  lv_indev_t * indev = lv_indev_drv_register(&s_indev_drv);
-
-  /* Visual touch indicator (rendered on the topmost system layer) */
-  s_touch_cursor = lv_obj_create(lv_layer_sys());
-  lv_obj_set_size(s_touch_cursor, 40, 40);
-  lv_obj_set_style_radius(s_touch_cursor, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(s_touch_cursor, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_bg_opa(s_touch_cursor, LV_OPA_30, 0);
-  lv_obj_set_style_border_width(s_touch_cursor, 2, 0);
-  lv_obj_set_style_border_color(s_touch_cursor, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_border_opa(s_touch_cursor, LV_OPA_80, 0);
-  lv_obj_clear_flag(s_touch_cursor, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_flag(s_touch_cursor, LV_OBJ_FLAG_HIDDEN); /* Hidden until pressed */
-  
-  lv_indev_set_cursor(indev, s_touch_cursor);
+  lv_indev_drv_register(&s_indev_drv);
 
   ESP_LOGI(TAG, "LVGL touch input device registered");
 }

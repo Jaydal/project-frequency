@@ -2,23 +2,22 @@
 CONFIG_IDF_TARGET="esp32s3"
 
 # ── PSRAM (Octal SPI, 8 MB) ────────────────────────────────────────────────
-# PSRAM and flash share the MSPI bus on ESP32-S3, so PSRAM can only reach
-# 120 MHz when the flash clock is also 120 MHz. These values match Waveshare's
-# reference config and are required to keep the RGB LCD DMA fed (otherwise the
-# panel loses VSYNC and the screen rolls/flickers).
+# Use the highest clock supported by this repository's ESP-IDF 5.1/esptool
+# combination. LCD scanout headroom is provided in esp32_display.c instead of
+# relying on the experimental 120 MHz octal-PSRAM mode.
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
-CONFIG_SPIRAM_SPEED_120M=y
+CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_BOOT_INIT=y
 CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
 CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
 CONFIG_SPIRAM_RODATA=y
 
-# ── Flash (QIO, 16 MB, 120 MHz) ────────────────────────────────────────────
+# ── Flash (QIO, 16 MB, 80 MHz) ─────────────────────────────────────────────
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
-CONFIG_ESPTOOLPY_FLASHFREQ_120M=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 

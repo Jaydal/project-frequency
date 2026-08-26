@@ -201,12 +201,24 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb) {
   lv_obj_set_style_radius(kb, 0, LV_PART_ITEMS);
   lv_obj_set_style_shadow_width(kb, 0, LV_PART_ITEMS);
   lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS);
+  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS);
+  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_translate_y(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_pad_top(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_pad_bottom(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
 
   /* Pressed state for keys (keep border width 1 to prevent layout shift!) */
-  lv_obj_set_style_bg_color(kb, kiosk_theme_color_primary(), LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_text_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_PRESSED);
+  /* Keep the pressed state visually identical to the normal state. This
+   * avoids a second full key redraw on every touch event. */
+  lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_border_color(kb, kiosk_theme_color_primary(), LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_border_color(kb, kiosk_theme_color_border(), LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
   
   /* OVERRIDE LVGL DEFAULT THEME TRANSFORMATIONS (prevent height/size animating on press) */
   lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
@@ -217,13 +229,18 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb) {
 }
 
 void kiosk_theme_style_modal_ta(lv_obj_t *ta) {
-  /* Disable blinking cursor animation to prevent screen tearing */
+  /* Disable blinking cursor animation to prevent screen tearing. The focused
+   * selector must be overridden too: lv_keyboard_set_textarea() focuses this
+   * textarea after the base cursor style is configured. */
   lv_obj_set_style_anim_time(ta, 0, LV_PART_CURSOR);
+  lv_obj_set_style_anim_time(ta, 0, LV_PART_CURSOR | LV_STATE_FOCUSED);
   
   /* HIDE the cursor entirely! Drawing and erasing the cursor block on every keystroke causes tearing 
      in single-buffer direct mode. Focus is already indicated by the blue border on the text area. */
   lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
   lv_obj_set_style_border_width(ta, 0, LV_PART_CURSOR);
+  lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR | LV_STATE_FOCUSED);
+  lv_obj_set_style_border_width(ta, 0, LV_PART_CURSOR | LV_STATE_FOCUSED);
   
   /* Normal state */
   lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);

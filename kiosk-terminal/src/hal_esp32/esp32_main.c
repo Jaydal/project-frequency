@@ -149,10 +149,9 @@ static void prv_mqtt_poll_cb(lv_timer_t *timer)
 /**
  * @brief Periodic esp_timer callback that advances LVGL's internal clock.
  *
- * Kept separate from the LVGL task on purpose: disp_flush_cb() now blocks that
- * task on VSYNC until the RGB bounce frame finishes, so a tick driven from the
- * task loop would under-count time (animations/timers would run slow). Driving
- * lv_tick_inc() from a hardware timer keeps LVGL's clock accurate.
+ * Kept separate from the LVGL task so rendering time does not make LVGL's
+ * timers drift. Driving lv_tick_inc() from a hardware timer keeps its clock
+ * accurate.
  */
 static void prv_lvgl_tick_cb(void *arg)
 {
@@ -163,9 +162,6 @@ static void prv_lvgl_tick_cb(void *arg)
 static void prv_lvgl_task(void *arg)
 {
     (void)arg;
-    /* Publish this task's handle so disp_flush_cb()'s VSYNC unblock can target
-     * it. Done here (not after xTaskCreate) to avoid a race where the task runs
-     * its first flush before the handle is set and deadlocks on ulTaskNotifyTake. */
     esp32_display_set_lvgl_task(xTaskGetCurrentTaskHandle());
 
     ESP_LOGI(TAG, "LVGL task started on core %d", xPortGetCoreID());
@@ -211,8 +207,7 @@ void app_main(void)
     lv_timer_create(prv_mqtt_poll_cb, MQTT_POLL_INTERVAL_MS, NULL);
     ESP_LOGI(TAG, "MQTT poll timer created (%d ms)", MQTT_POLL_INTERVAL_MS);
 
-    /* 8. LVGL clock driven by a hardware timer (decoupled from the LVGL task,
-     * which blocks on VSYNC during flushes). */
+    /* 8. LVGL clock driven by a hardware timer. */
     const esp_timer_create_args_t lvgl_tick_args = {
         .callback = &prv_lvgl_tick_cb,
         .name = "lvgl_tick",
@@ -222,8 +217,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer,
                                              LVGL_HANDLER_PERIOD_MS * 1000));
 
-    /* 9. Dedicated LVGL task on core 1. It registers its own handle with the
-     * display layer at startup (see prv_lvgl_task). */
+    /* 9. Dedicated LVGL task on core 1. */
     xTaskCreatePinnedToCore(
         prv_lvgl_task,
         "lvgl",

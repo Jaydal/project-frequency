@@ -8,6 +8,5 @@
  * Call after lv_init(). */
 void esp32_display_init(void);
 
-/* Passes the LVGL task handle to the display driver so it can notify the task
- * when a VSYNC / DMA flush finishes. Must be called after task creation. */
+/* Passes the LVGL task handle to the display driver for RGB frame events. */
 void esp32_display_set_lvgl_task(TaskHandle_t handle);
