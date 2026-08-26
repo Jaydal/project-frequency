@@ -85,14 +85,17 @@ static void ta_event_cb(lv_event_t * e) {
       lv_obj_set_size(ctx->input_modal, lv_pct(100), lv_pct(100));
       lv_obj_set_style_bg_color(ctx->input_modal, kiosk_theme_color_bg(), 0);
       lv_obj_set_style_bg_opa(ctx->input_modal, LV_OPA_COVER, 0);
-      lv_obj_set_flex_flow(ctx->input_modal, LV_FLEX_FLOW_COLUMN);
       lv_obj_clear_flag(ctx->input_modal, LV_OBJ_FLAG_SCROLLABLE);
 
-      /* Opaque header fills area above text area */
+      /* Keyboard height: 4 rows × ~46px + padding ≈ 200px */
+      int kb_h = 200;
+      int ta_h = 44;
+      int hdr_h = 40;
+
+      /* Header */
       lv_obj_t *hdr = lv_obj_create(ctx->input_modal);
       lv_obj_remove_style_all(hdr);
-      lv_obj_set_width(hdr, lv_pct(100));
-      lv_obj_set_height(hdr, 40);
+      lv_obj_set_size(hdr, lv_pct(100), hdr_h);
       lv_obj_set_style_bg_color(hdr, kiosk_theme_color_bg(), 0);
       lv_obj_set_style_bg_opa(hdr, LV_OPA_COVER, 0);
       lv_obj_clear_flag(hdr, LV_OBJ_FLAG_SCROLLABLE);
@@ -102,19 +105,20 @@ static void ta_event_cb(lv_event_t * e) {
       lv_obj_set_style_text_color(hdr_label, kiosk_theme_color_text_muted(), 0);
       lv_obj_align(hdr_label, LV_ALIGN_BOTTOM_LEFT, 20, -4);
 
+      /* Textarea — positioned below header */
       lv_obj_t *large_ta = lv_textarea_create(ctx->input_modal);
-      lv_obj_set_width(large_ta, lv_pct(100));
-      lv_obj_set_height(large_ta, 44);
+      lv_obj_set_size(large_ta, lv_pct(100), ta_h);
+      lv_obj_set_pos(large_ta, 0, hdr_h);
       lv_obj_set_style_pad_hor(large_ta, 20, 0);
       lv_textarea_set_text(large_ta, lv_textarea_get_text(target_ta));
       lv_textarea_set_one_line(large_ta, true);
       kiosk_theme_style_modal_ta(large_ta);
 
+      /* Keyboard — fixed at bottom of screen, not managed by flex */
       lv_obj_t *kb = lv_keyboard_create(ctx->input_modal);
       lv_keyboard_set_popovers(kb, false);
-      lv_obj_set_width(kb, lv_pct(100));
-      lv_obj_set_flex_grow(kb, 1);
-      
+      lv_obj_set_size(kb, lv_pct(100), kb_h);
+      lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
       kiosk_theme_style_keyboard(kb);
 
       lv_keyboard_set_textarea(kb, large_ta);
