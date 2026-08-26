@@ -9,6 +9,8 @@
 #include "../../net/nfc_reader.h"
 
 #define SETUP_FIELD_COUNT 7
+#define INPUT_CELL_COUNT 48
+#define INPUT_CELL_WIDTH 20
 
 typedef struct {
   const char *label;
@@ -31,6 +33,12 @@ typedef struct {
   lv_obj_t *ta[SETUP_FIELD_COUNT];
   lv_obj_t *input_modal;
   lv_obj_t *editing_ta;
+  lv_obj_t *input_cells[INPUT_CELL_COUNT];
+  char input_cell_text[INPUT_CELL_COUNT][2];
+  size_t input_page_start;
+  char input_text[KIOSK_CONFIG_URL_LEN];
+  size_t input_text_size;
+  bool input_password;
   lv_obj_t *scan_msgbox;
   lv_obj_t *scan_list;
   lv_obj_t *root;
@@ -50,26 +58,109 @@ static void free_ctx_cb(lv_event_t *e) {
   free(ctx);
 }
 
-static void kb_event_cb(lv_event_t *e) {
+static const char *KEYS_LOWER[] = {
+  "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
+  "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
+  "z", "x", "c", "v", "b", "n", "m", "\n",
+  "ABC", "SPACE", "BKSP", "123", "CANCEL", "OK", ""
+};
+
+static const char *KEYS_UPPER[] = {
+  "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
+  "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
+  "Z", "X", "C", "V", "B", "N", "M", "\n",
+  "abc", "SPACE", "BKSP", "123", "CANCEL", "OK", ""
+};
+
+static const char *KEYS_SYMBOLS[] = {
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
+  "@", ".", "/", ":", "-", "_", "?", "&", "=", "\n",
+  "+", "*", "#", "%", "!", "~", "\\", "\n",
+  "ABC", "SPACE", "BKSP", "abc", "CANCEL", "OK", ""
+};
+
+static void close_input_modal(setup_ctx_t *ctx) {
+  if (!ctx->input_modal) return;
+  lv_obj_del(ctx->input_modal);
+  ctx->input_modal = NULL;
+  memset(ctx->input_cells, 0, sizeof(ctx->input_cells));
+  memset(ctx->input_cell_text, 0, sizeof(ctx->input_cell_text));
+  ctx->input_page_start = 0;
+  ctx->editing_ta = NULL;
+  lv_obj_clear_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
+}
+
+static size_t input_page_for_length(size_t length) {
+  if (length == 0) return 0;
+  return ((length - 1) / INPUT_CELL_COUNT) * INPUT_CELL_COUNT;
+}
+
+static void set_input_cell(setup_ctx_t *ctx, size_t slot, char character) {
+  if (!ctx->input_cells[slot]) return;
+  if (ctx->input_cell_text[slot][0] == character &&
+      ctx->input_cell_text[slot][1] == '\0') return;
+
+  ctx->input_cell_text[slot][0] = character;
+  ctx->input_cell_text[slot][1] = '\0';
+  lv_obj_t *cell = ctx->input_cells[slot];
+  lv_label_set_text_static(cell, ctx->input_cell_text[slot]);
+}
+
+static void refresh_input_cells(setup_ctx_t *ctx) {
+  if (!ctx->input_cells[0]) return;
+
+  size_t length = strlen(ctx->input_text);
+  size_t page_start = input_page_for_length(length);
+  ctx->input_page_start = page_start;
+
+  for (size_t slot = 0; slot < INPUT_CELL_COUNT; slot++) {
+    size_t text_index = page_start + slot;
+    char character = '\0';
+    if (text_index < length) {
+      character = ctx->input_password ? '*' : ctx->input_text[text_index];
+    }
+    set_input_cell(ctx, slot, character);
+  }
+}
+
+static void static_keyboard_event_cb(lv_event_t *e) {
   setup_ctx_t *ctx = lv_event_get_user_data(e);
-  lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *kb = lv_event_get_target(e);
+  uint16_t btn = lv_btnmatrix_get_selected_btn(kb);
+  const char *key = lv_btnmatrix_get_btn_text(kb, btn);
+  if (!key || !ctx->input_cells[0]) return;
 
-  if (code == LV_EVENT_READY) {
-    lv_obj_t *ta = lv_keyboard_get_textarea(kb);
-    if (ta && ctx->editing_ta) {
-      lv_textarea_set_text(ctx->editing_ta, lv_textarea_get_text(ta));
+  if (strcmp(key, "ABC") == 0) {
+    lv_btnmatrix_set_map(kb, KEYS_UPPER);
+  } else if (strcmp(key, "abc") == 0) {
+    lv_btnmatrix_set_map(kb, KEYS_LOWER);
+  } else if (strcmp(key, "123") == 0) {
+    lv_btnmatrix_set_map(kb, KEYS_SYMBOLS);
+  } else if (strcmp(key, "SPACE") == 0) {
+    size_t length = strlen(ctx->input_text);
+    if (length + 1 < ctx->input_text_size) {
+      ctx->input_text[length] = ' ';
+      ctx->input_text[length + 1] = '\0';
+    }
+  } else if (strcmp(key, "BKSP") == 0) {
+    size_t length = strlen(ctx->input_text);
+    if (length > 0) ctx->input_text[length - 1] = '\0';
+  } else if (strcmp(key, "OK") == 0) {
+    if (ctx->editing_ta) {
+      lv_textarea_set_text(ctx->editing_ta, ctx->input_text);
+    }
+    close_input_modal(ctx);
+  } else if (strcmp(key, "CANCEL") == 0) {
+    close_input_modal(ctx);
+  } else {
+    size_t length = strlen(ctx->input_text);
+    size_t key_length = strlen(key);
+    if (length + key_length < ctx->input_text_size) {
+      strncat(ctx->input_text, key, ctx->input_text_size - length - 1);
     }
   }
 
-  if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
-    if (ctx->input_modal) {
-      lv_obj_del(ctx->input_modal);
-      ctx->input_modal = NULL;
-      ctx->editing_ta = NULL;
-      lv_obj_clear_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
-    }
-  }
+  refresh_input_cells(ctx);
 }
 
 static void field_focus_cb(lv_event_t *e) {
@@ -86,7 +177,6 @@ static void field_focus_cb(lv_event_t *e) {
   lv_obj_set_size(ctx->input_modal, lv_pct(100), lv_pct(100));
   lv_obj_set_style_bg_color(ctx->input_modal, kiosk_theme_color_bg(), 0);
   lv_obj_set_style_bg_opa(ctx->input_modal, LV_OPA_COVER, 0);
-  lv_obj_set_flex_flow(ctx->input_modal, LV_FLEX_FLOW_COLUMN);
   lv_obj_clear_flag(ctx->input_modal, LV_OBJ_FLAG_SCROLLABLE);
 
   /* Opaque header fills area above text area */
@@ -94,30 +184,67 @@ static void field_focus_cb(lv_event_t *e) {
   lv_obj_remove_style_all(hdr);
   lv_obj_set_width(hdr, lv_pct(100));
   lv_obj_set_height(hdr, 40);
+  lv_obj_align(hdr, LV_ALIGN_TOP_MID, 0, 0);
   lv_obj_set_style_bg_color(hdr, kiosk_theme_color_bg(), 0);
   lv_obj_set_style_bg_opa(hdr, LV_OPA_COVER, 0);
   lv_obj_clear_flag(hdr, LV_OBJ_FLAG_SCROLLABLE);
 
-  lv_obj_t *large_ta = lv_textarea_create(ctx->input_modal);
-  lv_obj_set_width(large_ta, lv_pct(100));
-  lv_obj_set_height(large_ta, 44);
-  lv_obj_set_style_pad_hor(large_ta, 20, 0);
-  lv_textarea_set_text(large_ta, lv_textarea_get_text(target_ta));
-  lv_textarea_set_password_mode(large_ta, lv_textarea_get_password_mode(target_ta));
-  lv_textarea_set_one_line(large_ta, true);
-  kiosk_theme_style_modal_ta(large_ta);
+  int field_index = 0;
+  while (field_index < SETUP_FIELD_COUNT && ctx->ta[field_index] != target_ta) {
+    field_index++;
+  }
+  ctx->input_text_size = field_index < SETUP_FIELD_COUNT
+      ? FIELDS[field_index].size
+      : sizeof(ctx->input_text);
+  ctx->input_password = field_index < SETUP_FIELD_COUNT && FIELDS[field_index].password;
+  snprintf(ctx->input_text, sizeof(ctx->input_text), "%s",
+           lv_textarea_get_text(target_ta));
 
-  lv_obj_t *kb = lv_keyboard_create(ctx->input_modal);
-  lv_keyboard_set_popovers(kb, false);
-  lv_obj_set_width(kb, lv_pct(100));
-  lv_obj_set_flex_grow(kb, 1);
+  /* Fixed, non-interactive display: no cursor, focus state, scrolling,
+   * password reveal timer, or textarea animation participates while typing. */
+  lv_obj_t *input_box = lv_obj_create(ctx->input_modal);
+  lv_obj_remove_style_all(input_box);
+  lv_obj_set_width(input_box, lv_pct(100));
+  lv_obj_set_height(input_box, 44);
+  lv_obj_align(input_box, LV_ALIGN_TOP_MID, 0, 40);
+  lv_obj_set_style_pad_hor(input_box, 20, 0);
+  lv_obj_set_style_bg_color(input_box, kiosk_theme_color_bg(), 0);
+  lv_obj_set_style_bg_opa(input_box, LV_OPA_COVER, 0);
+  lv_obj_set_style_text_color(input_box, kiosk_theme_color_text_strong(), 0);
+  lv_obj_set_style_border_color(input_box, kiosk_theme_color_primary(), 0);
+  lv_obj_set_style_border_width(input_box, 2, 0);
+  lv_obj_clear_flag(input_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+  memset(ctx->input_cells, 0, sizeof(ctx->input_cells));
+  memset(ctx->input_cell_text, 0, sizeof(ctx->input_cell_text));
+  ctx->input_page_start = 0;
+
+  for (size_t i = 0; i < INPUT_CELL_COUNT; i++) {
+    lv_obj_t *cell = lv_label_create(input_box);
+    ctx->input_cells[i] = cell;
+    lv_obj_set_size(cell, INPUT_CELL_WIDTH, 44);
+    lv_obj_set_pos(cell, i * INPUT_CELL_WIDTH, 0);
+    lv_label_set_long_mode(cell, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(cell, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(cell, kiosk_theme_color_text_strong(), 0);
+    lv_obj_set_style_pad_all(cell, 0, 0);
+    lv_obj_set_style_anim_time(cell, 0, 0);
+    lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_label_set_text_static(cell, ctx->input_cell_text[i]);
+  }
+  refresh_input_cells(ctx);
+
+  lv_obj_t *kb = lv_btnmatrix_create(ctx->input_modal);
+  lv_btnmatrix_set_map(kb, KEYS_LOWER);
+  /* The target panel is 1024x600. Use a hard geometry rectangle so no flex,
+   * percentage, or pressed-state recalculation can move the matrix. */
+  lv_obj_set_size(kb, 1024, 360);
+  lv_obj_set_pos(kb, 0, 240);
+  lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   
   kiosk_theme_style_keyboard(kb);
 
-  lv_keyboard_set_textarea(kb, large_ta);
-
-  lv_obj_add_event_cb(kb, kb_event_cb, LV_EVENT_READY, ctx);
-  lv_obj_add_event_cb(kb, kb_event_cb, LV_EVENT_CANCEL, ctx);
+  lv_obj_add_event_cb(kb, static_keyboard_event_cb, LV_EVENT_VALUE_CHANGED, ctx);
 }
 
 static void wifi_list_btn_cb(lv_event_t *e) {
