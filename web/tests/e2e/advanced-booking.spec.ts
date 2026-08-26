@@ -20,4 +20,9 @@ test.describe('Advanced Booking', () => {
     await page.click('text=Court 1');
     await expect(page.locator('text=08:00')).toBeVisible();
   });
+
+  test('shows upcoming bookings for member', async ({ page }) => {
+    await page.goto('/bookings');
+    await expect(page.locator('text=Scheduled')).toBeVisible();
+  });
 });
