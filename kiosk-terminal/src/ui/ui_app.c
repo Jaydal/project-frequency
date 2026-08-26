@@ -11,7 +11,7 @@
 #include "screens/queue_board.h"
 #include "screens/terminal_layout.h"
 #include "screens/setup_screen.h"
-#include "screens/screensaver.h"
+
 #include "widgets/court_overview.h"
 #include "widgets/step_select_court.h"
 #include "widgets/step_select_game_type.h"
@@ -31,7 +31,7 @@ typedef enum {
   KIOSK_STEP_CONFIRM,
   KIOSK_STEP_SUCCESS,
   KIOSK_STEP_ERROR,
-  KIOSK_STEP_SCREENSAVER,
+
 } kiosk_step_t;
 
 typedef struct {
@@ -421,10 +421,7 @@ static void render_current(void) {
       lv_obj_add_event_cb(corner, idle_long_press_cb, LV_EVENT_LONG_PRESSED, NULL);
       break;
     }
-    case KIOSK_STEP_SCREENSAVER: {
-      s_app.current_root = screensaver_create(s_screen_root, close_to_idle, NULL);
-      break;
-    }
+
     case KIOSK_STEP_EXISTING_QUEUE: {
       terminal_layout_set_sidebar(&s_app.terminal_layout, true);
       build_existing_queue_screen(s_app.terminal_layout.content);
@@ -555,12 +552,6 @@ static void on_tick(lv_timer_t *timer) {
       render_current();
     }
   } else if (s_app.step == KIOSK_STEP_IDLE) {
-    if (lv_disp_get_inactive_time(NULL) > 30000) {
-        s_app.step = KIOSK_STEP_SCREENSAVER;
-        render_current();
-        return;
-    }
-
     uint32_t current_ver = s_app.provider->get_board_version();
     bool board_changed = (current_ver != s_last_board_version);
     s_last_board_version = current_ver;

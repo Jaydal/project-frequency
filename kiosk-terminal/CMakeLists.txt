@@ -79,7 +79,6 @@ add_executable(kiosk_sim
   src/ui/widgets/step_booking_confirm.c
   src/ui/widgets/step_error.c
   src/ui/screens/queue_board.c
-  src/ui/screens/screensaver.c
   src/ui/screens/terminal_layout.c
   src/ui/screens/setup_screen.c
   src/ui/ui_app.c

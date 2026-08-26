@@ -151,7 +151,4 @@ RLS is disabled on all tables.
 
 ## ESP32 Firmware
 
-Located in `/FreqClient/` (library) and `firmware/` (ESP32 code). Topics:
-- Subscribe: `courts/{courtId}/display`
-- Publish status: `courts/{courtId}/status`
-- Display payload: `{line1, line2, line3}` (max 16 chars each)
+Located in `display-firmware/` (LED scoreboards) and `kiosk-terminal/` (touchscreen kiosk). See root `AGENTS.md` for compile commands and hardware constraints.
