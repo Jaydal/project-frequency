@@ -5,11 +5,13 @@
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_log.h"
+#include "gts_root_r1.h"
 
 /* ESP32-S3 HTTP transport: esp_http_client. Replaces the libcurl-based
  * simulator implementation (src/hal_sim/sim_http_transport.c). */
 
 static const char *TAG = "http";
+static char s_last_error[96] = "";
 
 /* Growable buffer used to accumulate the response body. */
 typedef struct {
@@ -54,6 +56,7 @@ bool http_transport_request(const char *method, const char *url,
   out->status   = 0;
   out->body     = NULL;
   out->body_len = 0;
+  s_last_error[0] = '\0';
 
   buffer_t buf = { NULL, 0 };
 
@@ -63,11 +66,12 @@ bool http_transport_request(const char *method, const char *url,
     .timeout_ms        = 10000,
     .event_handler     = http_event_handler,
     .user_data         = &buf,
-    .crt_bundle_attach = esp_crt_bundle_attach,
+    .cert_pem          = FREQ_GTS_ROOT_R1,
   };
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) {
+    snprintf(s_last_error, sizeof(s_last_error), "%s", "ESP_ERR_HTTP_INIT");
     ESP_LOGE(TAG, "esp_http_client_init failed");
     return false;
   }
@@ -93,6 +97,7 @@ bool http_transport_request(const char *method, const char *url,
     out->body     = buf.data;   /* may be NULL for empty body */
     out->body_len = buf.len;
   } else {
+    snprintf(s_last_error, sizeof(s_last_error), "%s", esp_err_to_name(err));
     ESP_LOGE(TAG, "%s %s failed: %s", method, url, esp_err_to_name(err));
     free(buf.data);
   }
@@ -100,6 +105,8 @@ bool http_transport_request(const char *method, const char *url,
   esp_http_client_cleanup(client);
   return ok;
 }
+
+const char *http_transport_last_error(void) { return s_last_error; }
 
 void http_response_free(http_response_t *out) {
   if (out && out->body) {

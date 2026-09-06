@@ -16,7 +16,7 @@ export default async function RFIDPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">RFID Cards</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">RFID Cards</h1>
           <p className="text-sm text-zinc-500 mt-1">{cards?.length ?? 0} registered cards</p>
         </div>
         <AssignRFIDDialog />

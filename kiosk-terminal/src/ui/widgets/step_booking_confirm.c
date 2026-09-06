@@ -1,6 +1,7 @@
 #include "step_booking_confirm.h"
 #include "booking_stepper.h"
 #include "../theme/kiosk_theme.h"
+#include "../assets/branding.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,16 @@ typedef struct {
   lv_obj_t *root;
   lv_obj_t *input_modal;
   lv_obj_t *editing_ta;
+  char *match_title_buf;
+  size_t match_title_buf_size;
+  lv_timer_t *confirm_timer;
 } confirm_ctx_t;
+
+static void sync_match_title(confirm_ctx_t *ctx) {
+  if (!ctx->match_title_buf || ctx->match_title_buf_size == 0) return;
+  const char *text = lv_textarea_get_text(ctx->ta_match_title);
+  snprintf(ctx->match_title_buf, ctx->match_title_buf_size, "%s", text ? text : "");
+}
 
 static void back_cb(lv_event_t *e) {
   back_closure_t *c = lv_event_get_user_data(e);
@@ -23,6 +33,7 @@ static void back_cb(lv_event_t *e) {
 
 static void deferred_confirm_cb(lv_timer_t *t) {
   confirm_ctx_t *ctx = t->user_data;
+  ctx->confirm_timer = NULL;
   ctx->on_confirm(ctx->user_data);
   lv_timer_del(t);
 }
@@ -35,11 +46,14 @@ static void confirm_click_cb(lv_event_t *e) {
   lv_label_set_text(ctx->confirm_label, "Processing...");
 
   /* Call the confirm callback deferred so the state renders first */
-  lv_timer_create(deferred_confirm_cb, 50, ctx);
+  ctx->confirm_timer = lv_timer_create(deferred_confirm_cb, 50, ctx);
 }
 
 static void free_ctx_cb(lv_event_t *e) {
   confirm_ctx_t *ctx = lv_event_get_user_data(e);
+  if (ctx->confirm_timer) {
+    lv_timer_del(ctx->confirm_timer);
+  }
   if (ctx->input_modal) {
     lv_obj_del(ctx->input_modal);
   }
@@ -56,6 +70,8 @@ static void modal_kb_event_cb(lv_event_t *e) {
     lv_obj_t *ta = lv_keyboard_get_textarea(kb);
     if (ta && ctx->editing_ta) {
       lv_textarea_set_text(ctx->editing_ta, lv_textarea_get_text(ta));
+      /* set_text doesn't emit VALUE_CHANGED, so sync the buffer explicitly. */
+      sync_match_title(ctx);
     }
   }
 
@@ -74,6 +90,10 @@ static void ta_event_cb(lv_event_t * e) {
   lv_obj_t * target_ta = lv_event_get_target(e);
   confirm_ctx_t * ctx = lv_event_get_user_data(e);
   
+  if (code == LV_EVENT_VALUE_CHANGED || code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
+      sync_match_title(ctx);
+  }
+
   if (code == LV_EVENT_FOCUSED) {
       if (ctx->input_modal) return;
       
@@ -112,13 +132,27 @@ static void ta_event_cb(lv_event_t * e) {
       lv_obj_set_style_pad_hor(large_ta, 20, 0);
       lv_textarea_set_text(large_ta, lv_textarea_get_text(target_ta));
       lv_textarea_set_one_line(large_ta, true);
+      lv_textarea_set_max_length(large_ta, 64);
+      lv_obj_clear_flag(large_ta, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+      lv_textarea_set_cursor_click_pos(large_ta, false);
       kiosk_theme_style_modal_ta(large_ta);
+      /* Keep the edit buffer invisible until the keyboard signals READY. */
+      lv_obj_set_style_text_color(large_ta, kiosk_theme_color_bg(), LV_PART_MAIN);
+      lv_obj_set_style_text_color(large_ta, kiosk_theme_color_bg(), LV_PART_SELECTED);
+      lv_obj_set_style_bg_opa(large_ta, LV_OPA_COVER, LV_PART_CURSOR);
+      lv_obj_set_style_bg_color(large_ta, kiosk_theme_color_bg(), LV_PART_CURSOR);
 
-      /* Keyboard — fixed at bottom of screen, not managed by flex */
+      /* Keyboard — fixed at bottom of screen, not managed by flex/percent
+       * layout. Keeping a constant rectangle prevents geometry changes while
+       * LVGL processes key press/release state transitions. */
       lv_obj_t *kb = lv_keyboard_create(ctx->input_modal);
       lv_keyboard_set_popovers(kb, false);
-      lv_obj_set_size(kb, lv_pct(100), kb_h);
-      lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+      lv_obj_set_size(kb, 1024, kb_h);
+      lv_obj_set_style_min_height(kb, kb_h, 0);
+      lv_obj_set_style_max_height(kb, kb_h, 0);
+      lv_obj_set_pos(kb, 0, 600 - kb_h);
+      lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+      lv_obj_add_flag(kb, LV_OBJ_FLAG_IGNORE_LAYOUT);
       kiosk_theme_style_keyboard(kb);
 
       lv_keyboard_set_textarea(kb, large_ta);
@@ -136,6 +170,8 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
                                        const char *game_type_label,
                                        int32_t duration_min,
                                        int32_t credits_required,
+                                       char *match_title_buf, size_t match_title_buf_size,
+                                       bool is_check_in, bool is_capped,
                                        step_confirm_cb_t on_confirm,
                                        void (*on_cancel)(void *), void *cancel_user_data,
                                        void (*on_back)(void *), void *back_user_data,
@@ -156,6 +192,8 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   ctx->user_data = user_data;
   ctx->root = root;
   ctx->ta_match_title = NULL;
+  ctx->match_title_buf = match_title_buf;
+  ctx->match_title_buf_size = match_title_buf_size;
 
   booking_stepper_create(root, 3, member_name, balance, on_cancel, cancel_user_data);
 
@@ -170,13 +208,17 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_style_pad_row(scroll, 8, 0);
 
   lv_obj_t *header = lv_label_create(scroll);
-  lv_label_set_text(header, "Review Booking Details");
+  lv_label_set_text(header, is_check_in ? "Review Check-In Details" : "Review Booking Details");
   lv_obj_set_style_text_font(header, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(header, kiosk_theme_color_text_muted(), 0);
 
   /* Summary cards row */
-  char dur_buf[16];
-  snprintf(dur_buf, sizeof(dur_buf), "%d mins", (int)duration_min);
+  char dur_buf[32];
+  if (is_capped) {
+    snprintf(dur_buf, sizeof(dur_buf), "%d mins\n(Capped)", (int)duration_min);
+  } else {
+    snprintf(dur_buf, sizeof(dur_buf), "%d mins", (int)duration_min);
+  }
 
   lv_obj_t *cards_row = lv_obj_create(scroll);
   lv_obj_remove_style_all(cards_row);
@@ -329,6 +371,9 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
 
   lv_obj_t *ta = lv_textarea_create(match_title_col);
   lv_textarea_set_one_line(ta, true);
+  lv_textarea_set_max_length(ta, 64);
+  lv_obj_set_height(ta, 44);
+  lv_obj_clear_flag(ta, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_textarea_set_placeholder_text(ta, "e.g. Weekend Showdown");
   lv_obj_set_width(ta, lv_pct(100));
   lv_obj_set_style_anim_time(ta, 0, LV_PART_CURSOR);
@@ -369,7 +414,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   if (!sufficient) lv_obj_add_state(ctx->confirm_btn, LV_STATE_DISABLED);
 
   ctx->confirm_label = lv_label_create(ctx->confirm_btn);
-  lv_label_set_text(ctx->confirm_label, "Confirm & Book Match");
+  lv_label_set_text(ctx->confirm_label, is_check_in ? "Check In Now" : "Confirm & Book Match");
   lv_obj_center(ctx->confirm_label);
   lv_obj_add_event_cb(ctx->confirm_btn, confirm_click_cb, LV_EVENT_CLICKED, ctx);
 

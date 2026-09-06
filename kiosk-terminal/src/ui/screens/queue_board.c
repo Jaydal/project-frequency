@@ -1,11 +1,13 @@
 #include "queue_board.h"
 #include "../theme/kiosk_theme.h"
+#include "../assets/branding.h"
 #include "../widgets/court_status_card.h"
 #include "../widgets/queue_list.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../../net/nfc_reader.h"
+#include "../../net/relay.h"
 #include "../ui_app.h"
 
 static void theme_switch_cb(lv_event_t *e) {
@@ -20,9 +22,14 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_t *root = lv_obj_create(parent);
   lv_obj_remove_style_all(root);
   lv_obj_add_style(root, &kiosk_style_screen_bg, 0);
+  kiosk_theme_disable_transitions(root);
   lv_obj_set_size(root, lv_pct(100), lv_pct(100));
   lv_obj_set_style_pad_all(root, 16, 0);
+  /* Keep the screen as a fixed coordinate space.  Making the root a flex
+   * column causes the top controls to consume/recalculate height whenever a
+   * live label changes, which is visible as a full-screen flicker. */
 
+  /* Top-right controls: lights status + theme toggle */
   lv_obj_t *top_right = lv_obj_create(root);
   lv_obj_remove_style_all(top_right);
   lv_obj_set_size(top_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -31,7 +38,19 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_set_style_pad_column(top_right, 16, 0);
   lv_obj_align(top_right, LV_ALIGN_TOP_RIGHT, 0, 0);
 
+  /* Light status indicator */
+  lv_obj_t *lights_status = lv_label_create(top_right);
+  if (relay_is_on()) {
+      lv_label_set_text(lights_status, LV_SYMBOL_EYE_OPEN " LIGHTS: ON");
+      lv_obj_set_style_text_color(lights_status, kiosk_theme_color_success(), 0);
+  } else {
+      lv_label_set_text(lights_status, LV_SYMBOL_EYE_CLOSE " LIGHTS: OFF");
+      lv_obj_set_style_text_color(lights_status, kiosk_theme_color_text_muted(), 0);
+  }
+  lv_obj_set_style_text_font(lights_status, &lv_font_montserrat_14, 0);
+
   lv_obj_t *theme_sw = lv_switch_create(top_right);
+  kiosk_theme_disable_transitions(theme_sw);
   if (kiosk_theme_is_dark()) {
       lv_obj_add_state(theme_sw, LV_STATE_CHECKED);
   }
@@ -46,6 +65,7 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
       lv_obj_set_style_text_color(nfc_status, kiosk_theme_color_danger(), 0);
   }
   lv_obj_set_style_text_font(nfc_status, &lv_font_montserrat_14, 0);
+  lv_obj_clear_flag(nfc_status, LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *brand = lv_label_create(root);
   lv_label_set_text(brand, "Paddle Point Queueing Terminal");
@@ -53,25 +73,47 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_set_style_text_color(brand, kiosk_theme_color_primary(), 0);
   lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 0, 0);
 
+  /* Bottom brand overlay: takes no layout space so court/queue columns can
+   * grow over it when bookings become active. */
+  lv_obj_t *logo = lv_img_create(root);
+  lv_img_set_src(logo, &img_logo_hero);
+  lv_obj_align(logo, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_obj_add_flag(logo, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_clear_flag(logo, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_move_background(logo);
+
+  /* Court + Queue columns fill remaining space */
   lv_obj_t *columns = lv_obj_create(root);
   lv_obj_remove_style_all(columns);
-  lv_obj_set_size(columns, lv_pct(100), lv_pct(100));
+  kiosk_theme_disable_transitions(columns);
+  lv_obj_set_width(columns, lv_pct(100));
+  lv_obj_set_height(columns, lv_pct(100));
+  lv_obj_align(columns, LV_ALIGN_TOP_LEFT, 0, 0);
   lv_obj_set_flex_flow(columns, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_column(columns, 16, 0);
   lv_obj_set_style_pad_top(columns, 48, 0);
 
   lv_obj_t *left = lv_obj_create(columns);
   lv_obj_remove_style_all(left);
+  kiosk_theme_disable_transitions(left);
   lv_obj_set_width(left, lv_pct(58));
   lv_obj_set_height(left, lv_pct(100));
+  /* Keep the courts in the familiar single vertical stack. Each card has a
+   * compact fixed footprint so up to three courts fit without scrolling. */
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_row(left, 12, 0);
+  lv_obj_set_style_pad_row(left, 6, 0);
+  /* The idle board is a fixed kiosk viewport. Keep court geometry stable;
+   * additional courts remain outside the viewport instead of triggering a
+   * scroll/layout reflow while live data changes. */
+  lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *courts_title = lv_label_create(left);
   lv_label_set_text(courts_title, "Courts");
   lv_obj_set_style_text_font(courts_title, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(courts_title, kiosk_theme_color_text_muted(), 0);
+  lv_obj_set_width(courts_title, lv_pct(100));
+  lv_obj_set_height(courts_title, 22);
 
   for (uint8_t i = 0; i < board->court_count; i++) {
     court_status_card_create(left, &board->courts[i], i);
@@ -79,17 +121,20 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
 
   lv_obj_t *right = lv_obj_create(columns);
   lv_obj_remove_style_all(right);
+  kiosk_theme_disable_transitions(right);
   lv_obj_set_flex_grow(right, 1);
   lv_obj_set_height(right, lv_pct(100));
   lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(right, 12, 0);
 
   lv_obj_t *queue_panel = lv_obj_create(right);
-  lv_obj_add_style(queue_panel, &kiosk_style_panel_bg, 0);
+  lv_obj_add_style(queue_panel, &kiosk_style_glass_bg, 0);
+  kiosk_theme_disable_transitions(queue_panel);
   lv_obj_set_width(queue_panel, lv_pct(100));
   lv_obj_set_flex_grow(queue_panel, 1);
   lv_obj_set_flex_flow(queue_panel, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(queue_panel, 10, 0);
+  lv_obj_clear_flag(queue_panel, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(queue_panel, LV_SCROLLBAR_MODE_OFF);
 
   char queue_title[24];

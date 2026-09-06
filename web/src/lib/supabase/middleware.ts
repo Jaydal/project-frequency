@@ -1,8 +1,15 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { withTimeout } from '../utils/timeout'
+export { isPublicPath } from './public-routes'
+import { isPublicPath } from './public-routes'
 
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  if (isPublicPath(path)) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -51,26 +58,9 @@ export async function updateSession(request: NextRequest) {
     user = null;
   }
 
-  const path = request.nextUrl.pathname;
-  const isPublicRoute = path.startsWith('/login') ||
-                        request.nextUrl.pathname.startsWith('/forgot-password') ||
-                        request.nextUrl.pathname.startsWith('/update-password') ||
-                        request.nextUrl.pathname.startsWith('/api/controller') ||
-                        request.nextUrl.pathname.startsWith('/api/public') ||
-                        request.nextUrl.pathname.startsWith('/api/health') ||
-                        request.nextUrl.pathname.startsWith('/api/queue') ||
-                        request.nextUrl.pathname.startsWith('/api/display') ||
-                        request.nextUrl.pathname.startsWith('/api/mqtt') ||
-                        request.nextUrl.pathname.startsWith('/api/board') ||
-                        request.nextUrl.pathname.startsWith('/health') ||
-                        request.nextUrl.pathname.startsWith('/terminal') ||
-                        process.env.PLAYWRIGHT_TEST_BYPASS_AUTH === '1' ||
-                        path === '/' ||
-                        path === '/book';
+  console.log(`[middleware] path=${path} user=${user !== null} public=false`);
 
-  console.log(`[middleware] path=${path} user=${user !== null} public=${isPublicRoute}`);
-
-  if (!user && !isPublicRoute) {
+  if (!user) {
     if (request.nextUrl.pathname.startsWith('/api')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

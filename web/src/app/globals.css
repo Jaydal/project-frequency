@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -61,7 +61,7 @@
   --card-foreground: #111827;
   --popover: #FFFFFF;
   --popover-foreground: #111827;
-  --primary: #3B82F6;
+  --primary: #32A45E;
   --primary-foreground: #FFFFFF;
   --secondary: #10B981;
   --secondary-foreground: #FFFFFF;
@@ -72,21 +72,57 @@
   --destructive: #EF4444;
   --border: #E5E7EB;
   --input: #F3F4F6;
-  --ring: #3B82F6;
+  --ring: #32A45E;
   --chart-1: #0E5E9A;
   --chart-2: #1e88e5;
   --chart-3: #32A45E;
   --chart-4: #66bb6a;
   --chart-5: #f9a825;
   --radius: 0.5rem;
-  --sidebar: #0E5E9A;
+  --sidebar: #10251A;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #0E5E9A;
+  --sidebar-primary-foreground: #32A45E;
   --sidebar-accent: oklch(0.2 0.05 230);
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: #32A45E;
+}
+
+/* Booking screens use their own compact palette. Keeping these as tokens lets
+   the existing status colors stay consistent while making light mode legible. */
+.booking-shell {
+  --booking-bg: #f3f7f4;
+  --booking-surface: #ffffff;
+  --booking-panel: #eef4ef;
+  --booking-card: #ffffff;
+  --booking-inset: #edf3ee;
+  --booking-border: #d5e2d8;
+  --booking-text: #16251c;
+  --booking-muted: #52645a;
+  --booking-subtle: #718178;
+  --booking-toggle-bg: rgba(255, 255, 255, 0.9);
+  --booking-toggle-hover: #e8f1ea;
+}
+
+.dark .booking-shell {
+  --booking-bg: #101713;
+  --booking-surface: #17231c;
+  --booking-panel: #142019;
+  --booking-card: #1b2a23;
+  --booking-inset: rgba(0, 0, 0, 0.1);
+  --booking-border: #31453a;
+  --booking-text: #f3f6f2;
+  --booking-muted: #aebbb2;
+  --booking-subtle: #829188;
+  --booking-toggle-bg: rgba(0, 0, 0, 0.2);
+  --booking-toggle-hover: rgba(0, 0, 0, 0.35);
+}
+
+html:not(.dark) .booking-court-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f4f8f5 58%, #edf4f7 100%) !important;
+  border-color: var(--booking-border);
+  box-shadow: 0 8px 24px rgba(25, 65, 42, 0.08);
 }
 
 .dark {
@@ -96,7 +132,7 @@
   --card-foreground: #F9FAFB;
   --popover: #1F2937;
   --popover-foreground: #F9FAFB;
-  --primary: #3B82F6;
+  --primary: #32A45E;
   --primary-foreground: #FFFFFF;
   --secondary: #10B981;
   --secondary-foreground: #FFFFFF;
@@ -107,16 +143,16 @@
   --destructive: #EF4444;
   --border: #374151;
   --input: #1F2937;
-  --ring: #3B82F6;
+  --ring: #32A45E;
   --chart-1: #0E5E9A;
   --chart-2: #1e88e5;
   --chart-3: #32A45E;
   --chart-4: #66bb6a;
   --chart-5: #f9a825;
-  --sidebar: #0E5E9A;
+  --sidebar: #10251A;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #0E5E9A;
+  --sidebar-primary-foreground: #32A45E;
   --sidebar-accent: oklch(0.2 0.05 230);
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: oklch(1 0 0 / 10%);
@@ -139,6 +175,15 @@
 @keyframes boot-pulse {
   0%, 100% { transform: scale(1); opacity: 0.8; }
   50% { transform: scale(1.5); opacity: 1; }
+}
+
+@keyframes terminal-ball {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-18deg); }
+  50% { transform: translate3d(-4px, -7px, 0) rotate(10deg); }
+}
+
+.animate-terminal-ball {
+  animation: terminal-ball 5s ease-in-out infinite;
 }
 
 @keyframes boot-ring-rotate {

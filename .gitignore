@@ -1,4 +1,9 @@
-# PlatformIO
+# PlatformIO & Build artifacts
+**/.pio/
+**/.vscode/
+**/build/
+**/.DS_Store
+.git.bak*
 firmware/.pio
 firmware/hdwf2/.pio
 firmware/.vscode/.browse.c_cpp.db*
@@ -9,6 +14,8 @@ firmware/hdwf2/.vscode/.browse.c_cpp.db*
 firmware/hdwf2/.vscode/c_cpp_properties.json
 firmware/hdwf2/.vscode/launch.json
 firmware/hdwf2/.vscode/ipch
+kiosk-terminal/.pio
+kiosk-terminal/build
 
 # Web app
 web/.next
@@ -37,3 +44,12 @@ test-rfid.js
 .DS_Store
 build/
 monorepo_review.diff
+display-firmware/.pio
+display-firmware/.vscode
+kiosk-terminal/.pio.backup
+.vercel
+.env*
+.kilo/
+web/test-results/
+web/playwright-report/
+assets/**/LOGO SUITE.pdf

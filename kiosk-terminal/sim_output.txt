@@ -1,0 +1,1 @@
+[sim] press keys 1-5 to simulate an RFID scan (TEST001..TEST005)

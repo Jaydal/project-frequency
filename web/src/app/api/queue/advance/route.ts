@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { processAllCourts } from '@/lib/queue/queue-processor';
 import { publishAllDisplays } from '@/lib/display/publish-all';
+import { checkControllerKey } from '@/lib/controller-auth';
+import { authenticateControllerDevice } from '@/lib/controller-device-auth';
 
-// Vercel cron: reconcile the ledger + republish every minute. The LED displays
-// are schedule-driven and advance locally (real-time), so this only closes
-// finished games, promotes waiters, and refreshes displays/board when the venue
-// is otherwise idle (no join/leave/admin event firing).
-export const schedule = { cron: '* * * * *' };
-
-async function advance() {
+async function advance(request: Request) {
+  const device = await authenticateControllerDevice(request, 'kiosk');
+  if (!device && !checkControllerKey(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const started = Date.now();
   await processAllCourts();
   const res = await publishAllDisplays();
@@ -20,10 +20,10 @@ async function advance() {
   });
 }
 
-export async function GET() {
-  return advance();
+export async function GET(request: Request) {
+  return advance(request);
 }
 
-export async function POST() {
-  return advance();
+export async function POST(request: Request) {
+  return advance(request);
 }

@@ -3,16 +3,20 @@ import { createClient } from "@/lib/supabase/server";
 import { withTimeout } from "@/lib/utils/timeout";
 import LandingExperience from "@/components/landing/LandingExperience";
 
+// Prices are public kiosk configuration and do not need to block every request.
+// Revalidate periodically while keeping the page responsive when Supabase is slow.
+export const revalidate = 60;
+
 async function getPrices(): Promise<Record<string, number>> {
   try {
     const supabase = await withTimeout(
       createClient(),
-      10000,
+      500,
       () => { throw new Error('createClient timeout'); }
     );
     const { data, error } = await withTimeout(
       supabase.from('settings').select('value').eq('key', 'prices').single(),
-      3000,
+      1200,
       () => ({ data: null, error: { message: 'timeout' } } as any)
     );
     if (data?.value && !error) return JSON.parse(data.value);

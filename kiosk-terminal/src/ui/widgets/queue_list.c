@@ -26,9 +26,11 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
     const queue_row_t *q = &rows[i];
     lv_obj_t *row = lv_obj_create(list);
     lv_obj_set_width(row, lv_pct(100));
-    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    /* Fixed row geometry prevents long names/titles from reflowing the queue
+     * panel when an MQTT snapshot replaces the data. */
+    lv_obj_set_height(row, 76);
     lv_obj_set_style_bg_color(row, kiosk_theme_color_panel(), 0);
-    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(row, KIOSK_GLASS_ROW_OPA, 0);
     lv_obj_set_style_border_width(row, 0, 0);
     lv_obj_set_style_radius(row, 6, 0);
     lv_obj_set_style_pad_all(row, 12, 0);
@@ -55,10 +57,15 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
     lv_obj_t *name_col = lv_obj_create(row);
     lv_obj_remove_style_all(name_col);
     lv_obj_set_height(name_col, LV_SIZE_CONTENT);
+    lv_obj_set_width(name_col, 0);
     lv_obj_set_flex_grow(name_col, 1);
     lv_obj_set_flex_flow(name_col, LV_FLEX_FLOW_COLUMN);
     lv_obj_clear_flag(name_col, LV_OBJ_FLAG_SCROLLABLE);
     set_label(name_col, name_buf, &lv_font_montserrat_16, kiosk_theme_color_text_strong());
+    lv_obj_t *name_label = lv_obj_get_child(name_col, 0);
+    lv_obj_set_width(name_label, lv_pct(100));
+    lv_obj_set_height(name_label, 22);
+    lv_label_set_long_mode(name_label, LV_LABEL_LONG_DOT);
     if (q->match_title[0] != '\0') {
       lv_obj_t *mt = lv_label_create(name_col);
       lv_label_set_text(mt, q->match_title);
@@ -68,7 +75,14 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
       lv_obj_set_width(mt, lv_pct(100));
     }
 
-    lv_obj_t *type_badge = lv_obj_create(row);
+    lv_obj_t *meta_col = lv_obj_create(row);
+    lv_obj_remove_style_all(meta_col);
+    lv_obj_set_width(meta_col, 122);
+    lv_obj_set_height(meta_col, 68);
+    lv_obj_set_flex_flow(meta_col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(meta_col, 2, 0);
+
+    lv_obj_t *type_badge = lv_obj_create(meta_col);
     lv_obj_remove_style_all(type_badge);
     lv_obj_set_size(type_badge, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(type_badge, kiosk_theme_color_bg(), 0);
@@ -78,20 +92,18 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
     lv_obj_set_style_pad_ver(type_badge, 2, 0);
     set_label(type_badge, q->match_type, &lv_font_montserrat_14, kiosk_theme_color_text());
 
-    set_label(row, q->court_name[0] ? q->court_name : "Any", &lv_font_montserrat_14, kiosk_theme_color_text_muted());
-
-    char dur_buf[8];
-    snprintf(dur_buf, sizeof(dur_buf), "%dm", (int)q->duration_min);
-    set_label(row, dur_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    char court_buf[40];
+    snprintf(court_buf, sizeof(court_buf), "%s · %dm", q->court_name[0] ? q->court_name : "Any", (int)q->duration_min);
+    set_label(meta_col, court_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
 
     char wait_buf[32];
     snprintf(wait_buf, sizeof(wait_buf), "Wait: %s", q->estimated_wait);
-    set_label(row, wait_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    set_label(meta_col, wait_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
 
     char actual_time_buf[32];
     struct tm *timeinfo = localtime(&q->estimated_start_time);
     strftime(actual_time_buf, sizeof(actual_time_buf), "ETA: %I:%M %p", timeinfo);
-    set_label(row, actual_time_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    set_label(meta_col, actual_time_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
   }
 
   return list;

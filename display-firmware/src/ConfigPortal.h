@@ -26,6 +26,7 @@ public:
 
   bool saveField(const String& key, const String& value);
   bool saveField(const String& key, uint8_t value);
+  bool saveField(const String& key, uint16_t value);
 
   String getPortalSSID();
 
@@ -35,6 +36,11 @@ public:
   uint16_t getMqttPort();
   String getMqttUser();
   String getMqttPass();
+  String getServerUrl();
+  String getApiKey();
+  bool fetchMqttConfig(int* outStatusCode = nullptr);
+  int getLastFetchStatus() const { return _lastFetchStatus; }
+  String getLastFetchError() const { return _lastFetchError; }
   String getCourtId();
   uint8_t getBrightness();
   String getColorHex();
@@ -55,9 +61,13 @@ private:
   uint16_t _mqttPort;
   String _mqttUser;
   String _mqttPass;
+  String _serverUrl;
+  String _apiKey;
   String _courtId;
   uint8_t _brightness = 0;
   String _colorHex;
+  int _lastFetchStatus = 0;
+  String _lastFetchError;
 
   bool loadFields();
   bool saveFields(const String& ssid, const String& pass, const String& broker,

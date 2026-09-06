@@ -13,3 +13,10 @@ dependencies:
 
   # Base esp_lcd_touch interface (pulled transitively, but declared for clarity).
   espressif/esp_lcd_touch: "1.0.4"
+
+  # ESP-IDF 6.x ships MQTT as a managed component rather than a built-in
+  # component, while the kiosk transport still requires the mqtt headers.
+  espressif/mqtt: "^1.0.0"
+
+  # cJSON replaced the legacy built-in `json` component in ESP-IDF 6.x.
+  espressif/cjson: "^1.7.19"

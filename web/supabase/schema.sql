@@ -82,6 +82,21 @@ CREATE TABLE IF NOT EXISTS controller_logs (
   last_sync        TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Pre-provisioned hardware identities. Devices authenticate by their
+-- immutable ESP32 MAC address; there is intentionally no public registration
+-- endpoint. Rows are inserted during deployment by an operator.
+CREATE TABLE IF NOT EXISTS controller_devices (
+  device_id      TEXT PRIMARY KEY CHECK (device_id ~ '^[0-9a-f]{12}$|^simulator$'),
+  device_type    TEXT NOT NULL CHECK (device_type IN ('kiosk', 'display')),
+  court_id       TEXT REFERENCES courts(id) ON UPDATE CASCADE,
+  enabled        BOOLEAN NOT NULL DEFAULT TRUE,
+  last_seen_at   TIMESTAMPTZ,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS controller_devices_enabled_idx
+  ON controller_devices (device_id) WHERE enabled;
+
 CREATE TABLE IF NOT EXISTS settings (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   key         TEXT UNIQUE NOT NULL,
@@ -125,6 +140,7 @@ CREATE OR REPLACE FUNCTION register_game(
   p_players     JSONB  -- [{rfid, team, charge_amount}]
 ) RETURNS UUID
 LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_court   courts%ROWTYPE;
@@ -139,15 +155,36 @@ DECLARE
   v_status      TEXT;
   v_latest_end  TIMESTAMPTZ;
 BEGIN
-  SELECT * INTO v_court FROM courts WHERE name = p_court_name;
+  IF p_duration NOT IN (30, 60, 90) THEN
+    RAISE EXCEPTION 'Invalid duration';
+  END IF;
+  IF p_match_type NOT IN ('1v1', '2v2') THEN
+    RAISE EXCEPTION 'Invalid match type';
+  END IF;
+  IF p_players IS NULL OR jsonb_array_length(p_players) NOT BETWEEN 1 AND 4 THEN
+    RAISE EXCEPTION 'Invalid player count';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(p_players) AS player
+    GROUP BY player->>'rfid'
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate player';
+  END IF;
+
+  SELECT * INTO v_court FROM courts WHERE name = p_court_name FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Court not found'; END IF;
 
   -- Validate ALL players before touching any money
   FOR v_p IN SELECT * FROM jsonb_array_elements(p_players) LOOP
     v_charge := (v_p->>'charge_amount')::NUMERIC;
+    IF v_charge IS NULL OR v_charge <= 0 OR v_charge > 100000 THEN
+      RAISE EXCEPTION 'Invalid charge';
+    END IF;
     SELECT rc.* INTO v_card FROM rfid_cards rc WHERE rc.uid = v_p->>'rfid';
     IF NOT FOUND THEN RAISE EXCEPTION 'Invalid RFID card'; END IF;
-    SELECT w.* INTO v_wallet FROM wallets w WHERE w.member_id = v_card.member_id;
+    SELECT w.* INTO v_wallet FROM wallets w WHERE w.member_id = v_card.member_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
     IF v_wallet.balance < v_charge THEN RAISE EXCEPTION 'Insufficient funds'; END IF;
     v_total := v_total + v_charge;
@@ -176,7 +213,7 @@ BEGIN
     v_charge := (v_p->>'charge_amount')::NUMERIC;
     SELECT rc.* INTO v_card FROM rfid_cards rc WHERE rc.uid = v_p->>'rfid';
     SELECT m.*  INTO v_member FROM members m WHERE m.id = v_card.member_id;
-    SELECT w.*  INTO v_wallet FROM wallets  w WHERE w.member_id = v_member.id;
+    SELECT w.*  INTO v_wallet FROM wallets  w WHERE w.member_id = v_member.id FOR UPDATE;
 
     UPDATE wallets SET balance = balance - v_charge, updated_at = NOW()
     WHERE id = v_wallet.id;
@@ -205,6 +242,7 @@ CREATE OR REPLACE FUNCTION create_member(
   p_email      TEXT
 ) RETURNS UUID
 LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_member_id UUID;
@@ -229,16 +267,24 @@ CREATE OR REPLACE FUNCTION reload_wallet(
   p_reference_number TEXT
 ) RETURNS UUID
 LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_member  members%ROWTYPE;
   v_wallet  wallets%ROWTYPE;
   v_tx_id   UUID;
 BEGIN
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'Amount must be positive';
+  END IF;
+  IF p_reference_number IS NULL OR btrim(p_reference_number) = '' THEN
+    RAISE EXCEPTION 'Reference number is required';
+  END IF;
+
   SELECT * INTO v_member FROM members WHERE member_id = p_member_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'Member not found'; END IF;
 
-  SELECT * INTO v_wallet FROM wallets WHERE member_id = v_member.id;
+  SELECT * INTO v_wallet FROM wallets WHERE member_id = v_member.id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
 
   UPDATE wallets SET balance = balance + p_amount, updated_at = NOW()
@@ -305,3 +351,146 @@ ALTER TABLE queue_entries ADD CONSTRAINT queue_entries_status_check
     'declined', 'expired', 'cancelled',
     'completed', 'insufficient_credits'
   ));
+
+-- ── Migration: guest booking requests ─────────────────────────────────────────
+ALTER TABLE games ADD COLUMN IF NOT EXISTS guest_booking_request_id UUID;
+
+CREATE TABLE IF NOT EXISTS public.guest_booking_requests (
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  reference_code    TEXT UNIQUE NOT NULL,
+  guest_name        TEXT NOT NULL,
+  mobile_number     TEXT NOT NULL,
+  email             TEXT,
+  court_id          TEXT NOT NULL REFERENCES public.courts(id) ON UPDATE CASCADE,
+  start_time        TIMESTAMPTZ NOT NULL,
+  duration          INTEGER NOT NULL CHECK (duration IN (30, 60, 90)),
+  party_size        INTEGER NOT NULL CHECK (party_size IN (2, 4)),
+  match_title       TEXT,
+  payment_method    TEXT NOT NULL CHECK (payment_method IN ('E-wallet', 'Bank Transfer', 'Walk-in')),
+  payment_status    TEXT NOT NULL DEFAULT 'Pending' CHECK (payment_status IN ('Pending', 'Confirmed', 'Not Required')),
+  status            TEXT NOT NULL DEFAULT 'Pending Confirmation' CHECK (status IN ('Pending Confirmation', 'Confirmed', 'Rejected', 'Expired')),
+  hold_expires_at   TIMESTAMPTZ NOT NULL,
+  admin_notes       TEXT,
+  confirmed_game_id UUID REFERENCES public.games(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at       TIMESTAMPTZ,
+  reviewed_by       UUID REFERENCES auth.users(id)
+);
+
+CREATE INDEX IF NOT EXISTS guest_booking_requests_slot_idx
+  ON public.guest_booking_requests (court_id, start_time, hold_expires_at)
+  WHERE status = 'Pending Confirmation';
+
+ALTER TABLE public.guest_booking_requests ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.guest_booking_requests FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.create_guest_booking_request(
+  p_guest_name TEXT,
+  p_mobile_number TEXT,
+  p_email TEXT,
+  p_court_id TEXT,
+  p_start_time TIMESTAMPTZ,
+  p_duration INTEGER,
+  p_party_size INTEGER,
+  p_match_title TEXT,
+  p_payment_method TEXT,
+  p_reference_code TEXT,
+  p_hold_expires_at TIMESTAMPTZ
+) RETURNS public.guest_booking_requests
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_request public.guest_booking_requests;
+  v_end TIMESTAMPTZ := p_start_time + make_interval(mins => p_duration);
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext(p_court_id));
+
+  UPDATE public.guest_booking_requests
+  SET status = 'Expired', updated_at = NOW()
+  WHERE status = 'Pending Confirmation' AND hold_expires_at <= NOW();
+
+  IF EXISTS (
+    SELECT 1 FROM public.games g
+    WHERE g.court_id = p_court_id
+      AND g.status IN ('Scheduled', 'In Progress')
+      AND g.start_time < v_end
+      AND g.start_time + make_interval(mins => g.duration) > p_start_time
+  ) OR EXISTS (
+    SELECT 1 FROM public.guest_booking_requests r
+    WHERE r.court_id = p_court_id
+      AND r.status = 'Pending Confirmation'
+      AND r.hold_expires_at > NOW()
+      AND r.start_time < v_end
+      AND r.start_time + make_interval(mins => r.duration) > p_start_time
+  ) THEN
+    RAISE EXCEPTION 'Selected court and time are no longer available';
+  END IF;
+
+  INSERT INTO public.guest_booking_requests (
+    reference_code, guest_name, mobile_number, email, court_id, start_time,
+    duration, party_size, match_title, payment_method, hold_expires_at
+  ) VALUES (
+    p_reference_code, p_guest_name, p_mobile_number, NULLIF(p_email, ''), p_court_id, p_start_time,
+    p_duration, p_party_size, NULLIF(p_match_title, ''), p_payment_method, p_hold_expires_at
+  ) RETURNING * INTO v_request;
+
+  RETURN v_request;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_guest_booking_request(TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, INTEGER, INTEGER, TEXT, TEXT, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_guest_booking_request(TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, INTEGER, INTEGER, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO service_role;
+
+-- ── Migration: approve guest booking ───────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.approve_guest_booking_request(p_request_id UUID)
+RETURNS UUID
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_request public.guest_booking_requests;
+  v_game_id UUID;
+  v_charge_amount INTEGER := 0;
+BEGIN
+  SELECT * INTO v_request
+  FROM public.guest_booking_requests
+  WHERE id = p_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Request not found';
+  END IF;
+
+  IF v_request.status != 'Pending Confirmation' THEN
+    RAISE EXCEPTION 'Request is not in pending state';
+  END IF;
+
+  INSERT INTO public.games (
+    court_id, match_type, match_title, duration, status, start_time, charge_amount
+  ) VALUES (
+    v_request.court_id,
+    CASE WHEN v_request.party_size = 4 THEN '2v2' ELSE '1v1' END,
+    v_request.match_title,
+    v_request.duration,
+    'Scheduled',
+    v_request.start_time,
+    v_charge_amount
+  ) RETURNING id INTO v_game_id;
+
+  UPDATE public.guest_booking_requests
+  SET status = 'Confirmed',
+      confirmed_game_id = v_game_id,
+      payment_status = 'Confirmed',
+      updated_at = NOW(),
+      reviewed_at = NOW()
+  WHERE id = p_request_id;
+
+  RETURN v_game_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.approve_guest_booking_request(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.approve_guest_booking_request(UUID) TO service_role;
+

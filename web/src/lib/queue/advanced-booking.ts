@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { deductWallet, refundTransaction } from './queue-service';
 import { isSlotAvailable } from './booking-engine';
 import { getCost } from '../products-config-types';
@@ -21,8 +21,8 @@ export interface BookingResult {
   error?: string;
 }
 
-export async function createAdvancedBooking(input: CreateBookingInput): Promise<BookingResult> {
-  const supabase = await createClient();
+export async function createAdvancedBooking(input: CreateBookingInput, client?: any): Promise<BookingResult> {
+  const supabase = client ?? createAdminClient();
   const start = new Date(input.start);
   const now = new Date();
 
@@ -65,7 +65,12 @@ export async function createAdvancedBooking(input: CreateBookingInput): Promise<
   const charge = getCost(config, input.duration, input.partySize);
   if (!charge) return { booking: { id: '', status: '', court_id: null }, error: 'No price configured for this duration' };
 
-  const depositTxId = await deductWallet(input.memberId, charge, 'QUEUE_DEPOSIT_' + Date.now());
+  let depositTxId: string | null = null;
+  try {
+    depositTxId = await deductWallet(input.memberId, charge, 'QUEUE_DEPOSIT_' + Date.now());
+  } catch (err: any) {
+    return { booking: { id: '', status: '', court_id: null }, error: err?.message || 'Insufficient credits' };
+  }
   if (!depositTxId) return { booking: { id: '', status: '', court_id: null }, error: 'Insufficient credits' };
 
   const gameInsert = {
@@ -91,8 +96,8 @@ export async function createAdvancedBooking(input: CreateBookingInput): Promise<
   return { booking: { id: game.id, status: 'Scheduled', court_id: courtId } };
 }
 
-export async function cancelBooking(bookingId: string, isGame: boolean): Promise<{ success: boolean; refunded: boolean; error?: string }> {
-  const supabase = await createClient();
+export async function cancelBooking(bookingId: string, isGame: boolean, client?: any): Promise<{ success: boolean; refunded: boolean; error?: string }> {
+  const supabase = client ?? createAdminClient();
 
   if (isGame) {
     const { data: game } = await supabase.from('games').select('start_time, charge_amount').eq('id', bookingId).single();
@@ -141,8 +146,8 @@ export interface Game {
   game_players?: any[];
 }
 
-export async function getUpcomingBookings(memberId?: string, date?: string): Promise<Game[]> {
-  const supabase = await createClient();
+export async function getUpcomingBookings(memberId?: string, date?: string, client?: any): Promise<Game[]> {
+  const supabase = client ?? createAdminClient();
   const now = new Date().toISOString();
 
   let query = supabase.from('games').select('*, game_players(*)').eq('status', 'Scheduled').gte('start_time', now).order('start_time', { ascending: true });
@@ -160,5 +165,3 @@ export async function getUpcomingBookings(memberId?: string, date?: string): Pro
   const { data: games } = await query;
   return games ?? [];
 }
-
-

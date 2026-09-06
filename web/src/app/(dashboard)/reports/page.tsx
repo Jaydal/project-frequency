@@ -30,7 +30,7 @@ export default async function ReportsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">Reports</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">Reports</h1>
         <p className="text-sm text-zinc-500 mt-1">Operational records, revenue summary, and booking activity stats</p>
       </div>
 
@@ -52,7 +52,7 @@ export default async function ReportsPage() {
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Total Wallet Reloads</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-zinc-255">
+            <div className="text-3xl font-black text-zinc-100">
               ₱{totalReloads.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <p className="text-[10px] text-zinc-500 mt-1">Total deposits reload by staff admins</p>

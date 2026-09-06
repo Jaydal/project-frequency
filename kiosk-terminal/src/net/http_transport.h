@@ -28,3 +28,6 @@ bool http_transport_request(const char *method, const char *url,
                             const char *body, http_response_t *out);
 
 void http_response_free(http_response_t *out);
+
+/* Human-readable reason for the most recent transport-level failure. */
+const char *http_transport_last_error(void);

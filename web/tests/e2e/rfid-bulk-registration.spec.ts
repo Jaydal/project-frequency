@@ -8,8 +8,8 @@ if (!LOGIN_EMAIL || !LOGIN_PASSWORD) {
 }
 
 async function loginIfNeeded(page: Page) {
-  if (process.env.PLAYWRIGHT_TEST_BYPASS_AUTH === '1') {
-    return; // Bypass auth
+  if (!LOGIN_EMAIL || !LOGIN_PASSWORD) {
+    return; // No credentials provided, skip
   }
 
   await page.goto('/login');
@@ -24,6 +24,7 @@ async function loginIfNeeded(page: Page) {
 
 test.describe('Bulk RFID Registration', () => {
   test.beforeEach(async ({ page }) => {
+    test.skip(!LOGIN_EMAIL || !LOGIN_PASSWORD, 'Requires PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD');
     test.info().annotations.push({ type: 'issue', description: 'Simulated RFID input via text field' });
     await loginIfNeeded(page);
   });

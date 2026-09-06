@@ -133,7 +133,7 @@ export default async function CourtsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-zinc-800 text-zinc-450 font-medium">
+                <tr className="border-b border-zinc-800 text-zinc-400 font-medium">
                   <th className="pb-3 pr-4">Court</th>
                   <th className="pb-3 pr-4">Match</th>
                   <th className="pb-3 pr-4">Players</th>
@@ -151,14 +151,14 @@ export default async function CourtsPage() {
                     .join(', ');
 
                   return (
-                    <tr key={game.id} className="text-zinc-350 hover:bg-zinc-800/10">
+                    <tr key={game.id} className="text-zinc-300 hover:bg-zinc-800/10">
                       <td className="py-3 pr-4 font-semibold text-zinc-200">
                         {game.courts?.name ?? 'Unknown'}
                       </td>
                       <td className="py-3 pr-4 uppercase text-xs font-semibold tracking-wider text-zinc-500">
                         {game.match_type}
                       </td>
-                      <td className="py-3 pr-4 text-zinc-350 truncate max-w-[200px]" title={playerNames}>
+                      <td className="py-3 pr-4 text-zinc-300 truncate max-w-[200px]" title={playerNames}>
                         {playerNames || 'No Players'}
                       </td>
                       <td className="py-3 pr-4 text-zinc-400">

@@ -120,6 +120,46 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
 
   const rates = ratesRes;
   const charge = calcCharge(rates, params.duration, params.partySize);
+  const isScheduled = params.start.getTime() > Date.now() + 30_000;
+
+  // Future bookings remain scheduled until the queue processor reaches their
+  // start time. This prevents a scheduled booking from occupying a court now.
+  if (isScheduled) {
+    let scheduledCourt = null;
+    if (params.courtId) {
+      const { data: selected } = await supabase
+        .from('courts')
+        .select('id, name, status')
+        .eq('id', params.courtId)
+        .single();
+      if (selected && await isSlotAvailable(selected.id, params.start, new Date(params.start.getTime() + params.duration * 60_000))) {
+        scheduledCourt = selected;
+      }
+    } else {
+      scheduledCourt = await findAvailableCourt(params.start, params.duration, params.partySize);
+    }
+    if (!scheduledCourt) throw new Error('Selected time is no longer available');
+
+    const insertData: Record<string, any> = {
+      member_id: params.memberId,
+      requested_start: params.start.toISOString(),
+      duration: params.duration,
+      party_size: params.partySize,
+      player_ids: JSON.stringify(params.playerIds),
+      status: 'scheduled',
+      court_id: scheduledCourt.id,
+    };
+    if (params.matchTitle) insertData.match_title = params.matchTitle;
+    const depositTxId = await deductWallet(params.memberId, charge, `QUEUE_DEPOSIT_${Date.now()}`);
+    if (depositTxId) insertData.deposit_tx_id = depositTxId;
+    const { data: entry, error } = await supabase.from('queue_entries').insert(insertData).select().single();
+    if (error) {
+      if (depositTxId) await refundTransaction(depositTxId, 'Scheduled booking failed');
+      throw new Error(error.message);
+    }
+    publishAllDisplays().catch(console.error);
+    return entry as QueueEntry;
+  }
 
   // Always attempt to book a free court directly. A waiting entry for a DIFFERENT
   // court must NOT block booking a currently free court — otherwise a caller who
@@ -256,14 +296,14 @@ export async function getQueuePosition(entryId: string): Promise<number> {
   const supabase = await createClient();
   const { data: entry } = await supabase
     .from('queue_entries')
-    .select('created_at')
+    .select('created_at, status')
     .eq('id', entryId)
     .single();
   if (!entry) return 0;
   const { count } = await supabase
     .from('queue_entries')
     .select('*', { count: 'exact', head: true })
-    .eq('status', 'waiting')
+      .eq('status', entry.status)
     .lt('created_at', entry.created_at);
   return count ?? 0;
 }

@@ -5,6 +5,7 @@ const mockGetQueuePosition = vi.hoisted(() => vi.fn());
 const mockGetEstimatedWait = vi.hoisted(() => vi.fn());
 const mockFinalizeBooking = vi.hoisted(() => vi.fn());
 const mockDeclineOffer = vi.hoisted(() => vi.fn());
+const mockAuthenticateControllerDevice = vi.hoisted(() => vi.fn());
 const mockSupabaseResults = vi.hoisted(() => [] as Array<{ data: any; error: any }>);
 
 vi.mock('@/lib/queue/queue-service', () => ({
@@ -18,28 +19,53 @@ vi.mock('@/lib/queue/reservation-service', () => ({
   declineOffer: mockDeclineOffer,
 }));
 
+vi.mock('@/lib/controller-device-auth', () => ({
+  authenticateControllerDevice: mockAuthenticateControllerDevice,
+}));
+
+vi.mock('@/lib/queue/board-publisher', () => ({
+  publishBoardOnce: vi.fn(),
+}));
+
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit: vi.fn(() => true),
+}));
+
+const mockFrom = vi.fn(() => {
+  const chain: any = {
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    gte: vi.fn(() => chain),
+    lte: vi.fn(() => chain),
+    order: vi.fn(() => chain),
+    limit: vi.fn(() => chain),
+    delete: vi.fn(() => chain),
+    update: vi.fn(() => chain),
+    single: vi.fn(() => {
+      const r = mockSupabaseResults.shift() || { data: null, error: null };
+      return Promise.resolve(r);
+    }),
+    then: (onfulfilled: any, onrejected?: any) => {
+      const r = mockSupabaseResults.shift() || { data: null, error: null };
+      return Promise.resolve(r).then(onfulfilled, onrejected);
+    },
+  };
+  return chain;
+});
+
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(() => ({
-    from: vi.fn(() => {
-      const chain: any = {
-        select: vi.fn(() => chain),
-        eq: vi.fn(() => chain),
-        in: vi.fn(() => chain),
-        order: vi.fn(() => chain),
-        limit: vi.fn(() => chain),
-        delete: vi.fn(() => chain),
-        update: vi.fn(() => chain),
-        single: vi.fn(() => {
-          const r = mockSupabaseResults.shift() || { data: null, error: null };
-          return Promise.resolve(r);
-        }),
-        then: (onfulfilled: any) => {
-          const r = mockSupabaseResults.shift() || { data: null, error: null };
-          return Promise.resolve(r).then(onfulfilled);
-        },
-      };
-      return chain;
-    }),
+    auth: {
+      getUser: vi.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+    },
+    from: mockFrom,
+  })),
+}));
+
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: vi.fn(() => ({
+    from: mockFrom,
   })),
 }));
 
@@ -49,12 +75,15 @@ describe('POST /api/queue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSupabaseResults.length = 0;
+    mockAuthenticateControllerDevice.mockResolvedValue(null);
   });
 
-  const makeReq = (body: unknown) =>
+  const makeReq = (body: unknown, authorized = true) =>
     new Request('http://localhost/api/queue', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authorized
+        ? { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' }
+        : { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
@@ -65,6 +94,32 @@ describe('POST /api/queue', () => {
     partySize: 2,
     playerIds: ['6ba7b810-9dad-11d1-80b4-00c04fd430c8', 'f47ac10b-58cc-4372-a567-0e02b2c3d479'],
   };
+
+  it('rejects queue mutations without controller or user authorization', async () => {
+    const res = await POST(makeReq(validBody, false));
+    expect(res.status).toBe(401);
+    expect(mockJoinQueue).not.toHaveBeenCalled();
+  });
+
+  it('accepts queue mutations from an allowlisted kiosk device', async () => {
+    mockAuthenticateControllerDevice.mockResolvedValue({ device_id: 'aabbccddeeff', device_type: 'kiosk', court_id: null });
+    mockJoinQueue.mockResolvedValue({
+      id: 'q-device', member_id: 'm1', status: 'waiting', court_id: null,
+      duration: 60, party_size: 2, player_ids: ['p1'], created_at: new Date().toISOString(),
+      requested_start: '2026-07-07T14:00:00Z', expires_at: null, updated_at: new Date().toISOString(),
+    });
+    mockGetQueuePosition.mockResolvedValue(1);
+    mockGetEstimatedWait.mockReturnValue('Now');
+
+    const res = await POST(new Request('http://localhost/api/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-device-id': 'aabbccddeeff' },
+      body: JSON.stringify(validBody),
+    }));
+
+    expect(res.status).toBe(201);
+    expect(mockJoinQueue).toHaveBeenCalled();
+  });
 
   it('returns 400 on invalid payload', async () => {
     const res = await POST(makeReq({}));
@@ -83,6 +138,7 @@ describe('POST /api/queue', () => {
       player_ids: ['p1', 'p2'], created_at: new Date().toISOString(),
       requested_start: '2026-07-07T14:00:00Z', expires_at: null, updated_at: new Date().toISOString(),
     });
+    mockSupabaseResults.push({ data: [], error: null });
     mockSupabaseResults.push({ data: { name: 'Court 1' }, error: null });
 
     const res = await POST(makeReq(validBody));
@@ -142,7 +198,7 @@ describe('PATCH /api/queue', () => {
   it('returns 400 on invalid payload', async () => {
     const res = await PATCH(new Request('http://localhost/api/queue', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' },
       body: JSON.stringify({}),
     }));
     expect(res.status).toBe(400);
@@ -155,7 +211,7 @@ describe('PATCH /api/queue', () => {
 
     const res = await PATCH(new Request('http://localhost/api/queue', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' },
       body: JSON.stringify({ id: '550e8400-e29b-41d4-a716-446655440000', action: 'accept' }),
     }));
     expect(res.status).toBe(200);
@@ -169,7 +225,7 @@ describe('PATCH /api/queue', () => {
 
     const res = await PATCH(new Request('http://localhost/api/queue', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' },
       body: JSON.stringify({ id: '550e8400-e29b-41d4-a716-446655440000', action: 'accept' }),
     }));
     expect(res.status).toBe(400);
@@ -182,7 +238,7 @@ describe('PATCH /api/queue', () => {
 
     const res = await PATCH(new Request('http://localhost/api/queue', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' },
       body: JSON.stringify({ id: '550e8400-e29b-41d4-a716-446655440000', action: 'decline' }),
     }));
     expect(res.status).toBe(200);
@@ -214,7 +270,7 @@ describe('GET /api/queue', () => {
     mockGetQueuePosition.mockResolvedValue(1);
     mockGetEstimatedWait.mockReturnValue('Now');
 
-    const res = await GET(new Request('http://localhost/api/queue?memberId=m1'));
+    const res = await GET(new Request('http://localhost/api/queue?memberId=m1', { headers: { 'x-api-key': 'test-api-key' } }));
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);

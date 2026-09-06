@@ -7,7 +7,9 @@
 #include "../data/kiosk_data_provider.h"
 #include "../data/kiosk_config.h"
 #include "../data/live/live_data_provider.h"
+#include "../net/freq_rest_client.h"
 #include "theme/kiosk_theme.h"
+#include "assets/branding.h"
 #include "screens/queue_board.h"
 #include "screens/terminal_layout.h"
 #include "screens/setup_screen.h"
@@ -51,6 +53,12 @@ typedef struct {
   lv_obj_t *current_root;
   terminal_layout_t terminal_layout;
   bool has_terminal_layout;
+
+  /* Boot diagnostics */
+  bool mqtt_configured;
+  uint32_t boot_start_tick;
+  uint32_t last_config_retry_tick;
+  lv_obj_t *boot_sub_label;
 } ui_app_state_t;
 
 static ui_app_state_t s_app;
@@ -65,13 +73,74 @@ static void reset_to_idle(void);
 
 /* ---- provider selection ---- */
 
-static void apply_provider(void) {
+static bool try_fetch_and_apply_remote_mqtt(char *err_msg, size_t err_msg_size) {
   kiosk_config_t cfg;
   memset(&cfg, 0, sizeof(cfg));
-  kiosk_config_load(&cfg);
+  if (!kiosk_config_load(&cfg)) {
+    kiosk_config_defaults(&cfg);
+  }
+  if (cfg.server_url[0] == '\0') {
+    if (err_msg && err_msg_size > 0) snprintf(err_msg, err_msg_size, "Server URL is empty");
+    return false;
+  }
+
+  freq_mqtt_config_t remote_mqtt;
+  freq_rest_init(cfg.server_url, cfg.api_key);
+  freq_rest_result_t res = freq_rest_fetch_mqtt_config(&remote_mqtt);
+  if (!res.ok) {
+    if (err_msg && err_msg_size > 0) {
+      if (res.http_status == 401) {
+        char dev_id[32];
+        freq_device_id_get(dev_id, sizeof(dev_id));
+        snprintf(err_msg, err_msg_size, "Unauthorized (401). Add MAC %s in Dashboard", dev_id);
+      } else if (res.http_status > 0) {
+        snprintf(err_msg, err_msg_size, "Server HTTP %ld: %s", res.http_status, res.error);
+      } else {
+        snprintf(err_msg, err_msg_size, "%s", res.error[0] ? res.error : "Connecting to network...");
+      }
+    }
+    return false;
+  }
+
+  snprintf(cfg.mqtt_broker, sizeof(cfg.mqtt_broker), "%s", remote_mqtt.broker);
+  snprintf(cfg.mqtt_user, sizeof(cfg.mqtt_user), "%s", remote_mqtt.username);
+  snprintf(cfg.mqtt_password, sizeof(cfg.mqtt_password), "%s", remote_mqtt.password);
+
+  // Cache working remote MQTT config in NVS so future boots or reconnects have credentials
+  kiosk_config_save(&cfg);
+
   live_data_provider_start(cfg.server_url, cfg.api_key,
                            cfg.mqtt_broker, cfg.mqtt_user, cfg.mqtt_password);
   s_app.provider = live_data_provider_get();
+  return true;
+}
+
+static void apply_provider(void) {
+  kiosk_config_t cfg;
+  memset(&cfg, 0, sizeof(cfg));
+  if (!kiosk_config_load(&cfg)) {
+    kiosk_config_defaults(&cfg);
+  }
+
+  /* Fetch remote credentials before starting MQTT. Previously we started the
+   * cached client here and then try_fetch_and_apply_remote_mqtt() started a
+   * second client immediately after saving fresh credentials. That raced the
+   * esp-mqtt task ("handler already registered" / "Client has not connected")
+   * and could corrupt the FreeRTOS heap. */
+  char err_buf[128];
+  if (try_fetch_and_apply_remote_mqtt(err_buf, sizeof(err_buf))) {
+    s_app.mqtt_configured = true;
+    return;
+  }
+
+  /* If the server is temporarily unavailable, use the last known-good MQTT
+   * credentials and let the boot state retry remote configuration later. */
+  live_data_provider_start(cfg.server_url, cfg.api_key,
+                           cfg.mqtt_broker, cfg.mqtt_user, cfg.mqtt_password);
+  s_app.provider = live_data_provider_get();
+  s_app.mqtt_configured = (cfg.mqtt_broker[0] != '\0' &&
+                           cfg.mqtt_user[0] != '\0' &&
+                           cfg.mqtt_password[0] != '\0');
 }
 
 /* ---- setup / config ---- */
@@ -148,16 +217,48 @@ static void handle_scan(void *user_data, const char *rfid) {
     return;
   }
 
-  member_state_t state = s_app.provider->check_member_state(s_app.member.id, &s_app.error);
-  switch (state) {
-    case MEMBER_STATE_HAS_WAITING: s_app.step = KIOSK_STEP_EXISTING_QUEUE; break;
-    case MEMBER_STATE_ALREADY_PLAYING:
+  switch (s_app.member.decision.type) {
+    case RFID_DECISION_MEMBER_UNAVAILABLE:
+      snprintf(s_app.error.title, sizeof(s_app.error.title), "Cannot Book");
+      snprintf(s_app.error.message, sizeof(s_app.error.message), "%s", s_app.member.decision.reason);
+      s_app.step = KIOSK_STEP_ERROR;
+      break;
+    case RFID_DECISION_ALREADY_QUEUED:
+      s_app.step = KIOSK_STEP_EXISTING_QUEUE;
+      break;
+    case RFID_DECISION_ALREADY_ACTIVE:
       snprintf(s_app.error.title, sizeof(s_app.error.title), "Already Playing");
       snprintf(s_app.error.message, sizeof(s_app.error.message), "You are already in an active game.");
       s_app.step = KIOSK_STEP_ERROR;
       break;
-    case MEMBER_STATE_NONE:
-    default: s_app.step = KIOSK_STEP_SELECT_COURT; break;
+    case RFID_DECISION_NO_ELIGIBLE_WINDOW:
+      snprintf(s_app.error.title, sizeof(s_app.error.title), "Court Unavailable");
+      snprintf(s_app.error.message, sizeof(s_app.error.message), "Court %s is reserved soon.", 
+               s_app.member.decision.court_name[0] ? s_app.member.decision.court_name : "selected");
+      s_app.step = KIOSK_STEP_ERROR;
+      break;
+    case RFID_DECISION_CHECK_IN_SCHEDULED:
+      snprintf(s_app.selected_court.id, sizeof(s_app.selected_court.id), "%s", s_app.member.decision.court_id);
+      snprintf(s_app.selected_court.name, sizeof(s_app.selected_court.name), "%s", s_app.member.decision.court_name[0] ? s_app.member.decision.court_name : "Assigned Court");
+      s_app.duration_min = s_app.member.decision.duration;
+      s_app.game_type = GAME_TYPE_1V1; // Default
+      s_app.step = KIOSK_STEP_CONFIRM; // Jump to confirm
+      break;
+    case RFID_DECISION_PLAY_NOW:
+      if (s_app.member.decision.capped) {
+        snprintf(s_app.selected_court.id, sizeof(s_app.selected_court.id), "%s", s_app.member.decision.court_id);
+        snprintf(s_app.selected_court.name, sizeof(s_app.selected_court.name), "%s", s_app.member.decision.court_name[0] ? s_app.member.decision.court_name : "Auto Selected");
+        s_app.duration_min = s_app.member.decision.duration;
+        s_app.step = KIOSK_STEP_SELECT_GAME; // Jump to game selection, skipping court & duration
+      } else {
+        s_app.step = KIOSK_STEP_SELECT_COURT;
+      }
+      break;
+    default:
+      snprintf(s_app.error.title, sizeof(s_app.error.title), "Unknown Decision");
+      snprintf(s_app.error.message, sizeof(s_app.error.message), "Unrecognized decision type.");
+      s_app.step = KIOSK_STEP_ERROR;
+      break;
   }
   render_current();
 }
@@ -172,7 +273,11 @@ static void handle_select_court(void *user_data, const court_option_t *court) {
 static void handle_select_game_type(void *user_data, game_type_t game_type) {
   (void)user_data;
   s_app.game_type = game_type;
-  s_app.step = KIOSK_STEP_SELECT_DURATION;
+  if (s_app.member.decision.type == RFID_DECISION_PLAY_NOW && s_app.member.decision.capped) {
+    s_app.step = KIOSK_STEP_CONFIRM; // skip duration
+  } else {
+    s_app.step = KIOSK_STEP_SELECT_DURATION;
+  }
   render_current();
 }
 
@@ -193,7 +298,13 @@ static void handle_confirm(void *user_data) {
     kiosk_products_config_t cfg;
     s_app.provider->get_products_config(&cfg);
     int32_t party_size = (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2;
-    s_app.result.credits_used = kiosk_get_cost(&cfg, s_app.duration_min, party_size);
+    
+    if (s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED) {
+      s_app.result.credits_used = 0; // Check-in doesn't cost extra
+    } else {
+      s_app.result.credits_used = kiosk_get_cost(&cfg, s_app.duration_min, party_size);
+    }
+    
     s_app.result.credits_remaining = s_app.member.balance - s_app.result.credits_used;
     s_app.step = KIOSK_STEP_SUCCESS;
     s_app.success_entered_at = time(NULL);
@@ -203,8 +314,11 @@ static void handle_confirm(void *user_data) {
 
 static void handle_cancel_existing(void *user_data) {
   (void)user_data;
-  s_app.provider->cancel_waiting(s_app.member.id);
-  s_app.step = KIOSK_STEP_SELECT_COURT;
+  if (!s_app.provider->cancel_waiting(s_app.member.id, &s_app.error)) {
+    s_app.step = KIOSK_STEP_ERROR;
+  } else {
+    s_app.step = KIOSK_STEP_SELECT_COURT;
+  }
   render_current();
 }
 
@@ -226,9 +340,27 @@ static void close_to_idle(void *user_data) {
 
 static void handle_back_step(void *user_data) {
   (void)user_data;
-  if (s_app.step == KIOSK_STEP_SELECT_GAME) s_app.step = KIOSK_STEP_SELECT_COURT;
-  else if (s_app.step == KIOSK_STEP_SELECT_DURATION) s_app.step = KIOSK_STEP_SELECT_GAME;
-  else if (s_app.step == KIOSK_STEP_CONFIRM) s_app.step = KIOSK_STEP_SELECT_DURATION;
+  if (s_app.step == KIOSK_STEP_SELECT_GAME) {
+    if (s_app.member.decision.type == RFID_DECISION_PLAY_NOW && s_app.member.decision.capped) {
+      reset_to_idle();
+      return;
+    }
+    s_app.step = KIOSK_STEP_SELECT_COURT;
+  }
+  else if (s_app.step == KIOSK_STEP_SELECT_DURATION) {
+    s_app.step = KIOSK_STEP_SELECT_GAME;
+  }
+  else if (s_app.step == KIOSK_STEP_CONFIRM) {
+    if (s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED) {
+      reset_to_idle();
+      return;
+    }
+    if (s_app.member.decision.type == RFID_DECISION_PLAY_NOW && s_app.member.decision.capped) {
+      s_app.step = KIOSK_STEP_SELECT_GAME;
+    } else {
+      s_app.step = KIOSK_STEP_SELECT_DURATION;
+    }
+  }
   render_current();
 }
 
@@ -339,17 +471,29 @@ static lv_obj_t *build_booting_screen(lv_obj_t *parent) {
   lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(root, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
+  lv_obj_t *logo = lv_img_create(root);
+  lv_img_set_src(logo, &img_logo_secondary);
+
   lv_obj_t *title = lv_label_create(root);
-  lv_label_set_text(title, "Connecting to Network...");
+  lv_label_set_text(title, "Starting Kiosk Terminal...");
   lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(title, KIOSK_COLOR_ZINC_100, 0);
   lv_obj_set_style_pad_top(title, 24, 0);
 
-  lv_obj_t *sub = lv_label_create(root);
-  lv_label_set_text(sub, "Waiting for server connection & configuration...");
-  lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(sub, KIOSK_COLOR_ZINC_400, 0);
-  lv_obj_set_style_pad_top(sub, 8, 0);
+  s_app.boot_sub_label = lv_label_create(root);
+  lv_label_set_text(s_app.boot_sub_label, "Connecting to network & fetching server configuration...");
+  lv_obj_set_style_text_font(s_app.boot_sub_label, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(s_app.boot_sub_label, KIOSK_COLOR_ZINC_400, 0);
+  lv_obj_set_style_text_align(s_app.boot_sub_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_pad_top(s_app.boot_sub_label, 8, 0);
+
+  char dev_id[32];
+  freq_device_id_get(dev_id, sizeof(dev_id));
+  lv_obj_t *dev_label = lv_label_create(root);
+  lv_label_set_text_fmt(dev_label, "Device ID: %s", dev_id);
+  lv_obj_set_style_text_font(dev_label, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(dev_label, KIOSK_COLOR_ZINC_500, 0);
+  lv_obj_set_style_pad_top(dev_label, 16, 0);
 
   return root;
 }
@@ -464,6 +608,7 @@ static void render_current(void) {
       step_select_duration_create(s_app.terminal_layout.content,
                                    member_name, s_app.member.balance,
                                    &cfg,
+                                   (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2,
                                    handle_select_duration,
                                    close_to_idle, NULL,
                                    handle_back_step, NULL, NULL);
@@ -485,6 +630,9 @@ static void render_current(void) {
                                    game_label,
                                    s_app.duration_min,
                                    credits_required,
+                                   s_app.match_title, sizeof(s_app.match_title),
+                                   s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED,
+                                   s_app.member.decision.capped,
                                    handle_confirm,
                                    close_to_idle, NULL,
                                    handle_back_step, NULL, NULL);
@@ -507,7 +655,12 @@ static void render_current(void) {
 
 static void send_refresh_recursive(lv_obj_t *obj) {
     if (!obj) return;
-    lv_event_send(obj, LV_EVENT_REFRESH, NULL);
+    /* Only timer labels need a one-second refresh. Sending LV_EVENT_REFRESH
+     * to every object causes unnecessary invalidation/layout work and flashes
+     * the single direct-mode framebuffer when multiple courts are active. */
+    if (lv_obj_has_flag(obj, LV_OBJ_FLAG_USER_1)) {
+        lv_event_send(obj, LV_EVENT_REFRESH, NULL);
+    }
     uint32_t count = lv_obj_get_child_cnt(obj);
     for(uint32_t i = 0; i < count; i++) {
         send_refresh_recursive(lv_obj_get_child(obj, i));
@@ -515,6 +668,24 @@ static void send_refresh_recursive(lv_obj_t *obj) {
 }
 
 static uint32_t s_last_board_version = 0;
+static bool s_last_court_active[KIOSK_MAX_COURTS];
+static bool s_have_court_activity = false;
+#ifdef ESP_PLATFORM
+static volatile bool s_queue_advance_running = false;
+static uint32_t s_last_queue_advance_tick = 0;
+static void queue_advance_task(void *arg) {
+    (void)arg;
+    freq_rest_result_t result = freq_rest_advance_queue();
+    if (result.ok) {
+        printf("queue: advance request accepted (HTTP %ld)\n", result.http_status);
+    } else {
+        printf("queue: advance request failed (HTTP %ld): %s\n",
+               result.http_status, result.error);
+    }
+    s_queue_advance_running = false;
+    vTaskDelete(NULL);
+}
+#endif
 
 static void on_tick(lv_timer_t *timer) {
   (void)timer;
@@ -522,11 +693,13 @@ static void on_tick(lv_timer_t *timer) {
 #ifdef ESP_PLATFORM
   char buf[32];
   if (s_rfid_queue && xQueueReceive(s_rfid_queue, buf, 0) == pdTRUE) {
+      lv_disp_trig_activity(NULL);
       handle_scan(NULL, buf);
   }
 #else
   if (s_has_pending_rfid) {
       s_has_pending_rfid = false;
+      lv_disp_trig_activity(NULL);
       handle_scan(NULL, s_pending_rfid);
   }
 #endif
@@ -544,23 +717,78 @@ static void on_tick(lv_timer_t *timer) {
   }
 
   if (s_app.step == KIOSK_STEP_BOOTING) {
-    if (s_app.provider->is_ready()) {
-  s_app.step = KIOSK_STEP_IDLE;
+    if (s_app.provider && s_app.provider->is_ready()) {
+      s_app.step = KIOSK_STEP_IDLE;
+      s_app.boot_sub_label = NULL;
       render_current();
-    } else if (lv_tick_get() > 15000) {
+      return;
+    }
+
+    uint32_t now_tick = lv_tick_get();
+
+    // If MQTT is not ready, retry fetching remote config every 2 seconds
+    if (!s_app.mqtt_configured && (now_tick - s_app.last_config_retry_tick >= 2000)) {
+      s_app.last_config_retry_tick = now_tick;
+      char err_detail[128] = {0};
+      if (try_fetch_and_apply_remote_mqtt(err_detail, sizeof(err_detail))) {
+        s_app.mqtt_configured = true;
+        if (s_app.boot_sub_label) {
+          lv_label_set_text(s_app.boot_sub_label, "Configuration received! Connecting to queue board...");
+        }
+      } else if (err_detail[0] != '\0' && s_app.boot_sub_label) {
+        lv_label_set_text(s_app.boot_sub_label, err_detail);
+      }
+    }
+
+    // After 30 seconds of booting without success, fall back to setup screen
+    if (now_tick - s_app.boot_start_tick > 30000) {
       s_app.step = KIOSK_STEP_SETUP;
+      s_app.boot_sub_label = NULL;
       render_current();
+      return;
     }
   } else if (s_app.step == KIOSK_STEP_IDLE) {
     uint32_t current_ver = s_app.provider->get_board_version();
     bool board_changed = (current_ver != s_last_board_version);
     s_last_board_version = current_ver;
 
-    if (board_changed) {
+    // The server remains authoritative, but the kiosk can safely update its
+    // local presentation when a scheduled game window expires. This avoids
+    // leaving a court card at 00:00 until the next MQTT publication.
+    kiosk_board_t board;
+    s_app.provider->get_board(&board);
+    bool local_activity_changed = !s_have_court_activity;
+    bool court_window_ended = false;
+    bool has_available_court = false;
+    for (uint8_t i = 0; i < board.court_count && i < KIOSK_MAX_COURTS; i++) {
+        bool active = court_is_active(&board.courts[i]);
+        if (!active) has_available_court = true;
+        if (s_have_court_activity && active != s_last_court_active[i]) {
+            local_activity_changed = true;
+            if (s_last_court_active[i] && !active) court_window_ended = true;
+        }
+        s_last_court_active[i] = active;
+    }
+    s_have_court_activity = true;
+
+    if (board_changed || local_activity_changed) {
         render_current();
     } else {
         send_refresh_recursive(s_app.current_root);
     }
+#ifdef ESP_PLATFORM
+    /* A transition can be missed while booting or offline. Reconcile whenever
+     * a queued player exists and at least one court is available. The endpoint
+     * is idempotent and the cooldown keeps this from becoming polling spam. */
+    uint32_t now_tick = lv_tick_get();
+    bool advance_cooldown_elapsed = (now_tick - s_last_queue_advance_tick) >= 10000;
+    if ((court_window_ended || (board.queue_count > 0 && has_available_court)) &&
+        advance_cooldown_elapsed && !s_queue_advance_running) {
+        s_last_queue_advance_tick = now_tick;
+        s_queue_advance_running = true;
+        xTaskCreate(queue_advance_task, "queue_advance", 6144, NULL, 4, NULL);
+    }
+#endif
   } else if (s_app.step == KIOSK_STEP_SUCCESS) {
     if (time(NULL) - s_app.success_entered_at >= 4) {
       reset_to_idle();
@@ -585,6 +813,8 @@ void ui_app_init(void) {
     }
   }
 
+  s_app.boot_start_tick = lv_tick_get();
+  s_app.last_config_retry_tick = 0;
   s_app.step = valid_config ? KIOSK_STEP_BOOTING : KIOSK_STEP_SETUP;
   render_current();
   lv_timer_create(on_tick, 1000, NULL);

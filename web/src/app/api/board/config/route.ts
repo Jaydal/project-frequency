@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const brokerUrl = process.env.MQTT_BROKER_URL || '';
-  const username = process.env.MQTT_USERNAME || '';
-  const password = process.env.MQTT_PASSWORD || '';
+  // Never expose server-side broker credentials to browsers. If browser MQTT
+  // is required, provision a separately scoped public broker identity.
+  const brokerUrl = process.env.NEXT_PUBLIC_MQTT_BROKER_URL || '';
+  const username = process.env.NEXT_PUBLIC_MQTT_USERNAME || '';
+  const password = process.env.NEXT_PUBLIC_MQTT_PASSWORD || '';
 
   if (!brokerUrl || !username || !password) {
     return NextResponse.json({ enabled: false });

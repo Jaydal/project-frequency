@@ -1,29 +1,71 @@
 'use server';
-import { createClient } from '@/lib/supabase/server';
+import { requireStaff } from '@/lib/auth/server-guards';
 import { revalidatePath } from 'next/cache';
 import { getRfidFormats } from '@/lib/rfid';
 
-export async function assignRFID(data: { memberId: string | null; uid: string }) {
-  const supabase = await createClient();
+function isMissingRowError(error: { code?: string } | null) {
+  return error?.code === 'PGRST116';
+}
+
+export type AssignRFIDResult =
+  | { ok: true }
+  | {
+      ok: false;
+      code: 'RFID_ALREADY_ASSIGNED' | 'RFID_ALREADY_UNASSIGNED';
+      message: string;
+    };
+
+async function getStaffClient() {
+  const auth = await requireStaff();
+  if (auth.response) {
+    throw new Error(auth.response.status === 403 ? 'Forbidden' : 'Unauthorized');
+  }
+  return auth.supabase;
+}
+
+function isUniqueViolation(error: { code?: string } | null) {
+  return error?.code === '23505';
+}
+
+function duplicateResult(status?: string): AssignRFIDResult {
+  if (status === 'Unassigned') {
+    return {
+      ok: false,
+      code: 'RFID_ALREADY_UNASSIGNED',
+      message: 'This card is already Unassigned in the system',
+    };
+  }
+
+  return {
+    ok: false,
+    code: 'RFID_ALREADY_ASSIGNED',
+    message: 'This RFID card is already assigned to another member',
+  };
+}
+
+export async function assignRFID(data: { memberId: string | null; uid: string }): Promise<AssignRFIDResult> {
+  const supabase = await getStaffClient();
   const formats = getRfidFormats(data.uid);
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('rfid_cards')
     .select('id, status')
     .in('uid', formats)
     .maybeSingle();
+  if (existingError) throw existingError;
 
   if (existing) {
     if (existing.status !== 'Unassigned') {
-      throw new Error('This RFID card is already assigned to another member');
+      return duplicateResult(existing.status);
     }
     
     if (!data.memberId) {
-      throw new Error('This card is already Unassigned in the system');
+      return duplicateResult(existing.status);
     }
 
-    const { data: member } = await supabase
+    const { data: member, error: memberError } = await supabase
       .from('members').select('id').eq('id', data.memberId).single();
+    if (memberError && !isMissingRowError(memberError)) throw memberError;
     if (!member) throw new Error('Member not found');
 
     const { error } = await supabase
@@ -35,8 +77,9 @@ export async function assignRFID(data: { memberId: string | null; uid: string })
   } else {
     const insert: any = { uid: data.uid };
     if (data.memberId) {
-      const { data: member } = await supabase
+      const { data: member, error: memberError } = await supabase
         .from('members').select('id').eq('id', data.memberId).single();
+      if (memberError && !isMissingRowError(memberError)) throw memberError;
       if (!member) throw new Error('Member not found');
       insert.member_id = member.id;
       insert.status = 'Active';
@@ -45,15 +88,27 @@ export async function assignRFID(data: { memberId: string | null; uid: string })
     }
 
     const { error } = await supabase.from('rfid_cards').insert(insert);
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isUniqueViolation(error)) {
+        const { data: duplicate, error: duplicateError } = await supabase
+          .from('rfid_cards')
+          .select('status')
+          .in('uid', formats)
+          .maybeSingle();
+        if (duplicateError) throw duplicateError;
+        return duplicateResult(duplicate?.status);
+      }
+      throw new Error(error.message);
+    }
   }
 
   revalidatePath('/rfid');
   revalidatePath('/members');
+  return { ok: true };
 }
 
 export async function unassignRFID(cardId: string) {
-  const supabase = await createClient();
+  const supabase = await getStaffClient();
   const { error } = await supabase
     .from('rfid_cards')
     .update({
@@ -69,7 +124,7 @@ export async function unassignRFID(cardId: string) {
 }
 
 export async function deleteRFID(cardId: string) {
-  const supabase = await createClient();
+  const supabase = await getStaffClient();
   const { error } = await supabase
     .from('rfid_cards')
     .delete()
@@ -84,7 +139,7 @@ export async function updateRFID(cardId: string, data: {
   status: string;
   memberId: string | null;
 }) {
-  const supabase = await createClient();
+  const supabase = await getStaffClient();
   const updateData: any = {
     status: data.status,
     member_id: data.memberId,

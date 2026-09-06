@@ -1,5 +1,6 @@
 #include "setup_screen.h"
 #include "../theme/kiosk_theme.h"
+#include "../assets/branding.h"
 #include "../../data/kiosk_config.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +8,9 @@
 #include <stddef.h>
 #include "../../net/wifi_scanner.h"
 #include "../../net/nfc_reader.h"
+#include "../../net/freq_rest_client.h"
 
-#define SETUP_FIELD_COUNT 7
+#define SETUP_FIELD_COUNT 3
 #define INPUT_CELL_COUNT 48
 #define INPUT_CELL_WIDTH 20
 
@@ -23,11 +25,17 @@ static const field_desc_t FIELDS[SETUP_FIELD_COUNT] = {
   { "WiFi Network (SSID)", false, offsetof(kiosk_config_t, wifi_ssid),     KIOSK_CONFIG_SSID_LEN },
   { "WiFi Password",       true,  offsetof(kiosk_config_t, wifi_password), KIOSK_CONFIG_PASS_LEN },
   { "Server URL",          false, offsetof(kiosk_config_t, server_url),    KIOSK_CONFIG_URL_LEN  },
-  { "API Key",             true,  offsetof(kiosk_config_t, api_key),       KIOSK_CONFIG_KEY_LEN  },
-  { "MQTT Broker",         false, offsetof(kiosk_config_t, mqtt_broker),   KIOSK_CONFIG_URL_LEN  },
-  { "MQTT Username",       false, offsetof(kiosk_config_t, mqtt_user),     KIOSK_CONFIG_SSID_LEN },
-  { "MQTT Password",       true,  offsetof(kiosk_config_t, mqtt_password), KIOSK_CONFIG_PASS_LEN },
 };
+
+static void format_mac_address(const char *raw, char *out, size_t out_size) {
+  if (!raw || !out || out_size == 0) return;
+  if (strlen(raw) == 12) {
+    snprintf(out, out_size, "%.2s:%.2s:%.2s:%.2s:%.2s:%.2s",
+             raw, raw + 2, raw + 4, raw + 6, raw + 8, raw + 10);
+  } else {
+    snprintf(out, out_size, "%s", raw);
+  }
+}
 
 typedef struct {
   lv_obj_t *ta[SETUP_FIELD_COUNT];
@@ -90,39 +98,6 @@ static void close_input_modal(setup_ctx_t *ctx) {
   lv_obj_clear_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
 }
 
-static size_t input_page_for_length(size_t length) {
-  if (length == 0) return 0;
-  return ((length - 1) / INPUT_CELL_COUNT) * INPUT_CELL_COUNT;
-}
-
-static void set_input_cell(setup_ctx_t *ctx, size_t slot, char character) {
-  if (!ctx->input_cells[slot]) return;
-  if (ctx->input_cell_text[slot][0] == character &&
-      ctx->input_cell_text[slot][1] == '\0') return;
-
-  ctx->input_cell_text[slot][0] = character;
-  ctx->input_cell_text[slot][1] = '\0';
-  lv_obj_t *cell = ctx->input_cells[slot];
-  lv_label_set_text_static(cell, ctx->input_cell_text[slot]);
-}
-
-static void refresh_input_cells(setup_ctx_t *ctx) {
-  if (!ctx->input_cells[0]) return;
-
-  size_t length = strlen(ctx->input_text);
-  size_t page_start = input_page_for_length(length);
-  ctx->input_page_start = page_start;
-
-  for (size_t slot = 0; slot < INPUT_CELL_COUNT; slot++) {
-    size_t text_index = page_start + slot;
-    char character = '\0';
-    if (text_index < length) {
-      character = ctx->input_password ? '*' : ctx->input_text[text_index];
-    }
-    set_input_cell(ctx, slot, character);
-  }
-}
-
 static void static_keyboard_event_cb(lv_event_t *e) {
   setup_ctx_t *ctx = lv_event_get_user_data(e);
   lv_obj_t *kb = lv_event_get_target(e);
@@ -160,7 +135,9 @@ static void static_keyboard_event_cb(lv_event_t *e) {
     }
   }
 
-  refresh_input_cells(ctx);
+  /* Keep the edit buffer private while the keyboard is active.  The target
+   * field is updated atomically when OK is pressed, avoiding redraws for every
+   * keystroke (and preventing typed text from flickering on the single buffer). */
 }
 
 static void field_focus_cb(lv_event_t *e) {
@@ -232,15 +209,18 @@ static void field_focus_cb(lv_event_t *e) {
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text_static(cell, ctx->input_cell_text[i]);
   }
-  refresh_input_cells(ctx);
+  /* Do not repaint the preview for each key; commit the buffered text on OK. */
 
   lv_obj_t *kb = lv_btnmatrix_create(ctx->input_modal);
   lv_btnmatrix_set_map(kb, KEYS_LOWER);
   /* The target panel is 1024x600. Use a hard geometry rectangle so no flex,
    * percentage, or pressed-state recalculation can move the matrix. */
   lv_obj_set_size(kb, 1024, 360);
+  lv_obj_set_style_min_height(kb, 360, 0);
+  lv_obj_set_style_max_height(kb, 360, 0);
   lv_obj_set_pos(kb, 0, 240);
   lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_add_flag(kb, LV_OBJ_FLAG_IGNORE_LAYOUT);
   
   kiosk_theme_style_keyboard(kb);
 
@@ -336,7 +316,9 @@ static void scan_btn_cb(lv_event_t *e) {
 static void save_cb(lv_event_t *e) {
   setup_ctx_t *ctx = lv_event_get_user_data(e);
   kiosk_config_t cfg;
-  memset(&cfg, 0, sizeof(cfg));
+  if (!kiosk_config_load(&cfg)) {
+    kiosk_config_defaults(&cfg);
+  }
   for (int i = 0; i < SETUP_FIELD_COUNT; i++) {
     char *dest = (char *)&cfg + FIELDS[i].offset;
     snprintf(dest, FIELDS[i].size, "%s", lv_textarea_get_text(ctx->ta[i]));
@@ -377,23 +359,55 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
   lv_obj_add_event_cb(root, free_ctx_cb, LV_EVENT_DELETE, ctx);
   ctx->root = root;
 
-  lv_obj_t *title = lv_label_create(root);
-  lv_label_set_text(title, "Terminal Setup");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
-  lv_obj_set_style_text_color(title, KIOSK_COLOR_ZINC_100, 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 15);
+  lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  lv_obj_t *nfc_status = lv_label_create(root);
+  lv_obj_t *top_bar = lv_obj_create(root);
+  lv_obj_remove_style_all(top_bar);
+  lv_obj_set_width(top_bar, lv_pct(100));
+  lv_obj_set_height(top_bar, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(top_bar, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(top_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_hor(top_bar, 15, 0);
+  lv_obj_set_style_pad_top(top_bar, 15, 0);
+  lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+  char device_id[32];
+  char mac_address[24];
+  freq_device_id_get(device_id, sizeof(device_id));
+  format_mac_address(device_id, mac_address, sizeof(mac_address));
+  lv_obj_t *device_status = lv_label_create(top_bar);
+  lv_label_set_text_fmt(device_status, "MAC Address: %s", mac_address);
+  lv_obj_set_style_text_font(device_status, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(device_status, KIOSK_COLOR_ZINC_300, 0);
+
+  lv_obj_t *nfc_status = lv_label_create(top_bar);
   bool nfc_ok = nfc_reader_is_online();
   lv_label_set_text_fmt(nfc_status, "NFC: %s", nfc_ok ? "OK" : "Offline");
   lv_obj_set_style_text_color(nfc_status, nfc_ok ? KIOSK_COLOR_EMERALD_400 : KIOSK_COLOR_RED_400, 0);
-  lv_obj_align(nfc_status, LV_ALIGN_TOP_RIGHT, -15, 15);
+
+  lv_obj_t *title_col = lv_obj_create(root);
+  lv_obj_remove_style_all(title_col);
+  lv_obj_set_size(title_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(title_col, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(title_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_top(title_col, 6, 0);
+  lv_obj_clear_flag(title_col, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+  lv_obj_t *logo = lv_img_create(title_col);
+  lv_img_set_src(logo, &img_logo_secondary);
+
+  lv_obj_t *title = lv_label_create(title_col);
+  lv_label_set_text(title, "Terminal Setup");
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
+  lv_obj_set_style_text_color(title, KIOSK_COLOR_ZINC_400, 0);
+  lv_obj_set_style_pad_top(title, 4, 0);
 
   lv_obj_t *form = lv_obj_create(root);
   lv_obj_remove_style_all(form);
   lv_obj_set_width(form, lv_pct(100));
-  lv_obj_set_height(form, lv_pct(85));
-  lv_obj_align(form, LV_ALIGN_TOP_MID, 0, 50);
+  lv_obj_set_flex_grow(form, 1);
+  lv_obj_set_style_pad_top(form, 12, 0);
 
   lv_obj_set_flex_flow(form, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_flex_align(form, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -418,6 +432,10 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
     lv_textarea_set_one_line(ta, true);
     lv_textarea_set_password_mode(ta, FIELDS[i].password);
     lv_obj_set_width(ta, lv_pct(100));
+    lv_obj_set_height(ta, 44);
+    lv_obj_set_style_min_height(ta, 44, 0);
+    lv_obj_set_style_max_height(ta, 44, 0);
+    lv_textarea_set_max_length(ta, FIELDS[i].size - 1);
     lv_obj_set_style_bg_color(ta, KIOSK_COLOR_ZINC_800, 0);
     lv_obj_set_style_text_color(ta, KIOSK_COLOR_ZINC_100, 0);
     lv_obj_set_style_border_color(ta, KIOSK_COLOR_ZINC_700, 0);
@@ -427,6 +445,7 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
     lv_obj_set_style_anim_time(ta, 0, LV_PART_CURSOR);
     lv_obj_set_style_bg_opa(ta, LV_OPA_TRANSP, LV_PART_CURSOR);
     lv_obj_set_style_border_width(ta, 0, LV_PART_CURSOR);
+    kiosk_theme_disable_transitions(ta);
     if (have_existing) {
       const char *val = (const char *)&existing + FIELDS[i].offset;
       if (val[0]) lv_textarea_set_text(ta, val);

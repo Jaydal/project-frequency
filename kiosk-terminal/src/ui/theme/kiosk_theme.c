@@ -6,6 +6,7 @@ lv_style_t kiosk_style_card_preparing;
 lv_style_t kiosk_style_card_in_game;
 lv_style_t kiosk_style_screen_bg;
 lv_style_t kiosk_style_panel_bg;
+lv_style_t kiosk_style_glass_bg;
 lv_style_t kiosk_style_btn_primary;
 lv_style_t kiosk_style_btn_secondary;
 lv_style_t kiosk_style_tile;
@@ -42,6 +43,12 @@ static void apply_theme_colors(void) {
   /* Panel */
   lv_style_set_bg_color(&kiosk_style_panel_bg, panel_color);
   lv_style_set_text_color(&kiosk_style_panel_bg, text_color);
+
+  /* Frosted glass panel: same surface as a panel, but see-through so the
+   * bottom brand logo stays visible behind the queue column. */
+  lv_style_set_bg_color(&kiosk_style_glass_bg, panel_color);
+  lv_style_set_text_color(&kiosk_style_glass_bg, text_color);
+  lv_style_set_border_color(&kiosk_style_glass_bg, border_color);
 
   /* Primary Button (Blue) */
   lv_style_set_bg_color(&kiosk_style_btn_primary, primary_color);
@@ -85,6 +92,13 @@ void kiosk_theme_init(void) {
   lv_style_set_radius(&kiosk_style_panel_bg, 8);
   lv_style_set_pad_all(&kiosk_style_panel_bg, 12);
   lv_style_set_border_width(&kiosk_style_panel_bg, 0);
+
+  lv_style_init(&kiosk_style_glass_bg);
+  lv_style_set_bg_opa(&kiosk_style_glass_bg, KIOSK_GLASS_PANEL_OPA);
+  lv_style_set_border_width(&kiosk_style_glass_bg, 1);
+  lv_style_set_border_opa(&kiosk_style_glass_bg, LV_OPA_40);
+  lv_style_set_radius(&kiosk_style_glass_bg, 8);
+  lv_style_set_pad_all(&kiosk_style_glass_bg, 12);
 
   lv_style_init(&kiosk_style_btn_primary);
   lv_style_set_bg_opa(&kiosk_style_btn_primary, LV_OPA_COVER);
@@ -198,11 +212,15 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb) {
   lv_obj_set_style_border_color(kb, kiosk_theme_color_border(), LV_PART_ITEMS);
   lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS);
   /* Set radius to 0 so LVGL can fully cull the background drawing underneath the opaque keys */
-  lv_obj_set_style_radius(kb, 0, LV_PART_ITEMS);
+  lv_obj_set_style_radius(kb, 4, LV_PART_ITEMS);
   lv_obj_set_style_shadow_width(kb, 0, LV_PART_ITEMS);
   lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS);
   lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS);
   lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  /* Constant gutters improve key readability without changing the keyboard's
+   * fixed outer rectangle or introducing press-time reflow. */
+  lv_obj_set_style_pad_row(kb, 4, LV_PART_MAIN);
+  lv_obj_set_style_pad_column(kb, 4, LV_PART_MAIN);
   lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
   lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
   lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_ANY);
@@ -210,6 +228,16 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb) {
   lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
   lv_obj_set_style_pad_top(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
   lv_obj_set_style_pad_bottom(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  /* Never let focus/check/pressed state alter key geometry or paint. */
+  lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
+  lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_ANY);
 
   /* Pressed state for keys (keep border width 1 to prevent layout shift!) */
   /* Keep the pressed state visually identical to the normal state. This

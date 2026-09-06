@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { publishAllDisplays } from '@/lib/display/publish-all';
+import { requireStaffOrController } from '@/lib/auth/server-guards';
 
-async function publishAll() {
+async function publishAll(request: Request) {
+  const auth = await requireStaffOrController(request);
+  if (auth.response) return auth.response;
   const res = await publishAllDisplays();
   if (!res.ok) {
     return NextResponse.json(
@@ -12,10 +15,10 @@ async function publishAll() {
   return NextResponse.json({ success: true, ...res });
 }
 
-export async function GET() {
-  return publishAll();
+export async function GET(request: Request) {
+  return publishAll(request);
 }
 
-export async function POST() {
-  return publishAll();
+export async function POST(request: Request) {
+  return publishAll(request);
 }

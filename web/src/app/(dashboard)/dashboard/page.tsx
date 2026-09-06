@@ -72,7 +72,7 @@ export default async function DashboardPage() {
     <div className="space-y-8 animate-fade-in">
       {/* Greetings section */}
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">Welcome, Admin</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">Welcome, Admin</h1>
         <p className="text-sm text-zinc-500 mt-1">Here is a summary of Paddle Point's operations today.</p>
       </div>
 
@@ -84,7 +84,7 @@ export default async function DashboardPage() {
             <Users className="size-4.5 text-emerald-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-zinc-250">{membersCount ?? 0}</div>
+            <div className="text-3xl font-black text-zinc-100">{membersCount ?? 0}</div>
             <p className="text-[10px] text-zinc-500 mt-1">Registered active players</p>
           </CardContent>
         </Card>
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
             <CreditCard className="size-4.5 text-emerald-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-zinc-250">{rfidCount ?? 0}</div>
+            <div className="text-3xl font-black text-zinc-100">{rfidCount ?? 0}</div>
             <p className="text-[10px] text-zinc-500 mt-1">Linked physical cards</p>
           </CardContent>
         </Card>
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
             <Activity className="size-4.5 text-emerald-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-black text-zinc-250">
+            <div className="text-3xl font-black text-zinc-100">
               {occupiedCourts} <span className="text-lg font-medium text-zinc-500">/ {totalCourts}</span>
             </div>
             <p className="text-[10px] text-zinc-500 mt-1">Courts currently in game</p>
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
       {/* Court Grid Status */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-zinc-150">Courts Status</h2>
+          <h2 className="text-lg font-bold text-zinc-100">Courts Status</h2>
           <Link href="/courts" className="text-xs font-semibold text-emerald-400 hover:text-emerald-350 flex items-center gap-0.5">
             Manage Courts <ArrowUpRight className="size-3.5" />
           </Link>
@@ -174,7 +174,7 @@ export default async function DashboardPage() {
         {/* Waiting Queue List */}
         <Card className="border-zinc-800 bg-zinc-900/30">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base font-bold text-zinc-150">Next in Queue</CardTitle>
+            <CardTitle className="text-base font-bold text-zinc-100">Next in Queue</CardTitle>
             <span className="text-xs text-zinc-500">Showing top 5</span>
           </CardHeader>
           <CardContent className="p-0 px-6 pb-6">
@@ -209,7 +209,7 @@ export default async function DashboardPage() {
         {/* Recent Transactions List */}
         <Card className="border-zinc-800 bg-zinc-900/30">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base font-bold text-zinc-150">Payment Transactions</CardTitle>
+            <CardTitle className="text-base font-bold text-zinc-100">Payment Transactions</CardTitle>
             <Link href="/wallet" className="text-xs text-emerald-400 hover:text-emerald-350">
               View History
             </Link>

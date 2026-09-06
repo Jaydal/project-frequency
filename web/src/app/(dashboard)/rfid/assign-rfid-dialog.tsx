@@ -72,7 +72,11 @@ export function AssignRFIDDialog() {
     e.preventDefault();
     if (!uid.trim()) { toast("Enter an RFID UID"); return; }
     try {
-      await assignRFID({ uid: uid.trim(), memberId: selected?.id ?? null });
+      const result = await assignRFID({ uid: uid.trim(), memberId: selected?.id ?? null });
+      if (!result.ok) {
+        toast.warning(result.message);
+        return;
+      }
       setOpen(false);
       setUid("");
       setSearch("");
@@ -110,8 +114,8 @@ export function AssignRFIDDialog() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Assign to Member (optional)</Label>
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or ID..." />
+            <Label htmlFor="member-search">Assign to Member (optional)</Label>
+            <Input id="member-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or ID..." />
             {searching && <p className="text-xs text-zinc-500">Searching...</p>}
             {members.length > 0 && (
               <div className="border rounded-md max-h-40 overflow-y-auto space-y-0.5">

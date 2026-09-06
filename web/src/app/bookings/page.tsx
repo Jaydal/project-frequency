@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -19,29 +20,25 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/bookings', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-    })
-      .then(r => {
-        if (r.status === 401) { router.push('/login?redirect=/bookings'); return; }
-        return r.json();
-      })
-      .then(data => { setBookings(data ?? []); setLoading(false); })
-      .catch(() => setLoading(false));
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        router.push('/login?redirect=/bookings');
+        return;
+      }
+      const now = new Date().toISOString();
+      supabase.from('games').select('*, courts(name), game_players(*)').eq('status', 'Scheduled').gte('start_time', now).order('start_time', { ascending: true }).then(({ data }) => {
+        const myBookings = (data ?? []).filter((g: any) => g.game_players?.some((p: any) => p.member_id === user.id));
+        setBookings(myBookings);
+        setLoading(false);
+      });
+    });
   }, [router]);
 
   async function handleCancel(id: string) {
-    const res = await fetch(`/api/bookings/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'cancel' }),
-      credentials: 'include',
-    });
-    if (res.ok) {
-      setBookings(bookings.filter(b => b.id !== id));
-    }
+    const supabase = createClient();
+    await supabase.from('games').update({ status: 'Cancelled' }).eq('id', id);
+    setBookings(bookings.filter(b => b.id !== id));
   }
 
   return (

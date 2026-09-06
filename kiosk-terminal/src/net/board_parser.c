@@ -23,6 +23,15 @@ bool board_parse(const char *json, size_t len, kiosk_board_t *out) {
   cJSON *root = cJSON_ParseWithLength(json, len);
   if (!root) return false;
 
+  /* The board publisher carries the authoritative epoch. Syncing from it
+   * lets the kiosk evaluate schedule windows locally even when SNTP has not
+   * completed yet (the LED display client follows the same model). */
+  const cJSON *server_time_item = cJSON_GetObjectItemCaseSensitive(root, "serverTime");
+  if (cJSON_IsNumber(server_time_item) && server_time_item->valuedouble > 1000000000.0) {
+    struct timeval tv = { .tv_sec = (time_t)server_time_item->valuedouble, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+  }
+
   /* config (durations/rates/prep) — from the API, not hardcoded */
   const cJSON *cfg = cJSON_GetObjectItemCaseSensitive(root, "config");
   if (cJSON_IsObject(cfg)) {
@@ -70,6 +79,36 @@ bool board_parse(const char *json, size_t len, kiosk_board_t *out) {
     }
   }
 
+  /* upcomingGames uses the court id as its id. Attach the first upcoming
+   * entry to its court so the kiosk can show an Up next block. */
+  const cJSON *upcoming = cJSON_GetObjectItemCaseSensitive(root, "upcomingGames");
+  if (cJSON_IsArray(upcoming)) {
+    const cJSON *g;
+    cJSON_ArrayForEach(g, upcoming) {
+      char court_id[KIOSK_MAX_ID_LEN];
+      get_str(g, "id", court_id, sizeof(court_id));
+      for (uint8_t i = 0; i < out->court_count; i++) {
+        court_status_t *dst = &out->courts[i];
+        if (dst->next_start_time != 0 || strcmp(dst->id, court_id) != 0) continue;
+        get_str(g, "matchTitle", dst->next_match_title, sizeof(dst->next_match_title));
+        dst->next_start_time = (time_t)get_num(g, "startTime");
+        dst->next_duration_min = (int32_t)get_num(g, "durationMin");
+        dst->next_is_scheduled = true;
+        const cJSON *players = cJSON_GetObjectItemCaseSensitive(g, "players");
+        if (cJSON_IsArray(players)) {
+          const cJSON *p;
+          cJSON_ArrayForEach(p, players) {
+            if (dst->next_player_count >= KIOSK_MAX_PLAYERS) break;
+            kiosk_player_name_t *pl = &dst->next_players[dst->next_player_count++];
+            get_str(p, "firstName", pl->first_name, sizeof(pl->first_name));
+            get_str(p, "lastName", pl->last_name, sizeof(pl->last_name));
+          }
+        }
+        break;
+      }
+    }
+  }
+
   /* queue */
   const cJSON *queue = cJSON_GetObjectItemCaseSensitive(root, "queue");
   if (cJSON_IsArray(queue)) {
@@ -88,6 +127,26 @@ bool board_parse(const char *json, size_t len, kiosk_board_t *out) {
       dst->duration_min = (int32_t)get_num(q, "durationMin");
       get_str(q, "estimatedWait", dst->estimated_wait, sizeof(dst->estimated_wait));
       dst->estimated_start_time = (time_t)get_num(q, "estimatedStartTime");
+      get_str(q, "simulatedCourtName", dst->simulated_court_name, sizeof(dst->simulated_court_name));
+    }
+  }
+
+  /* A waiting entry is the authoritative Up next player. Prefer the first
+   * queue row assigned to each court over the scheduled-games fallback. */
+  for (uint8_t i = 0; i < out->court_count; i++) {
+    court_status_t *court = &out->courts[i];
+    for (uint8_t j = 0; j < out->queue_count; j++) {
+      queue_row_t *q = &out->queue[j];
+      const char *assigned = q->court_name[0] ? q->court_name : q->simulated_court_name;
+      if (!assigned[0] || strcmp(assigned, court->name) != 0) continue;
+      snprintf(court->next_match_title, sizeof(court->next_match_title), "%s", q->match_title);
+      court->next_start_time = q->estimated_start_time;
+      court->next_duration_min = q->duration_min;
+      court->next_is_scheduled = false;
+      court->next_player_count = 1;
+      snprintf(court->next_players[0].first_name, KIOSK_MAX_NAME_LEN, "%s", q->first_name);
+      snprintf(court->next_players[0].last_name, KIOSK_MAX_NAME_LEN, "%s", q->last_name);
+      break;
     }
   }
 

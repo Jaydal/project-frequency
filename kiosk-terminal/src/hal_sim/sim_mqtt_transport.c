@@ -7,10 +7,13 @@
 /* Simulator MQTT transport: libmosquitto, pumped via mqtt_transport_poll().
  * Replaced by an esp-mqtt implementation of the same interface on the ESP32. */
 
+#define MAX_SUBSCRIPTIONS 8
+
 static struct mosquitto *s_mosq = NULL;
 static mqtt_message_cb_t s_cb = NULL;
 static void *s_user_data = NULL;
-static char s_topic[128] = "";
+static char s_topics[MAX_SUBSCRIPTIONS][128];
+static int  s_topic_count = 0;
 static bool s_connected = false;
 
 /* Parses "mqtt(s)://host:port", "host:port", or "host" into host/port/tls. */
@@ -39,7 +42,9 @@ static void on_connect(struct mosquitto *mosq, void *obj, int rc) {
   (void)obj;
   if (rc == 0) {
     s_connected = true;
-    if (s_topic[0]) mosquitto_subscribe(mosq, NULL, s_topic, 0);
+    for (int i = 0; i < s_topic_count; i++) {
+      mosquitto_subscribe(mosq, NULL, s_topics[i], 0);
+    }
   }
 }
 
@@ -62,6 +67,13 @@ bool mqtt_transport_start(const mqtt_config_t *cfg, mqtt_message_cb_t cb, void *
   mosquitto_lib_init();
   s_cb = cb;
   s_user_data = user_data;
+  s_topic_count = 0;
+
+  if (s_mosq) {
+    mosquitto_disconnect(s_mosq);
+    mosquitto_destroy(s_mosq);
+    s_mosq = NULL;
+  }
 
   s_mosq = mosquitto_new(NULL, true, NULL);
   if (!s_mosq) return false;
@@ -96,8 +108,14 @@ bool mqtt_transport_start(const mqtt_config_t *cfg, mqtt_message_cb_t cb, void *
 }
 
 void mqtt_transport_subscribe(const char *topic) {
-  snprintf(s_topic, sizeof(s_topic), "%s", topic);
-  if (s_connected && s_mosq) mosquitto_subscribe(s_mosq, NULL, s_topic, 0);
+  for (int i = 0; i < s_topic_count; i++) {
+    if (strcmp(s_topics[i], topic) == 0) return;
+  }
+  if (s_topic_count < MAX_SUBSCRIPTIONS) {
+    snprintf(s_topics[s_topic_count], sizeof(s_topics[s_topic_count]), "%s", topic);
+    s_topic_count++;
+    if (s_connected && s_mosq) mosquitto_subscribe(s_mosq, NULL, topic, 0);
+  }
 }
 
 void mqtt_transport_poll(void) {

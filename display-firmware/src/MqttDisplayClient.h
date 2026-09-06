@@ -58,6 +58,7 @@ struct DisplayBlock {
 };
 
 typedef void (*CourtChangeCallback)(const char* newCourtId);
+typedef bool (*ConfigRefreshCallback)(String& broker, uint16_t& port, String& user, String& pass, String& courtId);
 
 class MqttDisplayClient {
 public:
@@ -68,6 +69,7 @@ public:
              const char* courtId,  const char* mqttUser = nullptr, const char* mqttPass = nullptr);
   void update();
   void setCourtChangeCallback(CourtChangeCallback cb) { _courtChangeCb = cb; }
+  void setConfigRefreshCallback(ConfigRefreshCallback cb) { _configRefreshCb = cb; }
 
   bool wifiOk()   { return WiFi.status() == WL_CONNECTED; }
   bool mqttOk()   { return _mqtt.connected(); }
@@ -92,6 +94,9 @@ private:
   unsigned long _lastHeartbeat = 0;
   bool          _wasOnline = false;
   CourtChangeCallback _courtChangeCb = nullptr;
+  ConfigRefreshCallback _configRefreshCb = nullptr;
+  unsigned long _lastConfigRefresh = 0;
+  uint8_t       _failedMqttAttempts = 0;
   String   _mac;
   char          _cmdTopic[50];
   bool          _overrideActive = false;

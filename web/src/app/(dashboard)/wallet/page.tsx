@@ -39,7 +39,7 @@ export default async function WalletPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">Wallet Transactions</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">Wallet Transactions</h1>
           <p className="text-sm text-zinc-500 mt-1">Transaction history and credit reload records</p>
         </div>
         <ReloadWalletDialog />

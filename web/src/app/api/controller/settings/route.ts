@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { checkControllerKey } from '@/lib/controller-auth';
+import { authenticateControllerDevice } from '@/lib/controller-device-auth';
 
 export async function GET(request: Request) {
-  if (!checkControllerKey(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const supabase = await createClient();
+  const device = await authenticateControllerDevice(request);
+  // Legacy API-key authentication is retained temporarily for already
+  // deployed devices while the allowlist is populated.
+  if (!device && !checkControllerKey(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const supabase = createAdminClient();
   const { data: rows } = await supabase.from('settings').select('key, value');
 
   const map = Object.fromEntries((rows ?? []).map((r: any) => [r.key, r.value]));

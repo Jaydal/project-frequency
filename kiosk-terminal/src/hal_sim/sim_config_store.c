@@ -7,6 +7,7 @@
 
 #define CONFIG_PATH   "kiosk_config.ini"
 #define DEFAULTS_PATH "kiosk_defaults.ini"  /* optional, git-ignored, prefill source */
+#define DEFAULT_MQTT_BROKER "mqtts://594d608708f34a7b9607e86258c3b3ae.s1.eu.hivemq.cloud:8883"
 
 static void read_value(const char *line, const char *key, char *out, size_t out_size) {
   size_t key_len = strlen(key);
@@ -17,6 +18,12 @@ static void read_value(const char *line, const char *key, char *out, size_t out_
     size_t n = strlen(out);
     while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r')) {
       out[--n] = '\0';
+    }
+    /* Strip matching surrounding quotes so a hand-edited ini can't silently
+     * send "key" instead of key in an auth header. */
+    if (n >= 2 && out[0] == '"' && out[n - 1] == '"') {
+      memmove(out, out + 1, n - 1);
+      out[n - 2] = '\0';
     }
   }
 }
@@ -58,10 +65,9 @@ void kiosk_config_defaults(kiosk_config_t *out) {
    * is used directly, so WiFi is informational — a placeholder is fine. */
   snprintf(out->wifi_ssid, sizeof(out->wifi_ssid), "%s", "Wokwi-GUEST");
   snprintf(out->server_url, sizeof(out->server_url), "%s", "https://project-frequency.vercel.app/");
-  snprintf(out->mqtt_broker, sizeof(out->mqtt_broker), "%s", "mqtts://594d608708f34a7b9607e86258c3b3ae.s1.eu.hivemq.cloud:8883");
-  snprintf(out->mqtt_user, sizeof(out->mqtt_user), "%s", "frequency");
-  snprintf(out->mqtt_password, sizeof(out->mqtt_password), "%s", "Frequency@123");
-  snprintf(out->api_key, sizeof(out->api_key), "%s", "freq-kiosk-4aaf57f19c605f82ac70fe65");
+  snprintf(out->mqtt_broker, sizeof(out->mqtt_broker), "%s", DEFAULT_MQTT_BROKER);
+  /* Network credentials are supplied by the local simulator configuration.
+   * Keep repository defaults empty so production credentials cannot leak. */
   /* Overlay secrets/overrides (broker, creds, api key) from a local, git-ignored
    * kiosk_defaults.ini if the operator dropped one in. */
   overlay_file(DEFAULTS_PATH, out);

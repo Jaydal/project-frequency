@@ -110,7 +110,35 @@ void MqttDisplayClient::update() {
     if (now - _lastMqttReconnect > 5000) {
       _lastMqttReconnect = now;
       log_i("[health] MQTT reconnect attempt");
-      if (connectMqtt()) publishOnline();
+      if (connectMqtt()) {
+        _failedMqttAttempts = 0;
+        publishOnline();
+      } else {
+        _failedMqttAttempts++;
+        if ((_failedMqttAttempts >= 3 || _mqttUser.length() == 0) && (now - _lastConfigRefresh > 20000)) {
+          _lastConfigRefresh = now;
+          if (_configRefreshCb) {
+            String newBroker, newUser, newPass, newCourt;
+            uint16_t newPort = 8883;
+            log_i("[health] Attempting remote config refresh...");
+            if (_configRefreshCb(newBroker, newPort, newUser, newPass, newCourt)) {
+              log_i("[health] Refreshed MQTT config successfully");
+              _broker = newBroker;
+              _port = newPort;
+              _mqttUser = newUser;
+              _mqttPass = newPass;
+              _mqtt.setServer(_broker.c_str(), _port);
+              if (newCourt.length() > 0 && newCourt != _courtId) {
+                _courtId = newCourt;
+                snprintf(_displayTopic, sizeof(_displayTopic), "courts/%s/display", _courtId.c_str());
+                snprintf(_statusTopic,  sizeof(_statusTopic),  "freq.led/courts/%s/status",  _courtId.c_str());
+                log_i("[health] Court ID updated to: %s", _courtId.c_str());
+              }
+              _failedMqttAttempts = 0;
+            }
+          }
+        }
+      }
     }
   }
 

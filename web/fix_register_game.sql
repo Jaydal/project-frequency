@@ -5,6 +5,7 @@ CREATE OR REPLACE FUNCTION register_game(
   p_players     JSONB  -- [{rfid, team, charge_amount}]
 ) RETURNS UUID
 LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_court       courts%ROWTYPE;
@@ -19,15 +20,21 @@ DECLARE
   v_status      TEXT;
   v_latest_end  TIMESTAMPTZ;
 BEGIN
+  IF p_duration NOT IN (30, 60, 90) THEN RAISE EXCEPTION 'Invalid duration'; END IF;
+  IF p_match_type NOT IN ('1v1', '2v2') THEN RAISE EXCEPTION 'Invalid match type'; END IF;
+  IF p_players IS NULL OR jsonb_array_length(p_players) NOT BETWEEN 1 AND 4 THEN RAISE EXCEPTION 'Invalid player count'; END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_players) AS player GROUP BY player->>'rfid' HAVING count(*) > 1) THEN RAISE EXCEPTION 'Duplicate player'; END IF;
+
   SELECT * INTO v_court FROM courts WHERE name = p_court_name;
   IF NOT FOUND THEN RAISE EXCEPTION 'Court not found'; END IF;
 
   -- Validate ALL players before touching any money
   FOR v_p IN SELECT * FROM jsonb_array_elements(p_players) LOOP
     v_charge := (v_p->>'charge_amount')::NUMERIC;
+    IF v_charge IS NULL OR v_charge <= 0 OR v_charge > 100000 THEN RAISE EXCEPTION 'Invalid charge'; END IF;
     SELECT rc.* INTO v_card FROM rfid_cards rc WHERE rc.uid = v_p->>'rfid';
     IF NOT FOUND THEN RAISE EXCEPTION 'Invalid RFID card'; END IF;
-    SELECT w.* INTO v_wallet FROM wallets w WHERE w.member_id = v_card.member_id;
+    SELECT w.* INTO v_wallet FROM wallets w WHERE w.member_id = v_card.member_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Wallet not found'; END IF;
     IF v_wallet.balance < v_charge THEN RAISE EXCEPTION 'Insufficient funds'; END IF;
     v_total := v_total + v_charge;
@@ -56,7 +63,7 @@ BEGIN
     v_charge := (v_p->>'charge_amount')::NUMERIC;
     SELECT rc.* INTO v_card FROM rfid_cards rc WHERE rc.uid = v_p->>'rfid';
     SELECT m.*  INTO v_member FROM members m WHERE m.id = v_card.member_id;
-    SELECT w.*  INTO v_wallet FROM wallets  w WHERE w.member_id = v_member.id;
+    SELECT w.*  INTO v_wallet FROM wallets  w WHERE w.member_id = v_member.id FOR UPDATE;
 
     UPDATE wallets SET balance = balance - v_charge, updated_at = NOW()
     WHERE id = v_wallet.id;

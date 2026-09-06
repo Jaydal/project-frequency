@@ -1,7 +1,11 @@
 #ifdef HD_WF2
 #include "ConfigPortal.h"
 #include "wifi_config.h"
+#include "freq_root_ca.h"
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include <Preferences.h>
 #include <esp_partition.h>
 
@@ -12,6 +16,18 @@
 #define DEFAULT_MQTT_BROKER MQTT_BROKER
 #else
 #define DEFAULT_MQTT_BROKER ""
+#endif
+
+#ifdef CONFIG_API_URL
+#define DEFAULT_CONFIG_API_URL CONFIG_API_URL
+#else
+#define DEFAULT_CONFIG_API_URL "https://project-frequency.vercel.app/"
+#endif
+
+#ifdef CONFIG_API_KEY
+#define DEFAULT_CONFIG_API_KEY CONFIG_API_KEY
+#else
+#define DEFAULT_CONFIG_API_KEY ""
 #endif
 
 #ifdef MQTT_USER
@@ -68,6 +84,8 @@ bool ConfigPortal::loadFields() {
   _mqttPort = _prefs.getUShort("mqtt_port", 0);
   _mqttUser = _prefs.getString("mqtt_user", "");
   _mqttPass = _prefs.getString("mqtt_pass", "");
+  _serverUrl = _prefs.getString("server_url", "");
+  _apiKey = _prefs.getString("api_key", "");
   _courtId = _prefs.getString("court_id", "");
   _brightness = _prefs.getUChar("brightness", 153);
   _colorHex = _prefs.getString("color_hex", "#FF0000");
@@ -109,6 +127,14 @@ bool ConfigPortal::saveField(const String& key, const String& value) {
 bool ConfigPortal::saveField(const String& key, uint8_t value) {
   if (!_prefs.begin("freq-config", false)) return false;
   bool ok = _prefs.putUChar(key.c_str(), value) > 0;
+  _prefs.end();
+  if (ok) loadFields();
+  return ok;
+}
+
+bool ConfigPortal::saveField(const String& key, uint16_t value) {
+  if (!_prefs.begin("freq-config", false)) return false;
+  bool ok = _prefs.putUShort(key.c_str(), value) > 0;
   _prefs.end();
   if (ok) loadFields();
   return ok;
@@ -310,6 +336,110 @@ String ConfigPortal::getMqttPass() {
   return DEFAULT_MQTT_PASS;
 }
 
+String ConfigPortal::getServerUrl() {
+  if (_serverUrl.length() == 0 && !loadFields()) return DEFAULT_CONFIG_API_URL;
+  return _serverUrl.length() > 0 ? _serverUrl : DEFAULT_CONFIG_API_URL;
+}
+
+String ConfigPortal::getApiKey() {
+  if (_apiKey.length() == 0 && !loadFields()) return DEFAULT_CONFIG_API_KEY;
+  return _apiKey.length() > 0 ? _apiKey : DEFAULT_CONFIG_API_KEY;
+}
+
+bool ConfigPortal::fetchMqttConfig(int* outStatusCode) {
+  _lastFetchStatus = 0;
+  _lastFetchError = "";
+  if (outStatusCode) *outStatusCode = 0;
+
+  String serverUrl = getServerUrl();
+  String apiKey = getApiKey();
+  if (WiFi.status() != WL_CONNECTED || serverUrl.length() == 0) {
+    _lastFetchError = "WiFi not connected or empty server URL";
+    return false;
+  }
+
+  while (serverUrl.endsWith("/")) serverUrl.remove(serverUrl.length() - 1);
+  HTTPClient http;
+  bool beginOk = false;
+  WiFiClientSecure secureClient;
+  WiFiClient plainClient;
+
+  if (serverUrl.startsWith("https://")) {
+    secureClient.setCACert(FREQ_ROOT_CA);
+    beginOk = http.begin(secureClient, serverUrl + "/api/controller/config");
+  } else {
+    beginOk = http.begin(plainClient, serverUrl + "/api/controller/config");
+  }
+
+  if (!beginOk) {
+    _lastFetchError = "HTTP client begin failed";
+    return false;
+  }
+
+  http.setTimeout(5000);
+  String deviceId = WiFi.macAddress();
+  deviceId.toLowerCase();
+  deviceId.replace(":", "");
+  http.addHeader("x-device-id", deviceId);
+  if (apiKey.length() > 0) http.addHeader("x-api-key", apiKey);
+
+  int status = http.GET();
+  _lastFetchStatus = status;
+  if (outStatusCode) *outStatusCode = status;
+
+  if (status != HTTP_CODE_OK) {
+    _lastFetchError = "HTTP " + String(status);
+    http.end();
+    return false;
+  }
+
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, http.getString());
+  http.end();
+  if (error) {
+    _lastFetchError = "JSON parse error: " + String(error.c_str());
+    return false;
+  }
+
+  const char* broker = doc["broker"] | "";
+  const char* user = doc["username"] | "";
+  const char* pass = doc["password"] | "";
+  if (!broker[0] || !user[0] || !pass[0]) {
+    _lastFetchError = "Incomplete MQTT config from server";
+    return false;
+  }
+
+  // If server returns an assigned courtId for this device, adopt it
+  const char* assignedCourt = doc["courtId"] | "";
+  if (assignedCourt[0] && strlen(assignedCourt) > 0) {
+    if (_courtId != assignedCourt) {
+      saveField("court_id", String(assignedCourt));
+      _courtId = assignedCourt;
+      log_i("[portal] Court ID synchronized from server: %s", assignedCourt);
+    }
+  }
+
+  String brokerHost = broker;
+  if (brokerHost.startsWith("mqtts://")) brokerHost.remove(0, 8);
+  else if (brokerHost.startsWith("mqtt://")) brokerHost.remove(0, 7);
+  uint16_t brokerPort = getMqttPort();
+  int separator = brokerHost.lastIndexOf(':');
+  if (separator > 0) {
+    uint16_t parsedPort = (uint16_t)brokerHost.substring(separator + 1).toInt();
+    if (parsedPort > 0) {
+      brokerPort = parsedPort;
+      brokerHost.remove(separator);
+    }
+  }
+
+  bool ok = saveField("mqtt_broker", brokerHost);
+  ok = saveField("mqtt_port", brokerPort) && ok;
+  ok = saveField("mqtt_user", user) && ok;
+  ok = saveField("mqtt_pass", pass) && ok;
+  if (ok) log_i("[portal] MQTT configuration refreshed from API");
+  return ok;
+}
+
 String ConfigPortal::getCourtId() {
   if (_courtId.length() == 0 && !loadFields()) {
 #ifdef COURT_ID
@@ -387,20 +517,29 @@ void ConfigPortal::handleSave() {
   String port   = _server->arg("mqtt_port");
   String user   = _server->arg("mqtt_user");
   String mpwd   = _server->arg("mqtt_pass");
+  String serverUrl = _server->arg("server_url");
+  String apiKey = _server->arg("api_key");
   String court  = _server->arg("court_id");
   String brightnessStr = _server->arg("brightness");
   String colorHex = _server->arg("color_hex");
   if (colorHex.length() == 0) colorHex = "#FFFFFF";
 
-  if (ssid.length() == 0 || court.length() == 0 || broker.length() == 0) {
-    _server->send(400, "text/plain", "Missing required fields: wifi_ssid, court_id, mqtt_broker");
+  if (ssid.length() == 0 || court.length() == 0) {
+    _server->send(400, "text/plain", "Missing required fields: wifi_ssid, court_id");
     return;
+  }
+
+  if (broker.length() == 0) {
+    broker = DEFAULT_MQTT_BROKER;
   }
 
   uint16_t mqttPort = port.length() ? (uint16_t)port.toInt() : 8883;
   uint8_t brightness = brightnessStr.length() ? (uint8_t)brightnessStr.toInt() : 153;
 
   bool ok = saveFields(ssid, pass, broker, mqttPort, user, mpwd, court, brightness, colorHex);
+  if (serverUrl.length() > 0) ok = saveField("server_url", serverUrl) && ok;
+  // Keep the existing key when the password field is left blank.
+  if (apiKey.length() > 0) ok = saveField("api_key", apiKey) && ok;
   log_i("[portal] Config %s: ssid=%s court=%s broker=%s",
                 ok ? "SAVED" : "WRITE FAILED",
                 ssid.c_str(), court.c_str(), broker.c_str());
@@ -465,12 +604,16 @@ String ConfigPortal::scanNetworks() {
 }
 
 void ConfigPortal::sendHtmlChunked() {
+  String deviceId = WiFi.macAddress();
+  deviceId.toLowerCase();
+  deviceId.replace(":", "");
   String currentSsid   = getWifiSsid();
   String currentCourt  = getCourtId();
   String currentBroker = getMqttBroker();
   uint16_t currentPort = getMqttPort();
   String currentUser   = getMqttUser();
   String currentPass   = getMqttPass();
+  String currentServerUrl = getServerUrl();
   uint8_t currentBrightness = getBrightness();
   String currentColorHex = getColorHex();
 
@@ -504,6 +647,9 @@ void ConfigPortal::sendHtmlChunked() {
 <div class="card">
   <h1>Freq Court Display</h1>
   <p class="sub">HD-WF2 Controller Setup</p>
+  <p class="hint">Device ID / MAC: )HTML");
+  _server->sendContent(htmlEscape(deviceId));
+  _server->sendContent(R"HTML(</p>
 
   <form action="/save" method="POST">
 
@@ -520,6 +666,15 @@ void ConfigPortal::sendHtmlChunked() {
 
     <label>WiFi Password</label>
     <input type="password" name="wifi_pass" placeholder="password">
+
+    <div class="sec">
+      <div class="sec-title">Server Configuration API</div>
+      <label>Server URL</label>
+      <input type="url" name="server_url" value=")HTML");
+  _server->sendContent(htmlEscape(currentServerUrl));
+  _server->sendContent(R"HTML(" placeholder="https://your-app.example.com">
+      <p class="hint">MQTT credentials are refreshed automatically using this device's hardware identity.</p>
+    </div>
 
     <div class="sec">
       <div class="sec-title">MQTT Broker</div>

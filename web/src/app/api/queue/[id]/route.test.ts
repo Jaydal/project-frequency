@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockSupabaseResult = vi.hoisted(() => ({ data: null as any, error: null as any }));
+const mockSupabaseResult = vi.hoisted(() => ({ data: null as any, queueEntry: null as any, error: null as any }));
 const mockPublishAllDisplays = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true, failed: 0, total: 0 }));
+const mockLeaveQueue = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockAuthenticateControllerDevice = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn(() => {
   const chain: any = {
     select: vi.fn(() => chain),
@@ -10,6 +12,7 @@ const mockFrom = vi.hoisted(() => vi.fn(() => {
     order: vi.fn(() => chain),
     limit: vi.fn(() => chain),
     single: vi.fn(() => Promise.resolve({ data: mockSupabaseResult.data, error: mockSupabaseResult.error })),
+    maybeSingle: vi.fn(() => Promise.resolve({ data: mockSupabaseResult.queueEntry, error: mockSupabaseResult.error })),
     delete: vi.fn(() => chain),
     update: vi.fn(() => chain),
     then: (onfulfilled: any) => Promise.resolve({ data: mockSupabaseResult.data, error: mockSupabaseResult.error }).then(onfulfilled),
@@ -21,8 +24,20 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(() => ({ from: mockFrom })),
 }));
 
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: vi.fn(() => ({ from: mockFrom })),
+}));
+
 vi.mock('@/lib/display/publish-all', () => ({
   publishAllDisplays: (...args: any[]) => mockPublishAllDisplays(...args),
+}));
+
+vi.mock('@/lib/queue/queue-service', () => ({
+  leaveQueue: mockLeaveQueue,
+}));
+
+vi.mock('@/lib/controller-device-auth', () => ({
+  authenticateControllerDevice: mockAuthenticateControllerDevice,
 }));
 
 import { DELETE, PATCH } from './route';
@@ -40,7 +55,9 @@ describe('DELETE /api/queue/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSupabaseResult.data = null;
+    mockSupabaseResult.queueEntry = null;
     mockSupabaseResult.error = null;
+    mockAuthenticateControllerDevice.mockResolvedValue(null);
   });
 
   it('deletes a Scheduled game and returns { ok: true }', async () => {
@@ -65,6 +82,34 @@ describe('DELETE /api/queue/[id]', () => {
 
     const res = await DELETE(authed('http://localhost'), params('g1'));
     expect(res.status).toBe(404);
+  });
+
+  it('cancels a waiting queue entry from an allowlisted kiosk device', async () => {
+    mockAuthenticateControllerDevice.mockResolvedValue({ device_id: 'aabbccddeeff', device_type: 'kiosk', court_id: null });
+    mockSupabaseResult.queueEntry = { id: 'q1', member_id: 'm1', status: 'waiting', deposit_tx_id: 'tx1', court_id: null };
+
+    const res = await DELETE(new Request('http://localhost', { headers: { 'x-device-id': 'aabbccddeeff' } }), params('q1'));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, cancelled: 'queue_entry' });
+    expect(mockLeaveQueue).toHaveBeenCalledWith('q1');
+  });
+
+  it('rejects cancellation for an unknown device', async () => {
+    const res = await DELETE(new Request('http://localhost', { headers: { 'x-device-id': '112233445566' } }), params('q1'));
+
+    expect(res.status).toBe(401);
+    expect(mockLeaveQueue).not.toHaveBeenCalled();
+  });
+
+  it('returns conflict when a queue entry is not cancellable', async () => {
+    mockAuthenticateControllerDevice.mockResolvedValue({ device_id: 'aabbccddeeff', device_type: 'kiosk', court_id: null });
+    mockSupabaseResult.queueEntry = { id: 'q1', member_id: 'm1', status: 'completed', deposit_tx_id: null, court_id: null };
+
+    const res = await DELETE(new Request('http://localhost', { headers: { 'x-device-id': 'aabbccddeeff' } }), params('q1'));
+
+    expect(res.status).toBe(409);
+    expect(mockLeaveQueue).not.toHaveBeenCalled();
   });
 });
 

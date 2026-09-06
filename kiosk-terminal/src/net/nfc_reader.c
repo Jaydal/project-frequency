@@ -1,5 +1,5 @@
 #include "nfc_reader.h"
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -13,6 +13,8 @@
 
 static const char *TAG = "nfc_reader";
 static bool s_online = false;
+static i2c_master_bus_handle_t s_nfc_bus = NULL;
+static i2c_master_dev_handle_t s_nfc_dev = NULL;
 
 #define I2C_PORT     I2C_NUM_1
 #define PIN_SDA      GPIO_NUM_43
@@ -63,11 +65,11 @@ static void set_offline(void) {
 
 static esp_err_t reg_write(uint8_t reg, uint8_t val) {
     uint8_t buf[2] = {reg, val};
-    return i2c_master_write_to_device(I2C_PORT, I2C_ADDR, buf, 2, pdMS_TO_TICKS(10));
+    return i2c_master_transmit(s_nfc_dev, buf, 2, 10);
 }
 
 static esp_err_t reg_read(uint8_t reg, uint8_t *val) {
-    return i2c_master_write_read_device(I2C_PORT, I2C_ADDR, &reg, 1, val, 1, pdMS_TO_TICKS(10));
+    return i2c_master_transmit_receive(s_nfc_dev, &reg, 1, val, 1, 10);
 }
 
 static bool transceive(const uint8_t *tx, uint8_t tx_len,
@@ -184,34 +186,47 @@ static bool read_card_uid(uint8_t *uid, uint8_t *uid_len) {
 }
 
 static esp_err_t init_i2c_bus(void) {
-    i2c_driver_delete(I2C_PORT);
-    const i2c_config_t cfg = {
-        .mode             = I2C_MODE_MASTER,
+    if (s_nfc_dev) return ESP_OK;
+    const i2c_master_bus_config_t cfg = {
+        .i2c_port         = I2C_PORT,
         .sda_io_num       = PIN_SDA,
         .scl_io_num       = PIN_SCL,
-        .sda_pullup_en    = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en    = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_FREQ_HZ,
+        .clk_source       = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
     };
-    esp_err_t err = i2c_param_config(I2C_PORT, &cfg);
+    esp_err_t err = i2c_new_master_bus(&cfg, &s_nfc_bus);
+    if (err != ESP_OK) return err;
+    const i2c_device_config_t dev_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = I2C_ADDR,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+    err = i2c_master_bus_add_device(s_nfc_bus, &dev_cfg, &s_nfc_dev);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "i2c_param_config failed: %s", esp_err_to_name(err));
-        return err;
-    }
-    err = i2c_driver_install(I2C_PORT, I2C_MODE_MASTER, 0, 0, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "i2c_driver_install failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "i2c_master_bus_add_device failed: %s", esp_err_to_name(err));
         return err;
     }
     return ESP_OK;
 }
 
+static void reset_i2c_bus(void) {
+    if (s_nfc_dev) {
+        i2c_master_bus_rm_device(s_nfc_dev);
+        s_nfc_dev = NULL;
+    }
+    if (s_nfc_bus) {
+        i2c_del_master_bus(s_nfc_bus);
+        s_nfc_bus = NULL;
+    }
+    gpio_reset_pin(PIN_SDA);
+    gpio_reset_pin(PIN_SCL);
+}
+
 static void nfc_debug_scan_bus(void) {
     ESP_LOGI(TAG, "Scanning I2C_NUM_1 for devices...");
     for (uint8_t addr = 1; addr < 127; addr++) {
-        uint8_t dummy;
-        esp_err_t r = i2c_master_read_from_device(I2C_PORT, addr,
-                                                  &dummy, 1, pdMS_TO_TICKS(10));
+        esp_err_t r = i2c_master_probe(s_nfc_bus, addr, 10);
         if (r == ESP_OK) {
             ESP_LOGI(TAG, "  Found device at 0x%02X", addr);
         }
@@ -220,18 +235,25 @@ static void nfc_debug_scan_bus(void) {
 }
 
 static bool probe_chip(void) {
-    uint8_t dummy;
-    esp_err_t r = i2c_master_read_from_device(I2C_PORT, I2C_ADDR,
-                                              &dummy, 1, pdMS_TO_TICKS(10));
-    return r == ESP_OK;
+    if (!s_nfc_dev) return false;
+    /* Keep the probe identical to the last known-good driver.  WS1850S
+     * modules expose the MFRC522 register map, but a register read is not a
+     * reliable presence test on every firmware revision; a raw I2C read is. */
+    uint8_t dummy = 0;
+    esp_err_t err = i2c_master_receive(s_nfc_dev, &dummy, 1, 10);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "WS1850S probe at 0x%02X failed: %s", I2C_ADDR,
+                 esp_err_to_name(err));
+    }
+    return err == ESP_OK;
 }
 
 static bool init_chip(void) {
-    reg_write(REG_COMMAND, CMD_SOFT_RESET);
+    if (reg_write(REG_COMMAND, CMD_SOFT_RESET) != ESP_OK) return false;
     vTaskDelay(pdMS_TO_TICKS(150));
 
     uint8_t v;
-    reg_read(REG_TX_CONTROL, &v);
+    if (reg_read(REG_TX_CONTROL, &v) != ESP_OK) return false;
 
     reg_write(REG_T_MODE,      0x80);
     reg_write(REG_T_PRESCALER, 0xA9);
@@ -244,9 +266,10 @@ static bool init_chip(void) {
     reg_write(REG_RX_SEL,      0x86);
     reg_write(REG_RF_CFG,      0x77);
 
-    reg_read(REG_TX_CONTROL, &v);
-    reg_write(REG_TX_CONTROL, v | 0x03);
-    ESP_LOGI(TAG, "WS1850S initialised on I2C_NUM_1 at 0x%02X", I2C_ADDR);
+    if (reg_read(REG_TX_CONTROL, &v) != ESP_OK ||
+        reg_write(REG_TX_CONTROL, v | 0x03) != ESP_OK) return false;
+    ESP_LOGI(TAG, "WS1850S initialised on UART2 header I2C pins SDA=%d SCL=%d addr=0x%02X",
+             PIN_SDA, PIN_SCL, I2C_ADDR);
     return true;
 }
 
@@ -264,7 +287,8 @@ static void reader_task(void *arg) {
             init_fails++;
             ESP_LOGE(TAG, "WS1850S probe failed (%d/5)", init_fails);
             if (init_fails >= 5) {
-                ESP_LOGW(TAG, "Reinitialising I2C_NUM_1");
+                ESP_LOGW(TAG, "Reinitialising WS1850S device handle");
+                reset_i2c_bus();
                 init_i2c_bus();
                 init_fails = 0;
             }
@@ -318,7 +342,7 @@ static void reader_task(void *arg) {
 }
 
 void nfc_reader_start(void) {
-    ESP_LOGI(TAG, "Starting NFC reader task on I2C_NUM_1 (SDA=43, SCL=44)");
+    ESP_LOGI(TAG, "Starting M5Unit-RFID reader on I2C_NUM_1 (SDA=43, SCL=44)");
     esp_err_t err = init_i2c_bus();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "I2C bus init failed, reader will be unavailable");

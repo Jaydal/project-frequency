@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { requireStaff } from '@/lib/auth/server-guards';
 
 export async function PUT(request: Request) {
   const { key, value } = await request.json();
@@ -7,7 +7,9 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'key required' }, { status: 400 });
   }
 
-  const supabase = await createClient();
+  const auth = await requireStaff();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
   const { error } = await supabase.from('settings').upsert(
     { key, value },
     { onConflict: 'key' },
@@ -17,9 +19,10 @@ export async function PUT(request: Request) {
   return NextResponse.json({ ok: true });
 }
 
-export async function GET(request: Request) {
-  const { createClient: createAdminClient } = require('@supabase/supabase-js');
-  const supabase = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+export async function GET() {
+  const auth = await requireStaff();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
   const { data, error } = await supabase.from('settings').select('*');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('@/lib/mqtt', () => ({ publishDisplay: vi.fn(), publishBoard: vi.fn() }))
+vi.mock('@/lib/mqtt', () => ({ publishDisplay: vi.fn(), publishBoard: vi.fn(), publishLightsCommand: vi.fn() }))
 vi.mock('@/lib/display/sports-caster', () => ({ generatePayload: vi.fn(() => ({})) }))
 vi.mock('./booking-engine', () => ({ findAvailableCourt: vi.fn(), isSlotAvailable: vi.fn() }))
 
@@ -295,6 +295,28 @@ describe('Booking simulation', () => {
     await Promise.all([processCourtQueue('c1'), processCourtQueue('c1')])
 
     expect(tables.games.length).toBe(1)
+    expect(tables.queue_entries[0].status).toBe('completed')
+  })
+
+  it('Promotion: completes an expired game and activates the next queued player', async () => {
+    const now = Date.now()
+    const tables: Record<string, Row[]> = {
+      settings: [{ key: 'prices', value: '{"30":150,"60":300,"90":450}' }],
+      courts: [{ id: 'c1', name: 'Court 1', status: 'In Game' }],
+      games: [{ id: 'old-game', court_id: 'c1', duration: 30, status: 'In Progress', start_time: new Date(now - 31 * 60_000).toISOString() }],
+      queue_entries: [{ id: 'next-entry', member_id: 'm2', duration: 60, party_size: 2, player_ids: JSON.stringify(['m2']), status: 'waiting', court_id: 'c1', requested_start: new Date(now - 1_000).toISOString() }],
+      members: [{ id: 'm2', status: 'Active' }],
+    }
+    const db = makeFakeDb(tables)
+    vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(true)
+
+    const { processCourtQueue } = await import('./queue-processor')
+    await processCourtQueue('c1')
+
+    expect(tables.games).toHaveLength(2)
+    expect(tables.games[0].status).toBe('Completed')
+    expect(tables.games[1].status).toBe('In Progress')
     expect(tables.queue_entries[0].status).toBe('completed')
   })
 

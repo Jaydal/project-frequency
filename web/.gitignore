@@ -52,3 +52,4 @@ agent/
 assets/
 node_modules/
 *.bak
+.env*

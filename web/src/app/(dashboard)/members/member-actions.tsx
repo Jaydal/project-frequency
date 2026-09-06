@@ -66,7 +66,11 @@ export function AssignRfidButton({ memberId }: { memberId: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await assignRFID({ memberId, uid: uid.trim() });
+      const result = await assignRFID({ memberId, uid: uid.trim() });
+      if (!result.ok) {
+        toast.warning(result.message);
+        return;
+      }
       setOpen(false);
       setUid('');
       toast('RFID assigned');

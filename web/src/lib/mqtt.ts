@@ -306,3 +306,31 @@ export async function publishDisplay(courtId: string, payload: DisplayPayload): 
     return false;
   }
 }
+
+// ── Lights Control ──────────────────────────────────────────────────────────
+
+export async function publishLightsCommand(state: 'ON' | 'OFF'): Promise<boolean> {
+  try {
+    const c = await connectMqtt();
+    if (!c) return false;
+    return new Promise((resolve) => {
+      c.publish(
+        'freq/lights',
+        JSON.stringify({ state }),
+        { qos: 1, retain: true },
+        (err) => {
+          if (err) {
+            console.error('[mqtt] publishLightsCommand error:', err);
+            resolve(false);
+          } else {
+            console.log(`[mqtt] lights → ${state}`);
+            resolve(true);
+          }
+        }
+      );
+    });
+  } catch (err) {
+    console.error('[mqtt] publishLightsCommand error:', err);
+    return false;
+  }
+}

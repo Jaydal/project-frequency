@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { requireStaff } from '@/lib/auth/server-guards';
 
 export async function GET() {
-  const supabase = await createClient();
+  const auth = await requireStaff();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
 
   const tables = ['courts', 'settings', 'members', 'wallets', 'rfid_cards'];
   const backupData: Record<string, any[]> = {};
@@ -22,7 +24,9 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const backupData = await req.json();
-    const supabase = await createClient();
+    const auth = await requireStaff();
+    if (auth.response) return auth.response;
+    const supabase = auth.supabase;
     
     // Validate backup data format
     if (!backupData || typeof backupData !== 'object') {

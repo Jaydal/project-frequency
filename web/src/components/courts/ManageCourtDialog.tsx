@@ -39,7 +39,10 @@ export function ManageCourtDialog({ court }: Props) {
     setLoading(true);
     setError(null);
     try {
-      await deleteCourt(court.id);
+      const result = await deleteCourt(court.id);
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Unable to delete court');
+      }
       setOpen(false);
       router.refresh();
     } catch (err: any) {

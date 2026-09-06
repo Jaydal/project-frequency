@@ -1,0 +1,14 @@
+.git
+.pio
+kiosk-terminal/.pio
+kiosk-terminal/build
+display-firmware/.pio
+display-firmware/build
+node_modules
+web/node_modules
+web/.next
+build
+.worktrees
+*.bin
+*.elf
+*.map

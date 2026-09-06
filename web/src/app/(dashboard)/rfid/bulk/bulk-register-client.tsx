@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { assignRFID, updateRFID, deleteRFID } from '@/features/rfid/actions';
+import { assignRFID, updateRFID, deleteRFID, type AssignRFIDResult } from '@/features/rfid/actions';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 
@@ -67,6 +67,8 @@ export default function BulkRegisterClient({ initialCards }: { initialCards: any
       setSubmitting(true);
       let successCount = 0;
       let skipCount = 0;
+      let failedCount = 0;
+      const failedUids: string[] = [];
       
       for (let i = 1; i < rows.length; i++) {
         const columns = rows[i].split(',').map(c => c.trim());
@@ -80,18 +82,26 @@ export default function BulkRegisterClient({ initialCards }: { initialCards: any
         }
         
         try {
-          await assignRFID({ uid: cardUid, memberId: null });
-          successCount++;
-        } catch (err: any) {
-          if (err.message?.includes('already')) {
-             skipCount++;
+          const result: AssignRFIDResult = await assignRFID({ uid: cardUid, memberId: null });
+          if (!result.ok) {
+            if (result.code === 'RFID_ALREADY_ASSIGNED' || result.code === 'RFID_ALREADY_UNASSIGNED') {
+              skipCount++;
+            }
           } else {
-            console.error('Failed to import UID:', cardUid, err);
+            successCount++;
           }
+        } catch (err: any) {
+          failedCount++;
+          failedUids.push(cardUid);
+          console.error('Failed to import UID:', cardUid, err);
         }
       }
       
-      toast.success(`Import complete: ${successCount} added, ${skipCount} skipped.`);
+      if (failedCount > 0) {
+        toast.error(`Import complete: ${successCount} added, ${skipCount} skipped, ${failedCount} failed (${failedUids.join(', ')}).`);
+      } else {
+        toast.success(`Import complete: ${successCount} added, ${skipCount} skipped.`);
+      }
       await refreshCards();
     } catch (err: any) {
       toast.error(err.message || 'Failed to import CSV');
@@ -118,16 +128,18 @@ export default function BulkRegisterClient({ initialCards }: { initialCards: any
     }
     setSubmitting(true);
     try {
-      await assignRFID({ uid: uid.trim(), memberId: null });
+      const result: AssignRFIDResult = await assignRFID({ uid: uid.trim(), memberId: null });
+      if (!result.ok) {
+        if (result.code === 'RFID_ALREADY_ASSIGNED' || result.code === 'RFID_ALREADY_UNASSIGNED') {
+          toast.warning(result.message);
+        }
+        return;
+      }
       setUid('');
       toast.success('RFID card registered');
       await refreshCards();
     } catch (err: any) {
-      if (err.message?.includes('already')) {
-        toast.warning(err.message);
-      } else {
-        toast.error(err.message || 'Failed to register RFID');
-      }
+      toast.error(err.message || 'Failed to register RFID');
     } finally {
       setSubmitting(false);
     }
@@ -169,7 +181,7 @@ export default function BulkRegisterClient({ initialCards }: { initialCards: any
     <div className="space-y-6">
       <Card className="border-zinc-800 bg-zinc-900/50">
         <CardHeader>
-          <CardTitle className="text-zinc-150">Simulated RFID Scan</CardTitle>
+          <CardTitle className="text-zinc-100">Simulated RFID Scan</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleRegister} className="flex gap-3">
@@ -195,7 +207,7 @@ export default function BulkRegisterClient({ initialCards }: { initialCards: any
 
       <Card className="border-zinc-800 bg-zinc-900/30 overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between py-4">
-          <CardTitle className="text-zinc-150 text-lg">Registered Cards</CardTitle>
+          <CardTitle className="text-zinc-100 text-lg">Registered Cards</CardTitle>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleExportCSV} className="border-zinc-700 bg-zinc-950/40">
               Export CSV

@@ -11,6 +11,15 @@
 #define KIOSK_MIN_TOUCH_PX     56
 #define KIOSK_PRIMARY_TOUCH_PX 64
 
+/* Translucency levels for the frosted-glass queue panel and its rows. */
+#define KIOSK_GLASS_PANEL_OPA  LV_OPA_50
+#define KIOSK_GLASS_ROW_OPA    LV_OPA_60
+
+/* Booking-form panels sit over the brand watermark: translucent enough to let
+ * it read through, opaque enough to keep body text legible. */
+#define KIOSK_GLASS_FORM_OPA   LV_OPA_80
+#define KIOSK_WATERMARK_OPA    LV_OPA_60
+
 #define KIOSK_COLOR_BLACK           lv_color_hex(0x000000)
 #define KIOSK_COLOR_WHITE           lv_color_hex(0xffffff)
 #define KIOSK_COLOR_ZINC_950        lv_color_hex(0x09090b)
@@ -65,6 +74,7 @@ extern lv_style_t kiosk_style_card_in_game;
 /* Generic reusable styles. */
 extern lv_style_t kiosk_style_screen_bg;     /* black/white full-bleed */
 extern lv_style_t kiosk_style_panel_bg;      /* rounded panel */
+extern lv_style_t kiosk_style_glass_bg;      /* translucent panel (content behind stays visible) */
 extern lv_style_t kiosk_style_btn_primary;   /* action button, min touch size */
 extern lv_style_t kiosk_style_btn_secondary; /* secondary button, min touch size */
 extern lv_style_t kiosk_style_tile;          /* selectable tile (court/game/duration options) */

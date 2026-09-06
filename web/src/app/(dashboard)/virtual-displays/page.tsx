@@ -55,11 +55,11 @@ export default function VirtualDisplaysPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">Display Monitor</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">Display Monitor</h1>
           <p className="text-sm text-zinc-500 mt-1">Virtual representation and simulation of the physical court scoreboards</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 border border-zinc-850 rounded-lg">
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 border border-zinc-800 rounded-lg">
             <button 
               onClick={() => setLayout('horizontal')}
               className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-md transition-all cursor-pointer ${

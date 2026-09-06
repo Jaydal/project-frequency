@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../data/kiosk_model.h"
+#include "../data/kiosk_config.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -10,9 +11,13 @@
  * (libcurl) and on the ESP32-S3 (esp_http_client) without changes.
  *
  * Endpoint coverage vs. the live backend:
- *   GET   /api/controller/member/{rfid}   -> freq_rest_lookup_member  (needs API key)
- *   POST  /api/queue                       -> freq_rest_join_queue
- *   GET   /api/queue?memberId={uuid}       -> freq_rest_get_member_queue
+ *   GET    /api/controller/config          -> freq_rest_fetch_mqtt_config
+ *   GET    /api/controller/member/{rfid}   -> freq_rest_lookup_member
+ *   POST   /api/queue                      -> freq_rest_join_queue
+ *   DELETE /api/queue/{id}                 -> freq_rest_cancel_queue
+ *
+ * Auth: every request carries `x-device-id` (allowlist) and, when a legacy key
+ * is still saved in config, `x-api-key`.
  *
  * The live board (court cards + now-serving + queue) does NOT come through
  * this REST client — the backend publishes it to MQTT (topic `freq/board`,
@@ -26,6 +31,9 @@ typedef struct {
   char error[128];    /* human-readable message when ok == false           */
 } freq_rest_result_t;
 
+/* Returns the normalized hardware identity used by the device allowlist. */
+void freq_device_id_get(char *out, size_t out_size);
+
 /* Call once at startup. base_url like "http://192.168.1.50:3000" (no trailing
  * slash). api_key may be NULL if the controller endpoints are open (dev). */
 void freq_rest_init(const char *base_url, const char *api_key);
@@ -33,8 +41,19 @@ void freq_rest_init(const char *base_url, const char *api_key);
 /* POST /api/display/publish-all to wake Vercel */
 void freq_rest_wake_server(void);
 
-/* GET /api/controller/member/{rfid}. Fills out->{member_id,first_name,
- * last_name,balance}; out->id (UUID) is left empty pending backend gap #1. */
+typedef struct {
+  char broker[KIOSK_CONFIG_URL_LEN];
+  char username[KIOSK_CONFIG_SSID_LEN];
+  char password[KIOSK_CONFIG_PASS_LEN];
+  char board_topic[64];
+  char display_topic_prefix[64];
+} freq_mqtt_config_t;
+
+/* GET /api/controller/config. Requires the configured controller API key. */
+freq_rest_result_t freq_rest_fetch_mqtt_config(freq_mqtt_config_t *out);
+
+/* GET /api/controller/member/{rfid}. Fills out->{id,member_id,first_name,
+ * last_name,balance,decision}; the caller then routes on out->decision.type. */
 freq_rest_result_t freq_rest_lookup_member(const char *rfid, kiosk_member_t *out);
 
 typedef struct {
@@ -55,3 +74,8 @@ freq_rest_result_t freq_rest_join_queue(const char *member_uuid, const char *sta
 
 /* DELETE /api/queue/{id}. */
 freq_rest_result_t freq_rest_cancel_queue(const char *entry_id);
+
+/* POST /api/queue/advance. The kiosk calls this when a locally observed game
+ * window ends; the server remains responsible for selecting/promoting the
+ * correct queue entry. */
+freq_rest_result_t freq_rest_advance_queue(void);

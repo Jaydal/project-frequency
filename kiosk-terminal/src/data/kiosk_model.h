@@ -38,6 +38,14 @@ typedef struct {
   int32_t prep_time_sec;
   kiosk_player_name_t players[KIOSK_MAX_PLAYERS];
   uint8_t player_count;
+  /* Next scheduled game on this court, kept in a reserved fixed slot so
+   * displaying it never changes the card's layout during timer ticks. */
+  char next_match_title[KIOSK_MAX_NAME_LEN];
+  time_t next_start_time;
+  int32_t next_duration_min;
+  bool next_is_scheduled;
+  kiosk_player_name_t next_players[KIOSK_MAX_PLAYERS];
+  uint8_t next_player_count;
 } court_status_t;
 
 /* effectivePrepSec() from products-config-types.ts: no prep time under 5 min games. */
@@ -78,6 +86,7 @@ typedef struct {
   int32_t duration_min;
   char estimated_wait[16]; /* pre-formatted, e.g. "~60 min" */
   time_t estimated_start_time; /* epoch seconds */
+  char simulated_court_name[KIOSK_MAX_NAME_LEN];
 } queue_row_t;
 
 /* Pricing config (mirrors ProductsConfig); carried in the board snapshot so
@@ -98,6 +107,27 @@ typedef struct {
   uint8_t queue_count;
 } kiosk_board_t;
 
+typedef enum {
+  RFID_DECISION_PLAY_NOW,
+  RFID_DECISION_CHECK_IN_SCHEDULED,
+  RFID_DECISION_ALREADY_ACTIVE,
+  RFID_DECISION_ALREADY_QUEUED,
+  RFID_DECISION_NO_ELIGIBLE_WINDOW,
+  RFID_DECISION_MEMBER_UNAVAILABLE
+} rfid_decision_type_t;
+
+typedef struct {
+  rfid_decision_type_t type;
+  char court_id[KIOSK_MAX_ID_LEN];
+  char court_name[KIOSK_MAX_NAME_LEN];
+  char game_id[KIOSK_MAX_ID_LEN];
+  char entry_id[KIOSK_MAX_ID_LEN];
+  char reason[128];
+  int32_t duration;
+  bool capped;
+  char cutoff_time[32]; // ISO string
+} rfid_decision_t;
+
 /* A scanned member (mirrors TerminalKiosk.tsx's Player). */
 typedef struct {
   char id[KIOSK_MAX_ID_LEN];
@@ -105,6 +135,7 @@ typedef struct {
   char first_name[KIOSK_MAX_NAME_LEN];
   char last_name[KIOSK_MAX_NAME_LEN];
   int32_t balance;
+  rfid_decision_t decision;
 } kiosk_member_t;
 
 /* One tile in the Select Court step (mirrors CourtOption). */
@@ -121,6 +152,9 @@ static inline int32_t kiosk_get_cost(const kiosk_products_config_t *cfg, int32_t
   int32_t rate = 0;
   for (uint8_t i = 0; i < cfg->duration_count; i++) {
     if (cfg->durations_min[i] == duration_min) { rate = cfg->rates[i]; break; }
+  }
+  if (rate == 0 && cfg->duration_count > 0) {
+    rate = cfg->rates[0]; // fallback to base rate if not an exact match
   }
   int32_t total = (rate * duration_min) / 30;
   return (party_size == 4) ? (total / 2) : total;

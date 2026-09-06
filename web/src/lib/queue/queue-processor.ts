@@ -1,9 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { isSlotAvailable } from './booking-engine';
 import { getCost, ProductsConfig } from '@/lib/products-config-types';
+import { evaluateLights } from './light-controller';
 
 export async function processCourtQueue(courtId: string): Promise<boolean> {
-  const supabase = await createClient();
+  /* Queue reconciliation is invoked by registered kiosk devices and has no
+   * browser session. Use the service-role client so RLS cannot silently block
+   * completion/promotion after the kiosk reports an expired game. */
+  const supabase = createAdminClient();
 
   const now = new Date();
   const { data: court } = await supabase.from('courts').select('id, name').eq('id', courtId).single();
@@ -27,7 +31,7 @@ export async function processCourtQueue(courtId: string): Promise<boolean> {
       if (game.status === 'Scheduled' && now.getTime() >= startMs) {
         await supabase
           .from('games')
-          .update({ status: 'Completed', end_time: now.toISOString() })
+          .update({ status: 'No-show', no_show_at: now.toISOString() })
           .eq('id', game.id);
         continue;
       }
@@ -36,7 +40,11 @@ export async function processCourtQueue(courtId: string): Promise<boolean> {
       if (now.getTime() >= gameEnd.getTime()) {
         await supabase
           .from('games')
-          .update({ status: 'Completed', end_time: gameEnd.toISOString() })
+          .update({ 
+            status: 'Completed', 
+            end_time: gameEnd.toISOString(),
+            ended_at: gameEnd.toISOString() 
+          })
           .eq('id', game.id);
         continue;
       }
@@ -65,15 +73,20 @@ export async function processCourtQueue(courtId: string): Promise<boolean> {
   // Try to match the first compatible waiting entry to this court
   for (const entry of waiting) {
     if (entry.court_id && entry.court_id !== courtId) continue;
+    if (entry.requested_start && new Date(entry.requested_start).getTime() > now.getTime()) continue;
+    const expectedStatus = entry.status;
 
     const end = new Date(now.getTime() + entry.duration * 60_000);
-    const slotFree = await isSlotAvailable(courtId, now, end, entry.id);
+    const slotFree = await isSlotAvailable(courtId, now, end, entry.id, supabase);
     if (!slotFree) continue;
 
     let charge = 0;
     try {
       const { data: pricesRow } = await supabase.from('settings').select('value').eq('key', 'prices').single();
-      const rates: Record<string, number> = pricesRow?.value ? JSON.parse(pricesRow.value) : { '30': 150, '60': 300, '90': 450 };
+      const rawRates = pricesRow?.value;
+      const rates: Record<string, number> = typeof rawRates === 'string'
+        ? JSON.parse(rawRates)
+        : (rawRates && typeof rawRates === 'object' ? rawRates as Record<string, number> : { '30': 150, '60': 300, '90': 450 });
       const config: ProductsConfig = { matchTypes: [], durations: [], rates };
       charge = getCost(config, entry.duration, entry.party_size);
     } catch {
@@ -93,7 +106,7 @@ export async function processCourtQueue(courtId: string): Promise<boolean> {
       .from('queue_entries')
       .update({ status: 'claimed', updated_at: now.toISOString() })
       .eq('id', entry.id)
-      .eq('status', 'waiting')
+      .eq('status', expectedStatus)
       .select('id')
       .single();
     if (!claimed) continue;
@@ -160,14 +173,14 @@ export async function processAllCourts(): Promise<void> {
   if (processAllRunning) return;
   processAllRunning = true;
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data: courts } = await supabase.from('courts').select('id');
     if (!courts) return;
     for (const c of courts) {
       await processCourtQueue(c.id);
     }
+    await evaluateLights();
   } finally {
     processAllRunning = false;
   }
 }
-

@@ -16,7 +16,7 @@ export default async function MembersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">Members</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">Members</h1>
           <p className="text-sm text-zinc-500 mt-1">{members?.length ?? 0} registered members</p>
         </div>
         <AddMemberDialog />

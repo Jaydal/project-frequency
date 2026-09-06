@@ -66,6 +66,9 @@ describe('findAvailableCourt', () => {
     const result = await findAvailableCourt(new Date('2026-07-07T10:00:00Z'), 60, 2)
     expect(result).not.toBeNull()
     expect(result!.id).toBe('c1')
+    const gamesQuery = db.from.mock.results.find((entry: any) => entry.value?.gte?.mock?.calls?.length > 0)?.value
+    expect(gamesQuery.gte).toHaveBeenCalledWith('start_time', '2026-07-07T10:00:00.000Z')
+    expect(gamesQuery.lt).toHaveBeenCalledWith('start_time', '2026-07-07T11:00:00.000Z')
   })
 
   it('returns null when all courts have overlapping games', async () => {

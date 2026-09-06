@@ -33,6 +33,8 @@ static const char *TAG = "config";
 #define KEY_MQTT_USER  "mqtt_user"
 #define KEY_MQTT_PASS  "mqtt_pass"
 
+#define DEFAULT_MQTT_BROKER "mqtts://594d608708f34a7b9607e86258c3b3ae.s1.eu.hivemq.cloud:8883"
+
 /* -------------------------------------------------------------------------- */
 /*  Private helpers                                                           */
 /* -------------------------------------------------------------------------- */
@@ -181,9 +183,8 @@ void kiosk_config_defaults(kiosk_config_t *out)
     memset(out, 0, sizeof(*out));
 
     /* WiFi credentials left empty – user must configure via setup screen. */
-    strncpy(out->server_url,  "https://project-frequency.vercel.app/", sizeof(out->server_url)  - 1);
-    strncpy(out->mqtt_broker,  "mqtts://594d608708f34a7b9607e86258c3b3ae.s1.eu.hivemq.cloud:8883", sizeof(out->mqtt_broker) - 1);
-    strncpy(out->mqtt_user, "frequency", sizeof(out->mqtt_user) - 1);
-    strncpy(out->mqtt_password, "Frequency@123", sizeof(out->mqtt_password) - 1);
-    strncpy(out->api_key, "freq-kiosk-4aaf57f19c605f82ac70fe65", sizeof(out->api_key) - 1);
+    strncpy(out->server_url,  "https://project-frequency.vercel.app", sizeof(out->server_url)  - 1);
+    strncpy(out->mqtt_broker, DEFAULT_MQTT_BROKER, sizeof(out->mqtt_broker) - 1);
+    /* Network credentials are provisioned through the setup flow. Never ship
+     * shared MQTT/API credentials in firmware defaults. */
 }

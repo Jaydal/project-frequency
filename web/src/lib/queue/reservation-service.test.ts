@@ -33,6 +33,7 @@ function withSettingsMock(db: any) {
         const chain: any = {
           select: vi.fn(() => chain),
           eq: vi.fn((_col: string, val: string) => { key = val; return chain; }),
+          in: vi.fn(() => chain),
           single: vi.fn(async () => ({ data: { value: SETTINGS[key] ?? '300' }, error: null })),
         };
         return chain;
@@ -66,6 +67,7 @@ describe('finalizeBooking', () => {
         const chain: any = {
           select: vi.fn(() => chain),
           eq: vi.fn((_col: string, val: string) => { key = val; return chain; }),
+          in: vi.fn(() => chain),
           single: vi.fn(async () => ({ data: { value: SETTINGS[key] ?? '300' }, error: null })),
         };
         return chain;
@@ -129,6 +131,7 @@ describe('finalizeBooking', () => {
         const chain: any = {
           select: vi.fn(() => chain),
           eq: vi.fn((_col: string, val: string) => { key = val; return chain; }),
+          in: vi.fn(() => chain),
           single: vi.fn(async () => ({ data: { value: SETTINGS[key] ?? '300' }, error: null })),
         };
         return chain;

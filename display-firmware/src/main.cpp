@@ -164,9 +164,97 @@ void setup() {
 
   g_display->setConnecting(false);
 
-  // ── Sync time via SNTP ─────────────────────────────────────────────────────
+  // HTTPS certificate validation requires a valid clock before bootstrapping
+  // the MQTT credentials.
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  time_t now = 0;
+  for (uint8_t i = 0; i < 20 && now < 1700000000; ++i) {
+    time(&now);
+    delay(250);
+  }
+
   log_i("[main] SNTP time sync initiated");
+
+  int fetchStatus = 0;
+  bool bootstrapped = g_portal.fetchMqttConfig(&fetchStatus);
+
+  String broker = g_portal.getMqttBroker();
+  String user   = g_portal.getMqttUser();
+  String mpwd   = g_portal.getMqttPass();
+  bool hasMqttCreds = (broker.length() > 0 && user.length() > 0 && mpwd.length() > 0);
+
+  // If initial bootstrap fails and we have no stored credentials, enter diagnostic retry
+  if (!bootstrapped && !hasMqttCreds) {
+    log_w("[main] Initial bootstrap failed (status=%d). Entering diagnostic retry...", fetchStatus);
+    unsigned long retryStart = millis();
+    while (!bootstrapped && !hasMqttCreds && (millis() - retryStart < 30000)) {
+      String deviceMac = WiFi.macAddress();
+      deviceMac.toLowerCase();
+      deviceMac.replace(":", "");
+      String failMsg = (fetchStatus == 401)
+        ? ("UNAUTHORIZED (401) - MAC: " + deviceMac + " - ADD IN DASHBOARD")
+        : ("CONFIG FAILED (" + String(fetchStatus) + ") - RETRYING...");
+
+      ZoneRenderInfo zones[1];
+      zones[0].panelStart = 0;
+      zones[0].panelEnd = 2;
+      zones[0].lineCount = 1;
+      zones[0].scaleX = 1;
+      zones[0].scaleY = 1;
+      zones[0].valign = "middle";
+      zones[0].borderCount = 0;
+      zones[0].lines[0].text = failMsg;
+      zones[0].lines[0].effect = "SCROLL";
+      zones[0].lines[0].align = "center";
+      zones[0].lines[0].marginTop = 0;
+      zones[0].lines[0].marginBottom = 2;
+      zones[0].lines[0].r = 255;
+      zones[0].lines[0].g = (fetchStatus == 401) ? 50 : 200;
+      zones[0].lines[0].b = 50;
+      g_display->setZones(zones, 1);
+
+      unsigned long waitStart = millis();
+      while (millis() - waitStart < 3000) {
+        checkResetButton();
+        g_display->update();
+        delay(20);
+      }
+      bootstrapped = g_portal.fetchMqttConfig(&fetchStatus);
+      broker = g_portal.getMqttBroker();
+      user   = g_portal.getMqttUser();
+      mpwd   = g_portal.getMqttPass();
+      hasMqttCreds = (broker.length() > 0 && user.length() > 0 && mpwd.length() > 0);
+    }
+  }
+
+  // If still completely unconfigured after retries, open setup portal
+  if (!bootstrapped && !hasMqttCreds) {
+    log_e("[main] Could not obtain MQTT credentials - opening portal");
+    g_portalMode = true;
+    ZoneRenderInfo zones[1];
+    zones[0].panelStart = 0;
+    zones[0].panelEnd = 2;
+    zones[0].lineCount = 1;
+    zones[0].scaleX = 1;
+    zones[0].scaleY = 1;
+    zones[0].valign = "middle";
+    zones[0].borderCount = 0;
+    zones[0].lines[0].text = (fetchStatus == 401)
+      ? ("UNAUTHORIZED (401) - " + g_portal.getPortalSSID())
+      : ("SETUP: " + g_portal.getPortalSSID());
+    zones[0].lines[0].effect = "SCROLL";
+    zones[0].lines[0].align = "center";
+    zones[0].lines[0].marginTop = 0;
+    zones[0].lines[0].marginBottom = 2;
+    zones[0].lines[0].r = 255;
+    zones[0].lines[0].g = 255;
+    zones[0].lines[0].b = 255;
+    g_display->setZones(zones, 1);
+    g_display->update();
+    g_portal.setDisplayDriver(g_display);
+    g_portal.startPortal();
+    return;
+  }
 
   // ── Normal boot: MQTT client with saved settings ───────────────────────────
   g_mqtt = new MqttDisplayClient(*g_display);
@@ -222,7 +310,7 @@ void setup() {
 #ifdef ENABLE_OTA
   ArduinoOTA.setHostname(("freq-display-" + court).c_str());
   #ifndef OTA_PASSWORD
-  #define OTA_PASSWORD "freqota"
+  #error "ENABLE_OTA requires OTA_PASSWORD supplied via build configuration"
   #endif
   ArduinoOTA.setPassword(OTA_PASSWORD);
   ArduinoOTA.onStart([&]() {
@@ -250,6 +338,19 @@ void setup() {
     g_portal.saveField("court_id", String(newCourtId));
     delay(500);
     ESP.restart();
+  });
+
+  g_mqtt->setConfigRefreshCallback([](String& outBroker, uint16_t& outPort, String& outUser, String& outPass, String& outCourt) -> bool {
+    int status = 0;
+    if (g_portal.fetchMqttConfig(&status)) {
+      outBroker = g_portal.getMqttBroker();
+      outPort   = g_portal.getMqttPort();
+      outUser   = g_portal.getMqttUser();
+      outPass   = g_portal.getMqttPass();
+      outCourt  = g_portal.getCourtId();
+      return true;
+    }
+    return false;
   });
 
   g_mqtt->begin(ssid.c_str(), pass.c_str(), broker.c_str(), port,

@@ -56,6 +56,13 @@ static const char *TAG = "main";
 /** LVGL handler delay between iterations (milliseconds). */
 #define LVGL_HANDLER_PERIOD_MS 5
 
+/**
+ * Maximum time to wait for an RGB-panel frame boundary.  The timeout keeps
+ * boot and recovery paths alive if the panel has not started generating
+ * VSYNC events yet.
+ */
+#define LVGL_VSYNC_WAIT_TIMEOUT_MS 100
+
 /* -------------------------------------------------------------------------- */
 /*  Private functions                                                         */
 /* -------------------------------------------------------------------------- */
@@ -132,6 +139,29 @@ static void prv_wifi_init_sta(void)
     tzset();
 }
 
+static bool prv_wifi_has_ip(void)
+{
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!netif) return false;
+    esp_netif_ip_info_t ip_info;
+    return esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0;
+}
+
+static void prv_wait_for_wifi_ip(void)
+{
+    kiosk_config_t cfg;
+    if (!kiosk_config_exists() || !kiosk_config_load(&cfg) || cfg.wifi_ssid[0] == '\0') {
+        return; /* Setup mode must remain immediately available. */
+    }
+
+    const int max_wait_ms = 10000;
+    for (int elapsed = 0; elapsed < max_wait_ms && !prv_wifi_has_ip(); elapsed += 250) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
+    ESP_LOGI(TAG, "WiFi startup wait complete (IP: %s)",
+             prv_wifi_has_ip() ? "ready" : "not available");
+}
+
 /**
  * @brief LVGL timer callback that pumps the MQTT transport layer.
  */
@@ -167,6 +197,16 @@ static void prv_lvgl_task(void *arg)
     ESP_LOGI(TAG, "LVGL task started on core %d", xPortGetCoreID());
 
     for (;;) {
+        /*
+         * The display uses one panel-owned PSRAM framebuffer in LVGL direct
+         * mode.  Rendering while the RGB peripheral is scanning that same
+         * buffer causes visible tearing (most obvious on keyboard presses).
+         * The RGB VSYNC callback signals this task, so begin each redraw at a
+         * frame boundary.  A bounded timeout avoids deadlocking during panel
+         * startup or recovery when no VSYNC has arrived yet.
+         */
+        (void)ulTaskNotifyTake(pdTRUE,
+                               pdMS_TO_TICKS(LVGL_VSYNC_WAIT_TIMEOUT_MS));
         lv_timer_handler();
         vTaskDelay(pdMS_TO_TICKS(LVGL_HANDLER_PERIOD_MS));
     }
@@ -195,6 +235,8 @@ void app_main(void)
 
     /* 4. WiFi subsystem (STA, no connection) */
     prv_wifi_init_sta();
+    /* Do not race the first REST request against DHCP. */
+    prv_wait_for_wifi_ip();
 
     /* 5. Application UI */
     ui_app_init();

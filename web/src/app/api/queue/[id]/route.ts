@@ -1,19 +1,62 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { publishAllDisplays } from '@/lib/display/publish-all';
+import { hasMatchingApiKey } from '@/lib/auth/authorization';
+import { hasStaffRole, isSameMember } from '@/lib/auth/authorization';
+import { authenticateControllerDevice } from '@/lib/controller-device-auth';
+import { getTerminalMemberId } from '@/lib/terminal-auth';
+import { leaveQueue } from '@/lib/queue/queue-service';
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
 
-  const apiKey = _request.headers.get('X-API-Key');
-  if (!apiKey || apiKey !== process.env.INTERNAL_API_KEY) {
+  const { id } = await params;
+
+  const internalAuthorized = hasMatchingApiKey(request.headers.get('x-api-key'), process.env.INTERNAL_API_KEY);
+  const controllerDevice = await authenticateControllerDevice(request, 'kiosk');
+  const terminalMemberId = getTerminalMemberId(request.headers.get('x-terminal-token'));
+
+  let supabase;
+  let user = null;
+  if (internalAuthorized || controllerDevice || terminalMemberId) {
+    supabase = createAdminClient();
+  } else {
+    supabase = await createClient();
+    const authResult = await (supabase as any).auth?.getUser?.();
+    user = authResult?.data?.user ?? null;
+  }
+  const staffAuthorized = hasStaffRole(user);
+
+  if (!internalAuthorized && !controllerDevice && !terminalMemberId && !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id } = await params;
-  const supabase = await createClient();
+  const { data: queueEntry } = await supabase
+    .from('queue_entries')
+    .select('id, member_id, status')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (queueEntry) {
+    if (!internalAuthorized && !controllerDevice && !staffAuthorized && !terminalMemberId && !isSameMember(user, queueEntry.member_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (terminalMemberId && terminalMemberId !== queueEntry.member_id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!['waiting', 'offered'].includes(queueEntry.status)) {
+      return NextResponse.json({ error: 'Queue entry cannot be cancelled' }, { status: 409 });
+    }
+    await leaveQueue(id);
+    return NextResponse.json({ ok: true, cancelled: 'queue_entry' });
+  }
+
+  if (!internalAuthorized && !staffAuthorized) {
+    return NextResponse.json({ error: 'Queue entry not found' }, { status: 404 });
+  }
 
   const { data: game } = await supabase.from('games').select('status, court_id').eq('id', id).single();
   if (!game || game.status !== 'Scheduled')
@@ -35,8 +78,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
 
-  const apiKey = _request.headers.get('X-API-Key');
-  if (!apiKey || apiKey !== process.env.INTERNAL_API_KEY) {
+  if (!hasMatchingApiKey(_request.headers.get('x-api-key'), process.env.INTERNAL_API_KEY)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

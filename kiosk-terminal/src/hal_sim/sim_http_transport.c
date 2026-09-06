@@ -70,6 +70,8 @@ bool http_transport_request(const char *method, const char *url,
   return ok;
 }
 
+const char *http_transport_last_error(void) { return "transport failure"; }
+
 void http_response_free(http_response_t *out) {
   if (out && out->body) {
     free(out->body);

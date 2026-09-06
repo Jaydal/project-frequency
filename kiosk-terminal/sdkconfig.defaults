@@ -43,8 +43,20 @@ CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=y
 # ── TLS (mbedTLS) ───────────────────────────────────────────────────────────
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# LVGL fonts referenced by the kiosk UI.
+CONFIG_LV_FONT_MONTSERRAT_12=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_32=y
+
+# Disable LVGL's default button grow animation; it tears with the single
+# PSRAM framebuffer used by the RGB panel.
+# CONFIG_LV_THEME_DEFAULT_GROW is not set

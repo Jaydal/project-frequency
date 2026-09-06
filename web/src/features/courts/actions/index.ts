@@ -17,9 +17,23 @@ export async function updateCourt(courtId: string, name: string, newId?: string)
 
 export async function deleteCourt(courtId: string) {
   const supabase = await createClient();
+
+  // queue_entries.court_id is nullable but intentionally does not cascade:
+  // preserve queue history while releasing any entries assigned to a court
+  // that is being removed. Games retain their historical rows via the
+  // existing ON DELETE CASCADE constraint.
+  const { error: detachError } = await supabase
+    .from('queue_entries')
+    .update({ court_id: null, updated_at: new Date().toISOString() })
+    .eq('court_id', courtId);
+  if (detachError) return { ok: false, error: detachError.message };
+
   const { error } = await supabase.from('courts').delete().eq('id', courtId);
-  if (error) throw new Error(error.message);
+  if (error) return { ok: false, error: error.message };
   revalidatePath('/courts');
+  revalidatePath('/booking');
+  publishBoardOnce().catch(() => {});
+  return { ok: true as const };
 }
 
 export async function endGame(gameId: string, courtId: string, refund: boolean = false) {
@@ -35,7 +49,7 @@ export async function endGame(gameId: string, courtId: string, refund: boolean =
 
   await supabase
     .from('games')
-    .update({ status: 'Completed', end_time: now })
+    .update({ status: 'Completed', end_time: now, ended_at: now })
     .eq('id', gameId);
 
   if (refund && game.id) {
@@ -139,7 +153,7 @@ export async function requeueGame(gameId: string, courtId: string, position: num
 
   await supabase
     .from('games')
-    .update({ status: 'Completed', end_time: now })
+    .update({ status: 'Completed', end_time: now, ended_at: now })
     .eq('id', gameId);
 
   await processCourtQueue(courtId);

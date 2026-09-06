@@ -88,7 +88,7 @@ export default function HealthPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center gap-3">
         <Activity size={22} className={data.ok ? 'text-emerald-400' : 'text-red-400'} />
-        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">System Health</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">System Health</h1>
         <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
           data.ok
             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
@@ -132,7 +132,7 @@ export default function HealthPage() {
       <Card className="border-zinc-800 bg-zinc-900/30 overflow-hidden">
         <div className="px-5 py-4 border-b border-zinc-800/50 bg-zinc-950/20 flex items-center gap-2">
           <Monitor size={16} className="text-zinc-400" />
-          <h2 className="font-semibold text-zinc-250 text-sm">Court Device Registry</h2>
+          <h2 className="font-semibold text-zinc-100 text-sm">Court Device Registry</h2>
         </div>
         <CardContent className="p-0">
           {courtCount === 0 ? (

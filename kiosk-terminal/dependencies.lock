@@ -1,27 +1,65 @@
 dependencies:
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
   espressif/esp_lcd_touch:
     component_hash: 847284c65f8d5aaa9a801f5b3d3dac0ba0a5a2dc1bb68890989e84dd9c4a9d53
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.0.4
   espressif/esp_lcd_touch_gt911:
     component_hash: adf278bb5bf3999502f5c03d85580039fe196a07a6574d27fc8eeeb0e8792edd
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: private
+      version: ^1.0
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.0.4
+  espressif/mqtt:
+    component_hash: fb18bc3b65aa8c94693a9811ffc322cca8a65d92d5ec84983d3e385080e3969c
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.0
   idf:
-    component_hash: null
     source:
       type: idf
-    version: 5.1.2
+    version: 6.1.0
   lvgl/lvgl:
     component_hash: 2567762b19953712ee38789ad8f8de57ad1f6e39283adefbbfc7184ffe662831
+    dependencies: []
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 8.2.0
-manifest_hash: d2bdb57e4729ec2e48f55fb35665fe2cb76c3aea126d191d5c946b3890000503
+direct_dependencies:
+- espressif/cjson
+- espressif/esp_lcd_touch
+- espressif/esp_lcd_touch_gt911
+- espressif/mqtt
+- lvgl/lvgl
+manifest_hash: 56dd9d47fe45f5e11ab2638a7c1f0d0b495a369a54ead27bb885affb959ea078
 target: esp32s3
-version: 1.0.0
+version: 3.0.0

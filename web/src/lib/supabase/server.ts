@@ -38,27 +38,5 @@ export async function createClient() {
     }
   );
 
-  if (process.env.PLAYWRIGHT_TEST_BYPASS_AUTH === '1') {
-    const originalGetUser = client.auth.getUser.bind(client.auth);
-    client.auth.getUser = async (jwt?: string) => {
-      if (jwt) return originalGetUser(jwt);
-      return {
-        data: {
-          user: {
-            id: 'mock-user-123',
-            aud: 'authenticated',
-            role: 'authenticated',
-            email: 'test@example.com',
-            app_metadata: {},
-            user_metadata: {},
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }
-        },
-        error: null
-      } as any;
-    };
-  }
-
   return client;
 }

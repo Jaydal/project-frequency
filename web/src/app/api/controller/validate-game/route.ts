@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { z } from 'zod';
 import { checkControllerKey } from '@/lib/controller-auth';
+import { authenticateControllerDevice } from '@/lib/controller-device-auth';
 import { getRfidFormats } from '@/lib/rfid';
 
 const schema = z.object({
@@ -11,13 +12,18 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (!checkControllerKey(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const device = await authenticateControllerDevice(request, 'kiosk');
+  // Legacy API-key authentication is retained temporarily for already
+  // deployed devices while the allowlist is populated.
+  if (!device && !checkControllerKey(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const body = await request.json();
   const result = schema.safeParse(body);
   if (!result.success) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
 
   const { rfid, duration } = result.data;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const formats = getRfidFormats(rfid);
 
   const { data: card } = await supabase

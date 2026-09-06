@@ -22,6 +22,7 @@ include(FetchContent)
 # find lv_conf.h, so it adds our project root to its own PUBLIC include
 # dirs — without this, LVGL's own .c files can't find lv_conf.h at all.
 set(LV_CONF_PATH ${CMAKE_SOURCE_DIR}/lv_conf.h CACHE STRING "" FORCE)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
   lvgl
@@ -63,6 +64,7 @@ add_executable(kiosk_sim
   src/hal_sim/sim_wifi_scanner.c
   src/hal_sim/sim_pn532.c
   src/hal_sim/sim_nfc_reader.c
+  src/hal_sim/sim_relay.c
   src/net/freq_rest_client.c
   src/net/board_parser.c
   src/data/live/live_data_provider.c
@@ -78,6 +80,10 @@ add_executable(kiosk_sim
   src/ui/widgets/step_booking_success.c
   src/ui/widgets/step_booking_confirm.c
   src/ui/widgets/step_error.c
+  src/ui/assets/img_logo_submark.c
+  src/ui/assets/img_logo_secondary.c
+  src/ui/assets/img_logo_hero.c
+  src/ui/assets/img_logo_watermark.c
   src/ui/screens/queue_board.c
   src/ui/screens/terminal_layout.c
   src/ui/screens/setup_screen.c
@@ -88,6 +94,7 @@ target_include_directories(kiosk_sim PRIVATE
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_SOURCE_DIR}/src/net
+  ${CMAKE_SOURCE_DIR}/src/ui/assets
   ${SDL2_INCLUDE_DIRS}
   ${CURL_INCLUDE_DIRS}
   ${MOSQUITTO_INCLUDE_DIRS}

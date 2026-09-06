@@ -22,7 +22,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-150">System Settings</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">System Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">Configure pickleball court products, rates, display layouts, and device parameters</p>
       </div>
 

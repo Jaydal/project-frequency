@@ -12,7 +12,7 @@
 #include "esp32_display.h"
 
 #include "driver/gpio.h"
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
@@ -58,6 +58,8 @@ static const char *TAG = "display";
 
 static esp_lcd_panel_handle_t s_panel = NULL;
 static esp_lcd_touch_handle_t s_touch = NULL;
+static i2c_master_bus_handle_t s_i2c_bus = NULL;
+static i2c_master_dev_handle_t s_ioexp_dev = NULL;
 
 static lv_disp_draw_buf_t s_draw_buf;
 static lv_disp_drv_t      s_disp_drv;
@@ -70,9 +72,7 @@ static uint8_t s_ioexp_out = 0xFF;
 /* Write to a register on the CH32V003 IO-expander. */
 static esp_err_t ioexp_write_reg(uint8_t reg, uint8_t value) {
   const uint8_t buf[2] = {reg, value};
-  return i2c_master_write_to_device(I2C_PORT, IOEXP_ADDR,
-                                    buf, sizeof(buf),
-                                    pdMS_TO_TICKS(100));
+  return i2c_master_transmit(s_ioexp_dev, buf, sizeof(buf), 100);
 }
 
 static void ioexp_set_pin(uint8_t pin, bool high) {
@@ -87,16 +87,23 @@ static void ioexp_set_pin(uint8_t pin, bool high) {
 /* ── I2C bus init ──────────────────────────────────────────────────────── */
 
 static void i2c_bus_init(void) {
-  const i2c_config_t cfg = {
-      .mode             = I2C_MODE_MASTER,
+  const i2c_master_bus_config_t cfg = {
+      .i2c_port         = I2C_PORT,
       .sda_io_num       = I2C_SDA_PIN,
       .scl_io_num       = I2C_SCL_PIN,
-      .sda_pullup_en    = GPIO_PULLUP_ENABLE,
-      .scl_pullup_en    = GPIO_PULLUP_ENABLE,
-      .master.clk_speed = I2C_FREQ_HZ,
+      .clk_source       = I2C_CLK_SRC_DEFAULT,
+      .glitch_ignore_cnt = 7,
+      .flags.enable_internal_pullup = true,
   };
-  ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &cfg));
-  ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, I2C_MODE_MASTER, 0, 0, 0));
+  ESP_ERROR_CHECK(i2c_new_master_bus(&cfg, &s_i2c_bus));
+
+  const i2c_device_config_t ioexp_cfg = {
+      .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+      .device_address = IOEXP_ADDR,
+      .scl_speed_hz = I2C_FREQ_HZ,
+  };
+  ESP_ERROR_CHECK(i2c_master_bus_add_device(s_i2c_bus, &ioexp_cfg,
+                                             &s_ioexp_dev));
   ESP_LOGI(TAG, "I2C master initialised on SDA=%d SCL=%d @ %d Hz",
            I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQ_HZ);
 }
@@ -183,11 +190,10 @@ static void lcd_panel_init(void) {
           .flags.pclk_active_neg = 1,
       },
       .data_width = 16,  /* RGB565 */
-      .bits_per_pixel = 16,  /* RGB565 color depth */
       .num_fbs    = 1,   /* Single-buffered to prevent strobe/tearing in direct mode */
       .bounce_buffer_size_px = LCD_H_RES * 10,
-      .sram_trans_align  = 4,
-      .psram_trans_align = 64,
+      .in_color_format = LCD_COLOR_FMT_RGB565,
+      .out_color_format = LCD_COLOR_FMT_RGB565,
       .hsync_gpio_num  = PIN_HSYNC,
       .vsync_gpio_num  = PIN_VSYNC,
       .de_gpio_num     = PIN_DE,
@@ -253,7 +259,9 @@ static void lvgl_display_init(void) {
   lv_disp_drv_register(&s_disp_drv);
 
   esp_lcd_rgb_panel_event_callbacks_t rgb_cbs = {
-      .on_bounce_frame_finish = lvgl_vsync_notify_cb,
+      /* Wake LVGL only at the real frame boundary.  Bounce-buffer completion
+       * can fire several times during a frame and would reintroduce mid-scan
+       * redraws when used as the render gate. */
       .on_vsync = lvgl_vsync_notify_cb,
   };
   ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(
@@ -310,12 +318,18 @@ static void touch_read_cb(lv_indev_drv_t *drv, lv_indev_data_t *data) {
 }
 
 static void touch_init(void) {
-  const esp_lcd_panel_io_i2c_config_t io_cfg =
+  /*
+   * The GT911 helper macro predates ESP-IDF's I2C master implementation and
+   * leaves scl_speed_hz at zero.  IDF 6.x validates this field when creating
+   * the panel IO device, so explicitly use the bus frequency here.
+   */
+  esp_lcd_panel_io_i2c_config_t io_cfg =
       ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+  io_cfg.scl_speed_hz = I2C_FREQ_HZ;
 
   esp_lcd_panel_io_handle_t io_handle = NULL;
   ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(
-      (esp_lcd_i2c_bus_handle_t)I2C_PORT, &io_cfg, &io_handle));
+      s_i2c_bus, &io_cfg, &io_handle));
 
   const esp_lcd_touch_config_t touch_cfg = {
       .x_max        = LCD_H_RES,

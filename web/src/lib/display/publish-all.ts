@@ -1,8 +1,10 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { publishDisplay } from '@/lib/mqtt';
 import { generatePayload, DisplaySequenceConfig } from '@/lib/display/sports-caster';
 import { publishBoardOnce } from '@/lib/queue/board-publisher';
-import { getBoardSnapshot } from '@/lib/queue/board-snapshot';
+import { getBoardSnapshot, getBoardSnapshotSignature } from '@/lib/queue/board-snapshot';
+
+let lastPublishedSignature: string | undefined;
 
 export interface PublishAllResult {
   ok: boolean;
@@ -14,8 +16,12 @@ export async function publishAllDisplays(): Promise<PublishAllResult> {
   let failed = 0;
   let total = 0;
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const snapshot = await getBoardSnapshot(supabase);
+    const signature = getBoardSnapshotSignature(snapshot);
+    if (lastPublishedSignature === signature) {
+      return { ok: true, failed: 0, total: 0 };
+    }
 
     const { data: settingsRows } = await supabase
       .from('settings')
@@ -125,6 +131,7 @@ export async function publishAllDisplays(): Promise<PublishAllResult> {
     }
 
     publishBoardOnce().catch(() => {});
+    if (failed === 0) lastPublishedSignature = signature;
   } catch (err) {
     console.error('Failed to publish all displays:', err);
     failed++;

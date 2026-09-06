@@ -1,16 +1,16 @@
 import { createClient } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { isOverlapping, type CourtInfo } from './index';
 
 
 export async function findAvailableCourt(
-  _requestedStart: Date,
+  requestedStart: Date,
   duration: number,
   partySize: number,
   excludeCourtId?: string
 ): Promise<CourtInfo | null> {
   const supabase = await createClient();
-  const now = new Date();
-  const end = new Date(now.getTime() + duration * 60_000);
+  const end = new Date(requestedStart.getTime() + duration * 60_000);
 
   const { data: courts } = await supabase
     .from('courts')
@@ -21,7 +21,7 @@ export async function findAvailableCourt(
 
   for (const court of courts) {
     if (excludeCourtId && court.id === excludeCourtId) continue;
-    const slotFree = await isSlotAvailable(court.id, now, end);
+    const slotFree = await isSlotAvailable(court.id, requestedStart, end);
     if (slotFree) return { id: court.id, name: court.name, status: court.status };
   }
 
@@ -32,9 +32,10 @@ export async function isSlotAvailable(
   courtId: string,
   start: Date,
   end: Date,
-  excludeQueueEntryId?: string
+  excludeQueueEntryId?: string,
+  client?: SupabaseClient
 ): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = client ?? await createClient();
 
   const { data: overlapping } = await supabase
     .from('games')
@@ -76,9 +77,12 @@ export async function isSlotAvailable(
   if (!straddling) return true;
 
   for (const game of straddling) {
-    // If it's a Scheduled game that is past its start time, it's a no-show ("done already")
-    if ((game as any).status === 'Scheduled' && new Date(game.start_time).getTime() <= start.getTime()) {
-      continue;
+    if ((game as any).status === 'Scheduled') {
+      const { GRACE_PERIOD_MINUTES } = await import('@/lib/queue/reservation-policy');
+      const graceEndMs = new Date(game.start_time).getTime() + (GRACE_PERIOD_MINUTES * 60000);
+      if (graceEndMs <= start.getTime()) {
+        continue; // It's past grace period, treat as no-show
+      }
     }
 
     const gameEnd = new Date(
@@ -90,4 +94,68 @@ export async function isSlotAvailable(
   }
 
   return true;
+}
+
+/**
+ * Finds the latest possible cutoff time across all currently available courts.
+ * Returns { courtId, cutoff } where cutoff is null if uncapped, or a Date if capped.
+ * Returns undefined if no courts available.
+ */
+export async function getPlayNowCutoff(supabase: any, now: Date): Promise<{ courtId: string, courtName: string, cutoff: Date | null } | undefined> {
+
+  const { data: courts } = await supabase
+    .from('courts')
+    .select('id, name, status')
+    .in('status', ['Available']);
+
+  if (!courts || courts.length === 0) return undefined; // No available courts right now
+
+  let bestOption: { courtId: string, courtName: string, cutoff: Date | null } | undefined = undefined;
+
+  for (const court of courts) {
+    const start = now;
+    const end = new Date(start.getTime() + 60_000);
+    const isFreeNow = await isSlotAvailable(court.id, start, end);
+    
+    if (!isFreeNow) continue; // Court is occupied
+
+    const { data: nextGames } = await supabase
+      .from('games')
+      .select('start_time')
+      .eq('court_id', court.id)
+      .in('status', ['Scheduled'])
+      .gt('start_time', start.toISOString())
+      .order('start_time', { ascending: true })
+      .limit(1);
+
+    const nextGameStart = nextGames?.[0]?.start_time ? new Date(nextGames[0].start_time) : null;
+
+    const { data: nextOffers } = await supabase
+      .from('queue_entries')
+      .select('requested_start')
+      .eq('court_id', court.id)
+      .in('status', ['offered'])
+      .gt('requested_start', start.toISOString())
+      .order('requested_start', { ascending: true })
+      .limit(1);
+    
+    const nextOfferStart = nextOffers?.[0]?.requested_start ? new Date(nextOffers[0].requested_start) : null;
+
+    let nextReservation: Date | null = null;
+    if (nextGameStart && nextOfferStart) {
+      nextReservation = nextGameStart < nextOfferStart ? nextGameStart : nextOfferStart;
+    } else {
+      nextReservation = nextGameStart || nextOfferStart;
+    }
+
+    if (nextReservation === null) {
+      return { courtId: court.id, courtName: court.name, cutoff: null }; // Free forever, best option!
+    }
+
+    if (!bestOption || (bestOption.cutoff && nextReservation > bestOption.cutoff)) {
+      bestOption = { courtId: court.id, courtName: court.name, cutoff: nextReservation };
+    }
+  }
+
+  return bestOption;
 }

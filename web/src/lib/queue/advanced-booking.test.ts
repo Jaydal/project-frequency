@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 vi.mock('./queue-service', () => ({ deductWallet: vi.fn(), refundTransaction: vi.fn() }))
 vi.mock('@/lib/products-config-types', () => ({ getCost: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { deductWallet } from './queue-service'
 import { getCost } from '@/lib/products-config-types'
 import { createAdvancedBooking } from './advanced-booking'
@@ -176,6 +178,7 @@ describe('createAdvancedBooking', () => {
     })
 
     vi.mocked(createClient).mockResolvedValue(db as any)
+    vi.mocked(createAdminClient).mockReturnValue(db as any)
 
     const start = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     const input = {

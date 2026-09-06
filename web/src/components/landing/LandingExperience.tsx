@@ -5,11 +5,13 @@ import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 
 export default function LandingExperience({ rateEntries }: { rateEntries: [string, number][] }) {
   const containerRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
+  const { theme, setTheme } = useTheme();
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"]
@@ -54,23 +56,32 @@ export default function LandingExperience({ rateEntries }: { rateEntries: [strin
   }, []);
 
   return (
-    <div ref={containerRef} className="bg-[#050914] text-white selection:bg-[#32A45E] selection:text-white font-sans overflow-x-hidden">
+    <div ref={containerRef} className={`${theme === 'light' ? 'bg-[#f5f8f6] text-[#142019]' : 'bg-[#050914] text-white'} selection:bg-[#32A45E] selection:text-white font-sans overflow-x-hidden`}>
+      <button type="button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle light and dark mode" className="fixed right-5 top-5 z-50 rounded-full border border-white/15 bg-black/25 p-2.5 text-white/80 backdrop-blur-md transition-colors hover:bg-black/40 hover:text-white">
+        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
       
       {/* 3D PICKLEBALL - THE STORYTELLING THREAD */}
       <motion.div 
-        className="fixed top-1/2 left-1/2 w-[400px] h-[400px] md:w-[600px] md:h-[600px] pointer-events-none z-30 mix-blend-screen flex items-center justify-center -mt-[200px] -ml-[200px] md:-mt-[300px] md:-ml-[300px]"
-        style={{ 
-          x: ballX, 
-          y: ballY, 
-          scale: ballScale, 
-          rotate: ballRotate, 
-          opacity: ballOpacity,
-          // Subtle mouse parallax
-          translateX: mousePos.x * -20,
-          translateY: mousePos.y * -20
-        }}
-      >
-        <Image src="/pickleball.jpg" alt="3D Pickleball" fill className="object-contain" priority />
+          className="fixed top-1/2 left-1/2 w-[400px] h-[400px] md:w-[600px] md:h-[600px] pointer-events-none z-30 mix-blend-screen flex items-center justify-center -mt-[200px] -ml-[200px] md:-mt-[300px] md:-ml-[300px]"
+          style={{ 
+            x: ballX, 
+            y: ballY, 
+            scale: ballScale, 
+            rotate: ballRotate,
+            opacity: ballOpacity,
+            translateX: mousePos.x * -20,
+            translateY: mousePos.y * -20
+          }}
+        >
+        <Image
+          src="/pickleball.webp"
+          alt="3D Pickleball"
+          fill
+          sizes="(max-width: 768px) 400px, 600px"
+          className="object-contain"
+          priority
+        />
       </motion.div>
 
       {/* HEADER */}
@@ -80,17 +91,16 @@ export default function LandingExperience({ rateEntries }: { rateEntries: [strin
             src="/secondary-logo.svg" 
             alt="Paddle Point" 
             width={320} height={206} 
-            className="h-14 md:h-20 w-auto grayscale brightness-0 invert transition-all duration-300" 
+            sizes="(max-width: 768px) 220px, 320px"
+            className="h-28 md:h-36 w-auto max-w-[320px] md:max-w-[360px] grayscale brightness-0 invert transition-all duration-300"
           />
         </div>
         <nav className="flex gap-6 items-center pointer-events-auto">
           {/* <Link href="/login" className="text-sm font-semibold uppercase tracking-widest hover:text-[#32A45E] transition-colors text-white">
             Staff
           </Link> */}
-          <Link href="/terminal">
-            <Button className="rounded-full bg-white text-[#050914] hover:bg-[#32A45E] hover:text-white uppercase font-bold tracking-widest px-8 py-6 transition-colors">
-              Book Now
-            </Button>
+          <Link href="/booking" className="flex items-center justify-center rounded-full bg-white text-[#050914] hover:bg-[#32A45E] hover:text-white uppercase font-bold tracking-widest px-8 py-6 transition-colors">
+            Book Now
           </Link>
         </nav>
       </header>
@@ -178,10 +188,8 @@ export default function LandingExperience({ rateEntries }: { rateEntries: [strin
             </div>
 
             <div className="flex flex-col items-center">
-              <Link href="/terminal">
-                <Button size="xl" className="rounded-full bg-[#32A45E] text-white hover:bg-white hover:text-[#050914] transition-all duration-300 uppercase font-black tracking-widest px-16 py-10 text-2xl shadow-[0_0_80px_-10px_rgba(50,164,94,0.6)] hover:shadow-none hover:scale-105">
-                  Start Playing
-                </Button>
+              <Link href="/booking" className="flex items-center justify-center rounded-full bg-[#32A45E] text-white hover:bg-white hover:text-[#050914] transition-all duration-300 uppercase font-black tracking-widest px-16 py-10 text-2xl shadow-[0_0_80px_-10px_rgba(50,164,94,0.6)] hover:shadow-none hover:scale-105">
+                Start Playing
               </Link>
             </div>
           </div>
@@ -194,6 +202,7 @@ export default function LandingExperience({ rateEntries }: { rateEntries: [strin
           src="/secondary-logo-3.svg" 
           alt="Paddle Point" 
           width={400} height={260} 
+          sizes="(max-width: 768px) 240px, 400px"
           className="h-24 md:h-32 w-auto opacity-30 hover:opacity-100 hover:grayscale-0 grayscale brightness-0 invert transition-all duration-500" 
         />
         <p className="text-xs font-bold tracking-widest uppercase text-white/40">

@@ -4,12 +4,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef ESP_PLATFORM
+#include "esp_mac.h"
+#endif
 
 static char s_base_url[128] = "http://localhost:3000";
 static char s_api_key[128] = "";
+static char s_device_id[32] = "";
+
+static void ensure_device_id(void) {
+  if (s_device_id[0]) return;
+#ifdef ESP_PLATFORM
+  uint8_t mac[6] = {0};
+  if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+    snprintf(s_device_id, sizeof(s_device_id), "%02x%02x%02x%02x%02x%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  }
+#else
+  snprintf(s_device_id, sizeof(s_device_id), "simulator");
+#endif
+}
+
+void freq_device_id_get(char *out, size_t out_size) {
+  if (!out || out_size == 0) return;
+  ensure_device_id();
+  snprintf(out, out_size, "%s", s_device_id);
+}
 
 void freq_rest_init(const char *base_url, const char *api_key) {
-  if (base_url) snprintf(s_base_url, sizeof(s_base_url), "%s", base_url);
+  ensure_device_id();
+  if (base_url) {
+    snprintf(s_base_url, sizeof(s_base_url), "%s", base_url);
+    size_t len = strlen(s_base_url);
+    while (len > 0 && s_base_url[len - 1] == '/') {
+      s_base_url[--len] = '\0';
+    }
+  }
   if (api_key) snprintf(s_api_key, sizeof(s_api_key), "%s", api_key);
   else s_api_key[0] = '\0';
 }
@@ -64,20 +94,71 @@ static void copy_json_string(const cJSON *obj, const char *key, char *out, size_
   }
 }
 
+freq_rest_result_t freq_rest_fetch_mqtt_config(freq_mqtt_config_t *out) {
+  if (!out) return result_err(0, "Invalid output");
+  memset(out, 0, sizeof(*out));
+  ensure_device_id();
+  if (!s_device_id[0]) return result_err(401, "Device identity unavailable");
+
+  char url[256];
+  int n = snprintf(url, sizeof(url), "%s/api/controller/config", s_base_url);
+  if (n < 0 || n >= (int)sizeof(url)) return result_err(0, "URL too long");
+
+  http_header_t headers[2];
+  size_t header_count = 0;
+  headers[header_count++] = (http_header_t){ "x-device-id", s_device_id };
+  if (s_api_key[0]) headers[header_count++] = (http_header_t){ "x-api-key", s_api_key };
+  http_response_t resp;
+  if (!http_transport_request("GET", url, headers, header_count, NULL, &resp)) {
+    char detail[96];
+    const char *transport_error = http_transport_last_error();
+    snprintf(detail, sizeof(detail), "Cannot reach server (%s)",
+             (transport_error && transport_error[0]) ? transport_error : "unknown HTTP error");
+    return result_err(0, detail);
+  }
+
+  freq_rest_result_t result;
+  const char *json_body = resp.body;
+  while (json_body && *json_body && *json_body != '{') json_body++;
+  cJSON *json = (resp.status == 200 && json_body && *json_body == '{') ? cJSON_Parse(json_body) : NULL;
+  if (!json) {
+    char msg[128];
+    extract_error(resp.body, msg, sizeof(msg));
+    result = result_err(resp.status, msg[0] ? msg : "MQTT configuration unavailable");
+  } else {
+    copy_json_string(json, "broker", out->broker, sizeof(out->broker));
+    copy_json_string(json, "username", out->username, sizeof(out->username));
+    copy_json_string(json, "password", out->password, sizeof(out->password));
+    copy_json_string(json, "boardTopic", out->board_topic, sizeof(out->board_topic));
+    copy_json_string(json, "displayTopicPrefix", out->display_topic_prefix, sizeof(out->display_topic_prefix));
+    result = (out->broker[0] && out->username[0] && out->password[0])
+      ? result_ok(resp.status) : result_err(resp.status, "Incomplete MQTT configuration");
+    cJSON_Delete(json);
+  }
+  http_response_free(&resp);
+  return result;
+}
+
 freq_rest_result_t freq_rest_lookup_member(const char *rfid, kiosk_member_t *out) {
   memset(out, 0, sizeof(*out));
   if (!is_valid_url_path_segment(rfid)) return result_err(0, "Invalid RFID format");
+  ensure_device_id();
 
   char url[256];
   int n = snprintf(url, sizeof(url), "%s/api/controller/member/%s", s_base_url, rfid);
   if (n < 0 || n >= sizeof(url)) return result_err(0, "URL too long");
 
-  http_header_t headers[1];
+  http_header_t headers[2];
   size_t header_count = 0;
+  if (s_device_id[0]) {
+    headers[header_count].name = "x-device-id";
+    headers[header_count].value = s_device_id;
+    header_count++;
+  }
   if (s_api_key[0]) {
-    headers[0].name = "x-api-key";
-    headers[0].value = s_api_key;
-    header_count = 1;
+    headers[header_count].name = "x-api-key";
+    headers[header_count].value = s_api_key;
+    header_count++;
   }
 
   http_response_t resp;
@@ -102,6 +183,30 @@ freq_rest_result_t freq_rest_lookup_member(const char *rfid, kiosk_member_t *out
       copy_json_string(json, "lastName", out->last_name, sizeof(out->last_name));
       const cJSON *balance = cJSON_GetObjectItemCaseSensitive(json, "balance");
       if (cJSON_IsNumber(balance)) out->balance = (int32_t)balance->valuedouble;
+      
+      const cJSON *decision = cJSON_GetObjectItemCaseSensitive(json, "decision");
+      if (decision) {
+        char type_str[64];
+        copy_json_string(decision, "type", type_str, sizeof(type_str));
+        if (strcmp(type_str, "play now") == 0) out->decision.type = RFID_DECISION_PLAY_NOW;
+        else if (strcmp(type_str, "check-in scheduled") == 0) out->decision.type = RFID_DECISION_CHECK_IN_SCHEDULED;
+        else if (strcmp(type_str, "already active") == 0) out->decision.type = RFID_DECISION_ALREADY_ACTIVE;
+        else if (strcmp(type_str, "already queued") == 0) out->decision.type = RFID_DECISION_ALREADY_QUEUED;
+        else if (strcmp(type_str, "no eligible window") == 0) out->decision.type = RFID_DECISION_NO_ELIGIBLE_WINDOW;
+        else out->decision.type = RFID_DECISION_MEMBER_UNAVAILABLE;
+
+        copy_json_string(decision, "courtId", out->decision.court_id, sizeof(out->decision.court_id));
+        copy_json_string(decision, "courtName", out->decision.court_name, sizeof(out->decision.court_name));
+        copy_json_string(decision, "gameId", out->decision.game_id, sizeof(out->decision.game_id));
+        copy_json_string(decision, "entryId", out->decision.entry_id, sizeof(out->decision.entry_id));
+        copy_json_string(decision, "reason", out->decision.reason, sizeof(out->decision.reason));
+        const cJSON *dur = cJSON_GetObjectItemCaseSensitive(decision, "duration");
+        if (cJSON_IsNumber(dur)) out->decision.duration = (int32_t)dur->valuedouble;
+        const cJSON *cap = cJSON_GetObjectItemCaseSensitive(decision, "capped");
+        if (cJSON_IsBool(cap)) out->decision.capped = cJSON_IsTrue(cap);
+        copy_json_string(decision, "cutoffTime", out->decision.cutoff_time, sizeof(out->decision.cutoff_time));
+      }
+      
       cJSON_Delete(json);
       printf("REST: OK! Member=%s %s, balance=%ld\n", out->first_name, out->last_name, (long)out->balance);
       result = result_ok(resp.status);
@@ -145,10 +250,22 @@ freq_rest_result_t freq_rest_join_queue(const char *member_uuid, const char *sta
     free(req_body);
     return result_err(0, "URL too long");
   }
-  http_header_t headers[1] = { { "Content-Type", "application/json" } };
+  ensure_device_id();
+  http_header_t headers[3] = { { "Content-Type", "application/json" } };
+  size_t header_count = 1;
+  if (s_device_id[0]) {
+    headers[header_count].name = "x-device-id";
+    headers[header_count].value = s_device_id;
+    header_count++;
+  }
+  if (s_api_key[0]) {
+    headers[header_count].name = "x-api-key";
+    headers[header_count].value = s_api_key;
+    header_count++;
+  }
 
   http_response_t resp;
-  bool sent = http_transport_request("POST", url, headers, 1, req_body, &resp);
+  bool sent = http_transport_request("POST", url, headers, header_count, req_body, &resp);
   free(req_body);
   if (!sent) return result_err(0, "Cannot reach server");
 
@@ -186,12 +303,18 @@ freq_rest_result_t freq_rest_cancel_queue(const char *entry_id) {
   int n = snprintf(url, sizeof(url), "%s/api/queue/%s", s_base_url, entry_id);
   if (n < 0 || n >= sizeof(url)) return result_err(0, "URL too long");
 
-  http_header_t headers[1];
+  ensure_device_id();
+  http_header_t headers[2];
   size_t header_count = 0;
+  if (s_device_id[0]) {
+    headers[header_count].name = "x-device-id";
+    headers[header_count].value = s_device_id;
+    header_count++;
+  }
   if (s_api_key[0]) {
-    headers[0].name = "x-api-key";
-    headers[0].value = s_api_key;
-    header_count = 1;
+    headers[header_count].name = "x-api-key";
+    headers[header_count].value = s_api_key;
+    header_count++;
   }
 
   http_response_t resp;
@@ -208,6 +331,27 @@ freq_rest_result_t freq_rest_cancel_queue(const char *entry_id) {
     result = result_err(resp.status, msg[0] ? msg : "Cancel failed");
   }
 
+  http_response_free(&resp);
+  return result;
+}
+
+freq_rest_result_t freq_rest_advance_queue(void) {
+  char url[256];
+  int n = snprintf(url, sizeof(url), "%s/api/queue/advance", s_base_url);
+  if (n < 0 || n >= (int)sizeof(url)) return result_err(0, "URL too long");
+
+  ensure_device_id();
+  http_header_t headers[2];
+  size_t header_count = 0;
+  if (s_device_id[0]) headers[header_count++] = (http_header_t){ "x-device-id", s_device_id };
+  if (s_api_key[0]) headers[header_count++] = (http_header_t){ "x-api-key", s_api_key };
+
+  http_response_t resp;
+  if (!http_transport_request("POST", url, headers, header_count, "{}", &resp)) {
+    return result_err(0, "Cannot reach server");
+  }
+  freq_rest_result_t result = (resp.status >= 200 && resp.status < 300)
+    ? result_ok(resp.status) : result_err(resp.status, "Queue advance failed");
   http_response_free(&resp);
   return result;
 }

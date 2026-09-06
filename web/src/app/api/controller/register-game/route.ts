@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { publishDisplay } from '@/lib/mqtt';
 import { generatePayload } from '@/lib/display/sports-caster';
 import { getBoardSnapshot } from '@/lib/queue/board-snapshot';
 import { publishBoardOnce } from '@/lib/queue/board-publisher';
 import { publishAllDisplays } from '@/lib/display/publish-all';
+import { checkControllerKey } from '@/lib/controller-auth';
+import { authenticateControllerDevice } from '@/lib/controller-device-auth';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -18,17 +20,13 @@ const schema = z.object({
   })),
 });
 
-// Hardware controllers authenticate with a static API key in x-api-key header.
-// Set CONTROLLER_API_KEY in .env.local. If unset, the endpoint is open (dev only).
-function checkControllerKey(request: Request): boolean {
-  const apiKey = process.env.CONTROLLER_API_KEY;
-  if (!apiKey) return false;
-  return request.headers.get('x-api-key') === apiKey;
-}
-
 export async function POST(request: Request) {
-  if (!checkControllerKey(request))
+  const device = await authenticateControllerDevice(request, 'kiosk');
+  // Legacy API-key authentication is retained temporarily for already
+  // deployed devices while the allowlist is populated.
+  if (!device && !checkControllerKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const body = await request.json();
   const result = schema.safeParse(body);
@@ -36,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
 
   const { courtName, matchType, duration, players } = result.data;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Fix #1 & #2: single atomic DB transaction — all wallet debits + game creation
   // happen inside one SQL function, so no partial state on crash.
@@ -58,7 +56,7 @@ export async function POST(request: Request) {
       error.message.includes('Invalid RFID')     ? 'Invalid card'         :
       error.message.includes('Wallet not found') ? 'Wallet not found'     :
       error.message.includes('Insufficient')     ? 'Insufficient funds'   :
-                                                   'Registration failed';
+                                                    'Registration failed';
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
