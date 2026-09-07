@@ -52,11 +52,30 @@ To resolve this, the PN532 is routed to **UART2** pins configured as a secondary
 
 ### Build & Flash
 
+#### 1. Initial USB Flash (One-Time)
+Flashes the bootloader, dual-OTA partition table (`partitions.csv` with two 7MB slots), and starts the background OTA server on port 80:
+
 ```bash
 cd kiosk-terminal
-pio run -e esp32s3 -t upload
-pio device monitor -e esp32s3
+pio run -e waveshare-7b -t upload
+pio device monitor -e waveshare-7b
 ```
+
+#### 2. Wireless Local WiFi OTA (Subsequent Updates)
+Once the kiosk is connected to the venue Wi-Fi, you can flash updates through the air:
+
+- **Via Web Browser UI:**
+  Open `http://<kiosk-ip>/update` in any browser on the venue Wi-Fi. Choose `.pio/build/waveshare-7b/firmware.bin` and click **Flash Firmware**. The page displays a real-time progress bar, flashes the inactive OTA partition, and automatically reboots the kiosk in 2 seconds.
+
+- **Via PlatformIO:**
+  ```bash
+  pio run -e waveshare-7b-ota -t upload --upload-port 192.168.1.60
+  ```
+
+- **Via curl:**
+  ```bash
+  curl -f -X POST --data-binary @.pio/build/waveshare-7b/firmware.bin http://192.168.1.60/update
+  ```
 
 ---
 

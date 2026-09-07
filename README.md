@@ -75,13 +75,16 @@ npm run build
 
 ```bash
 cd display-firmware
-pio run -e esp32-hub75-wf2
+# Initial USB flash:
 pio run -e esp32-hub75-wf2 -t upload
+# Wireless Local WiFi OTA:
+pio run -e esp32-hub75-wf2-ota -t upload --upload-port 192.168.1.50
 ```
 
 ### 3. `kiosk-terminal/` — Touchscreen Kiosk
 - **Hardware:** Waveshare ESP32-S3 Touch LCD 7" with PN532 NFC reader routed to UART2 (`GPIO 43/44`) as a secondary I2C bus (`I2C_NUM_1`).
 - **Core Logic:** Subscribes to `freq/board` to render the live queue board, sends REST calls to `/api/terminal/member/[rfid]` and `/api/queue` for player check-in, and renders with LVGL in single-framebuffer direct mode (`direct_mode = 1`) to eliminate screen tearing without PSRAM starvation.
+- **Wireless OTA:** Features a built-in HTTP server on port 80. Flash wirelessly via browser at `http://<kiosk-ip>/update` or via PlatformIO.
 - **Simulator:** Runs natively on macOS/Linux using SDL2.
 
 ```bash
@@ -91,9 +94,11 @@ cmake -B build -S .
 cmake --build build -j
 ./build/kiosk_sim
 
-# Flash hardware
-cd kiosk-terminal
-pio run -e esp32s3 -t upload
+# Flash hardware via USB:
+pio run -e waveshare-7b -t upload
+
+# Flash hardware wirelessly via local WiFi OTA:
+pio run -e waveshare-7b-ota -t upload --upload-port 192.168.1.60
 ```
 
 ---

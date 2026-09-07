@@ -34,6 +34,7 @@
 
 /* Project headers */
 #include "hal_esp32/esp32_display.h"
+#include "hal_esp32/esp32_ota_server.h"
 #include "net/mqtt_transport.h"
 #include "ui/ui_app.h"
 #include "data/kiosk_config.h"
@@ -237,6 +238,9 @@ void app_main(void)
     prv_wifi_init_sta();
     /* Do not race the first REST request against DHCP. */
     prv_wait_for_wifi_ip();
+
+    /* Start local WiFi OTA server */
+    esp32_ota_server_start();
 
     /* 5. Application UI */
     ui_app_init();
