@@ -79,8 +79,8 @@ export async function POST(request: Request) {
     // Window matches evaluateRfidScan in reservation-policy.ts
     const SCHEDULE_EARLY_CHECKIN_MIN = 30;
     const SCHEDULE_LATE_CHECKIN_MIN = 15;
-    const checkInStart = new Date(now.getTime() - SCHEDULE_EARLY_CHECKIN_MIN * 60_000);
-    const checkInEnd = new Date(now.getTime() + SCHEDULE_LATE_CHECKIN_MIN * 60_000);
+    const checkInStart = new Date(now.getTime() - SCHEDULE_LATE_CHECKIN_MIN * 60_000);
+    const checkInEnd = new Date(now.getTime() + SCHEDULE_EARLY_CHECKIN_MIN * 60_000);
 
     const { data: upcomingGames } = await supabase
       .from('games')

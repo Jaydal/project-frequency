@@ -1,6 +1,7 @@
 export const MINIMUM_DURATION_MINUTES = 30;
 export const MAXIMUM_TAKEOVER_BUFFER = 45;
 export const GRACE_PERIOD_MINUTES = 15;
+export const EARLY_CHECKIN_MINUTES = 30;
 
 export type MemberStatus = 'Active' | 'Suspended' | 'Inactive';
 
@@ -79,7 +80,7 @@ export function evaluateRfidScan(
 
   // Check-in logic: Find a scheduled game within the valid window
   const graceMs = GRACE_PERIOD_MINUTES * 60 * 1000;
-  const earlyCheckInMs = 15 * 60 * 1000; // Allow check-in 15 mins early
+  const earlyCheckInMs = EARLY_CHECKIN_MINUTES * 60 * 1000; // Allow check-in 30 mins early
   const scheduledGame = memberGames
     .filter(g => g.status === 'Scheduled')
     .find(g => {
