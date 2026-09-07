@@ -8,11 +8,5 @@
     "deploymentEnabled": {
       "main": true
     }
-  },
-  "crons": [
-    {
-      "path": "/api/queue/advance",
-      "schedule": "* * * * *"
-    }
-  ]
+  }
 }
