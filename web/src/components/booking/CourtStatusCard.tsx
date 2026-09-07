@@ -100,11 +100,11 @@ export const CourtStatusCard = memo(function CourtStatusCard({ court }: Props) {
       {!isActive && court.status === 'Scheduled' && court.players && court.players.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap mt-2">
           {court.players.slice(0, 2).map((p, i) => (
-            <span key={i} className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">
+            <span key={i} className="text-xs bg-[var(--booking-panel)] text-[var(--booking-text)] border border-[var(--booking-border)]/60 px-2 py-0.5 rounded-md font-medium">
               {p.first_name} {p.last_name}
             </span>
           ))}
-          {court.players.length > 2 && <span className="text-xs text-zinc-500">+{court.players.length - 2}</span>}
+          {court.players.length > 2 && <span className="text-xs text-[var(--booking-subtle)]">+{court.players.length - 2}</span>}
         </div>
       )}
 
@@ -127,12 +127,12 @@ export const CourtStatusCard = memo(function CourtStatusCard({ court }: Props) {
           {court.players && court.players.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap mt-2">
               {court.players.slice(0, 2).map((p, i) => (
-                <span key={i} className="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">
+                <span key={i} className="text-xs bg-[var(--booking-panel)] text-[var(--booking-text)] border border-[var(--booking-border)]/60 px-2 py-0.5 rounded-md font-medium">
                   {p.first_name} {p.last_name}
                 </span>
               ))}
               {court.players.length > 2 && (
-                <span className="text-xs text-zinc-500">+{court.players.length - 2}</span>
+                <span className="text-xs text-[var(--booking-subtle)]">+{court.players.length - 2}</span>
               )}
             </div>
           )}

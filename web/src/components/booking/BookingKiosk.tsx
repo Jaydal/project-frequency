@@ -667,7 +667,7 @@ export function BookingKiosk() {
     switch (step) {
       case 'idle':
       return (
-        <div className="relative min-h-screen bg-[#111a16]">
+        <div className="relative min-h-screen bg-[var(--booking-bg)]">
           <QueueBoard onBookAsGuest={() => { setErrorInfo(null); setStep('guest-booking'); }} />
           {testMode && (
             <div className="absolute top-4 right-4 z-50 bg-[#1b2a23]/95 border border-[#2b4035] rounded-xl p-4 w-64 shadow-2xl animate-fade-in">

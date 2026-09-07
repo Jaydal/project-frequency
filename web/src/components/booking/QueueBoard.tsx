@@ -7,6 +7,7 @@ import { QueueList, type QueueEntryDisplay } from './QueueList';
 import { fetchBoardSnapshot } from '@/app/booking/queue/actions';
 import type { BoardSnapshot } from '@/lib/queue/board-snapshot';
 import { buildCourtDisplays } from './queue-board-model';
+import { BookingThemeToggle } from './BookingThemeToggle';
 
 export function QueueBoard({ onBookAsGuest }: { onBookAsGuest?: () => void }) {
   const [snapshot, setSnapshot] = useState<BoardSnapshot | null>(null);
@@ -139,15 +140,18 @@ export function QueueBoard({ onBookAsGuest }: { onBookAsGuest?: () => void }) {
               <h1 className="text-base font-medium text-[var(--booking-muted)]">Courts</h1>
               <p className="text-xs text-[var(--booking-subtle)]">Tap your RFID card to book as a member</p>
             </div>
-            {onBookAsGuest && (
-              <button
-                type="button"
-                onClick={onBookAsGuest}
-                className="rounded-xl bg-[#32A45E] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-md shadow-[#32A45E]/20 hover:bg-[#3bb86b] active:scale-[0.98] transition-all"
-              >
-                Book Now
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              <BookingThemeToggle className="rounded-xl border border-[var(--booking-border)] bg-[var(--booking-panel)] p-2.5 text-[var(--booking-muted)] hover:bg-[var(--booking-inset)] hover:text-[var(--booking-text)] transition-colors cursor-pointer" />
+              {onBookAsGuest && (
+                <button
+                  type="button"
+                  onClick={onBookAsGuest}
+                  className="rounded-xl bg-[#32A45E] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white shadow-md shadow-[#32A45E]/20 hover:bg-[#3bb86b] active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  Book Now
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
