@@ -2,10 +2,8 @@
 
 #include "kiosk_model.h"
 
-/* Abstract data source for the kiosk UI. The mock implementation
- * (mock/mock_data_provider.c) is the only implementation in this phase;
- * a later phase adds a real HTTP/MQTT-backed implementation of the exact
- * same vtable, and none of src/ui/ needs to change when that happens. */
+/* Abstract data source for the kiosk UI, implemented by live_data_provider.c
+ * backed by HTTP REST and MQTT. */
 
 typedef struct {
   void (*get_board)(kiosk_board_t *out);
@@ -21,7 +19,7 @@ typedef struct {
                       int32_t duration_min, const char *match_title,
                       booking_result_t *out_result, kiosk_error_t *out_error);
 
-  bool (*cancel_waiting)(const char *member_id, kiosk_error_t *out_error);
+  bool (*cancel_waiting)(const char *member_id, const char *entry_id, kiosk_error_t *out_error);
   bool (*end_game)(const char *member_id, const char *game_id, kiosk_error_t *out_error);
   bool (*is_ready)(void);
   uint32_t (*get_board_version)(void);

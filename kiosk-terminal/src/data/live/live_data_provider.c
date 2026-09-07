@@ -215,10 +215,24 @@ static bool join_queue(const char *member_id, const char *court_id, game_type_t 
   return true;
 }
 
-static bool cancel_waiting(const char *member_id, kiosk_error_t *out_error) {
-  bool cancelled = false;
+static bool cancel_waiting(const char *member_id, const char *entry_id, kiosk_error_t *out_error) {
   freq_rest_result_t result = { 0 };
 
+  /* If we already know the entry UUID from member lookup, cancel directly without board search */
+  if (entry_id && entry_id[0] != '\0') {
+    result = freq_rest_cancel_queue(entry_id);
+    if (!result.ok && out_error) {
+      snprintf(out_error->title, sizeof(out_error->title), "Cancel Failed");
+      snprintf(out_error->message, sizeof(out_error->message), "%s",
+               result.error[0] ? result.error : "Unable to cancel queue.");
+    } else if (out_error) {
+      out_error->title[0] = '\0';
+      out_error->message[0] = '\0';
+    }
+    return result.ok;
+  }
+
+  bool cancelled = false;
   LOCK_BOARD();
   if (s_have_board) {
     for (uint8_t i = 0; i < s_board.queue_count; i++) {

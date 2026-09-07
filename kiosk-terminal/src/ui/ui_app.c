@@ -317,7 +317,8 @@ static void handle_confirm(void *user_data) {
 
 static void handle_cancel_existing(void *user_data) {
   (void)user_data;
-  if (!s_app.provider->cancel_waiting(s_app.member.id, &s_app.error)) {
+  const char *entry_id = s_app.member.decision.entry_id[0] ? s_app.member.decision.entry_id : NULL;
+  if (!s_app.provider->cancel_waiting(s_app.member.id, entry_id, &s_app.error)) {
     s_app.step = KIOSK_STEP_ERROR;
   } else {
     reset_to_idle();
@@ -714,7 +715,8 @@ static void render_current(void) {
       kiosk_products_config_t cfg;
       s_app.provider->get_products_config(&cfg);
       int32_t party_size = (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2;
-      int32_t credits_required = kiosk_get_cost(&cfg, s_app.duration_min, party_size);
+      bool is_check_in = (s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED);
+      int32_t credits_required = is_check_in ? 0 : kiosk_get_cost(&cfg, s_app.duration_min, party_size);
       const char *game_label = (s_app.game_type == GAME_TYPE_2V2) ? "Doubles (2v2)" : "Singles (1v1)";
       format_member_name(member_name, sizeof(member_name));
       step_booking_confirm_create(s_app.terminal_layout.content,
@@ -724,7 +726,7 @@ static void render_current(void) {
                                    s_app.duration_min,
                                    credits_required,
                                    s_app.match_title, sizeof(s_app.match_title),
-                                   s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED,
+                                   is_check_in,
                                    s_app.member.decision.capped,
                                    handle_confirm,
                                    close_to_idle, NULL,
