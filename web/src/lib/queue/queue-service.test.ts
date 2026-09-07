@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
+vi.mock('./queue-processor', () => ({ processCourtQueue: vi.fn().mockResolvedValue(true), processAllCourts: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('./booking-engine', () => ({ findAvailableCourt: vi.fn(), isSlotAvailable: vi.fn() }))
 vi.mock('@/lib/mqtt', () => ({ publishDisplay: vi.fn() }))
+vi.mock('@/lib/display/publish-all', () => ({ publishAllDisplays: vi.fn().mockResolvedValue(undefined) }))
 
 import { createClient } from '@/lib/supabase/server'
 import { findAvailableCourt } from './booking-engine'

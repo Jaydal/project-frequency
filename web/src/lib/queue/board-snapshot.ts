@@ -130,18 +130,30 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
   });
 
   /* A queue row can briefly remain `waiting` if a promotion was interrupted
-   * after the game was created. Never publish a member in both places: active
-   * game membership is authoritative for the kiosk/web board. */
-  const activeMemberIds = new Set<string>();
+   * after the game was created. Only discard stale queue entries that were created
+   * before the current active game started. New bookings made by active players
+   * for their next match must remain visible in the queue. */
+  const activeMemberLatestGameStart = new Map<string, number>();
   (games ?? []).forEach((g: any) => {
     if (!isGameActiveAt(g)) return;
+    const startMs = g.start_time ? new Date(g.start_time).getTime() : 0;
     (g.game_players ?? []).forEach((gp: any) => {
-      if (gp.member_id) activeMemberIds.add(gp.member_id);
+      if (gp.member_id) {
+        const existing = activeMemberLatestGameStart.get(gp.member_id) ?? 0;
+        if (startMs > existing) activeMemberLatestGameStart.set(gp.member_id, startMs);
+      }
     });
   });
-  if (waiting && activeMemberIds.size > 0) {
+  if (waiting && activeMemberLatestGameStart.size > 0) {
     for (let i = waiting.length - 1; i >= 0; i--) {
-      if (activeMemberIds.has(waiting[i].member_id)) waiting.splice(i, 1);
+      const entry = waiting[i];
+      const gameStartMs = activeMemberLatestGameStart.get(entry.member_id);
+      if (gameStartMs !== undefined) {
+        const entryCreatedMs = entry.created_at ? new Date(entry.created_at).getTime() : 0;
+        if (entryCreatedMs < gameStartMs) {
+          waiting.splice(i, 1);
+        }
+      }
     }
   }
 

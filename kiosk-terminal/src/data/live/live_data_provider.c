@@ -243,6 +243,20 @@ static bool cancel_waiting(const char *member_id, kiosk_error_t *out_error) {
   }
   return cancelled;
 }
+
+static bool end_game(const char *member_id, const char *game_id, kiosk_error_t *out_error) {
+  freq_rest_result_t result = freq_rest_end_game(member_id, game_id);
+  if (!result.ok && out_error) {
+    snprintf(out_error->title, sizeof(out_error->title), "End Game Failed");
+    snprintf(out_error->message, sizeof(out_error->message), "%s",
+             result.error[0] ? result.error : "Unable to end match.");
+  } else if (out_error) {
+    out_error->title[0] = '\0';
+    out_error->message[0] = '\0';
+  }
+  return result.ok;
+}
+
 static bool is_ready(void) {
   LOCK_BOARD();
   bool ready = s_have_board;
@@ -264,6 +278,7 @@ static const kiosk_data_provider_t s_live_provider = {
   .lookup_member = lookup_member,
   .join_queue = join_queue,
   .cancel_waiting = cancel_waiting,
+  .end_game = end_game,
   .is_ready = is_ready,
   .get_board_version = get_board_version,
 };

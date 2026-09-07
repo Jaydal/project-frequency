@@ -16,6 +16,17 @@ describe('booking and queue schemas', () => {
     expect(result.success).toBe(true);
   });
 
+  it.each([30, 60, 90, 120])('accepts configured duration: %i minutes', (d) => {
+    const result = queueJoinSchema.safeParse({
+      memberId: member,
+      start: '2026-08-30T14:00:00Z',
+      duration: d,
+      partySize: 2,
+      playerIds: [member],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it.each([
     { duration: -1 },
     { duration: 999 },

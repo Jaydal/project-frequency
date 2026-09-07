@@ -18,6 +18,10 @@ vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: vi.fn(() => true),
 }));
 
+vi.mock('@/lib/display/publish-all', () => ({
+  publishAllDisplays: vi.fn().mockResolvedValue({ ok: true, failed: 0, total: 0 }),
+}));
+
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(() => ({
     auth: {
@@ -32,6 +36,8 @@ vi.mock('@/lib/supabase/server', () => ({
 describe('POST /api/bookings', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
+    const { publishAllDisplays } = await import('@/lib/display/publish-all');
+    (publishAllDisplays as any).mockResolvedValue({ ok: true, failed: 0, total: 0 });
     const { createClient } = await import('@/lib/supabase/server');
     (createClient as any).mockImplementation(() => ({
       auth: {

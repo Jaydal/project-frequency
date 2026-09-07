@@ -10,7 +10,7 @@ const matchTitle = z.preprocess(
   z.string().trim().max(120).optional()
 );
 const start = z.string().datetime({ offset: true });
-const duration = z.union([z.literal(30), z.literal(60), z.literal(90)]);
+const duration = z.coerce.number().int().min(15).max(480);
 const partySize = z.union([z.literal(2), z.literal(4)]);
 const playerIds = z.array(memberId).max(4).optional().default([]);
 

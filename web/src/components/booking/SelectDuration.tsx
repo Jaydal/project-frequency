@@ -8,9 +8,10 @@ interface Props {
   onSelect: (duration: number) => void;
   onBack: () => void;
   onCancel?: () => void;
+  subtitle?: string;
 }
 
-export function SelectDuration({ member, durations, rates, onSelect, onBack, onCancel }: Props) {
+export function SelectDuration({ member, durations, rates, onSelect, onBack, onCancel, subtitle }: Props) {
 
   // Simple helper to describe durations
   const getDurationLabel = (mins: number) => {
@@ -30,7 +31,9 @@ export function SelectDuration({ member, durations, rates, onSelect, onBack, onC
 
       <div className="flex-1 flex flex-col px-5 pb-5 justify-between gap-4 overflow-y-auto">
         <div className="space-y-3 flex-1 flex flex-col justify-center">
-          <div className="text-center mb-1"><div className="text-xl font-black tracking-tight text-[#f3f6f2]">How long would you like to play?</div><div className="mt-1 text-xs text-[#9eaca3]">Pick a duration and review the credit requirement.</div>
+          <div className="text-center mb-1">
+            <div className="text-xl font-black tracking-tight text-[#f3f6f2]">How long would you like to play?</div>
+            <div className="mt-1 text-xs text-[#9eaca3]">{subtitle || 'Pick a duration and review the credit requirement.'}</div>
           </div>
 
           <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-3 w-full max-w-lg mx-auto">

@@ -126,6 +126,8 @@ typedef struct {
   int32_t duration;
   bool capped;
   char cutoff_time[32]; // ISO string
+  bool has_active_game;
+  bool has_active_queue;
 } rfid_decision_t;
 
 /* A scanned member (mirrors TerminalKiosk.tsx's Player). */

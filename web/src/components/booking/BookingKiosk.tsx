@@ -18,7 +18,15 @@ import { GuestBookingSuccess } from './GuestBookingSuccess';
 import type { ProductsConfig } from '@/lib/products-config-types';
 import { getCost } from '@/lib/products-config-types';
 import { fetchBoardSnapshot } from '@/app/booking/queue/actions';
-import { AlertCircle, Trash2, Plus, CalendarCheck } from 'lucide-react';
+import { AlertCircle, Trash2, Plus, CalendarCheck, Calendar, Clock, StopCircle } from 'lucide-react';
+
+interface ActiveGameInfo {
+  id: string;
+  courtId: string;
+  courtName: string;
+  startTime: string;
+  duration: number;
+}
 
 interface Player {
   id: string;
@@ -61,6 +69,7 @@ export function BookingKiosk() {
   const [member, setMember] = useState<Player | null>(null);
   const [decision, setDecision] = useState<any>(null);
   const [terminalToken, setTerminalToken] = useState<string | null>(null);
+  const [activeGame, setActiveGame] = useState<ActiveGameInfo | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<CourtOption | null>(null);
   const [gameType, setGameType] = useState<'1v1' | '2v2' | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -270,7 +279,7 @@ export function BookingKiosk() {
         });
       }
       await fetchCourts();
-      setStep('idle');
+      setStep(prev => (prev === 'booting' || prev === 'idle' ? 'idle' : prev));
     } catch (err: any) {
       setErrorInfo({ title: 'System Offline', message: 'Unable to connect to the server. Retrying...' });
       setStep('error');
@@ -321,16 +330,42 @@ export function BookingKiosk() {
       setMember(player);
       setDecision(memberData.decision);
       
-      if (memberData.decision?.type === 'already queued') {
-        const queueRes = await fetch(`/api/queue?memberId=${encodeURIComponent(player.id)}`, {
-          headers: { 'x-terminal-token': memberData.token },
-        });
-        if (!queueRes.ok) throw new Error('Unable to load queue status');
-        const entries = await queueRes.json();
-        const data = Array.isArray(entries) ? entries[0] : null;
+      const loadedActiveGame = memberData.activeGame ?? (
+        memberData.decision?.type === 'already active' ? {
+          id: memberData.decision.gameId,
+          courtId: memberData.decision.courtId,
+          courtName: memberData.decision.courtName || 'Current Court',
+          startTime: new Date().toISOString(),
+          duration: 60,
+        } : null
+      );
+      setActiveGame(loadedActiveGame);
 
-        if (data && data.status === 'offered') { setQueueEntry(data as any); setStep('offer'); return; }
-        if (data && data.status === 'waiting') { setQueueEntry(data as any); setStep('existing-queue'); return; }
+      let loadedQueue = memberData.activeQueue ?? null;
+      if (!loadedQueue && memberData.decision?.type === 'already queued') {
+        try {
+          const queueRes = await fetch(`/api/queue?memberId=${encodeURIComponent(player.id)}`, {
+            headers: { 'x-terminal-token': memberData.token },
+          });
+          if (queueRes.ok) {
+            const entries = await queueRes.json();
+            const data = Array.isArray(entries) ? entries[0] : null;
+            if (data) loadedQueue = data;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      setQueueEntry(loadedQueue);
+
+      if (loadedQueue && loadedQueue.status === 'offered') {
+        setStep('offer');
+        return;
+      }
+
+      if (loadedActiveGame || (loadedQueue && loadedQueue.status === 'waiting') || memberData.decision?.type === 'already queued') {
+        setStep('existing-queue');
+        return;
       }
 
       setStep('rfid-decision');
@@ -520,8 +555,39 @@ export function BookingKiosk() {
     reset();
   }
 
+  async function handleEndOngoingGame() {
+    const gameId = activeGame?.id || decision?.gameId;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/terminal/game/end', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(terminalToken ? { 'x-terminal-token': terminalToken } : {}),
+        },
+        body: JSON.stringify({ gameId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErrorInfo({ title: 'Unable to End Game', message: body.error || 'Please try again.' });
+        setStep('error');
+        return;
+      }
+      setActiveGame(null);
+      if (!queueEntry) {
+        reset();
+      }
+    } catch {
+      setErrorInfo({ title: 'Unable to Connect', message: 'Check connection and try again.' });
+      setStep('error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleCancelExisting() {
     if (!queueEntry) return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/queue/${queueEntry.id}`, {
         method: 'DELETE',
@@ -533,9 +599,16 @@ export function BookingKiosk() {
         setStep('error');
         return;
       }
-    } catch { setErrorInfo({ title: 'Cancel Failed', message: 'Check connection and try again.' }); setStep('error'); return; }
-    setQueueEntry(null);
-    setStep('select-court');
+      setQueueEntry(null);
+      if (!activeGame) {
+        reset();
+      }
+    } catch { 
+      setErrorInfo({ title: 'Cancel Failed', message: 'Check connection and try again.' }); 
+      setStep('error'); 
+    } finally {
+      setBusy(false);
+    }
   }
 
   function reset() {
@@ -550,6 +623,7 @@ export function BookingKiosk() {
     setScheduleDate('');
     setScheduleTime('');
     setQueueEntry(null);
+    setActiveGame(null);
     setErrorInfo(null);
     setStep('idle');
     focusRfid();
@@ -557,12 +631,13 @@ export function BookingKiosk() {
 
   function handleBack() {
     switch (step) {
-      case 'select-court': setStep(scheduleMode ? 'select-schedule-datetime' : 'rfid-decision'); break;
+      case 'select-court': setStep(scheduleMode ? 'select-schedule-datetime' : (activeGame || queueEntry ? 'existing-queue' : 'rfid-decision')); break;
       case 'select-game': setStep('select-court'); break;
       case 'select-duration': setStep('select-game'); break;
       case 'confirm': setStep('select-duration'); break;
-      case 'select-schedule-datetime': setStep('rfid-decision'); break;
+      case 'select-schedule-datetime': setStep(activeGame || queueEntry ? 'existing-queue' : 'rfid-decision'); break;
       case 'rfid-decision': reset(); break;
+      case 'existing-queue': reset(); break;
       default: reset();
     }
   }
@@ -621,48 +696,124 @@ export function BookingKiosk() {
 
     case 'existing-queue':
       return withLayout(
-        member && queueEntry && (
-          <div className="min-h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-            <div className="size-12 rounded-full bg-[#32A45E]/15 border border-[#32A45E]/45 flex items-center justify-center mb-4 text-[#72d493]">
+        member && (queueEntry || activeGame) && (
+          <div className="min-h-full flex flex-col items-center justify-center p-6 text-center animate-fade-in max-w-lg mx-auto">
+            <div className="size-12 rounded-full bg-[#32A45E]/15 border border-[#32A45E]/45 flex items-center justify-center mb-3 text-[#72d493]">
               <AlertCircle className="size-6" />
             </div>
-            <h2 className="text-lg font-black text-[#f3f6f2] tracking-wide">Active Booking Found</h2>
-            <p className="text-xs text-[#b8c5bc] mt-1 mb-6">You are already in the waiting list.</p>
-            
-            <div className="bg-[#20362a] border border-[#486352] rounded-2xl p-5 mb-8 w-full max-w-sm text-left shadow-md shadow-black/10 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-[#aebbb2] uppercase tracking-widest">Queue Status</span>
-                <span className="text-xs font-bold text-[#72d493] bg-[#32A45E]/10 px-2 py-0.5 rounded border border-[#32A45E]/25">
-                  Waiting
-                </span>
-              </div>
-              {queueEntry.courts?.name && (
-                <>
-                  <div className="h-px bg-[#385044]" />
+            <h2 className="text-xl font-black text-[#f3f6f2] tracking-wide">Active Session Found</h2>
+            <p className="text-xs text-[#b8c5bc] mt-1 mb-6">
+              Welcome back, <span className="text-[#edf3ee] font-bold">{member.firstName}</span>. Manage your active game, queue, or add another booking.
+            </p>
+
+            <div className="w-full space-y-3 mb-6">
+              {/* Ongoing Game Card */}
+              {activeGame && (
+                <div className="bg-[#20362a] border border-[#32A45E]/40 rounded-2xl p-4 text-left shadow-md shadow-black/10 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-[#aebbb2] uppercase tracking-widest">Preferred Court</span>
-                    <span className="text-xs font-black text-[#edf3ee]">{queueEntry.courts.name}</span>
+                    <span className="text-[10px] font-bold text-[#72d493] uppercase tracking-widest flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-[#32A45E] animate-pulse" />
+                      Ongoing Match
+                    </span>
+                    <span className="text-xs font-bold text-[#72d493] bg-[#32A45E]/10 px-2 py-0.5 rounded border border-[#32A45E]/25">
+                      In Progress
+                    </span>
                   </div>
-                </>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="text-base font-black text-[#edf3ee]">{activeGame.courtName || 'Court'}</div>
+                      <div className="text-[11px] text-[#9eb1a6] mt-0.5">{activeGame.duration} min match</div>
+                    </div>
+                    <button
+                      onClick={handleEndOngoingGame}
+                      disabled={busy}
+                      className="py-2 px-3 rounded-xl bg-[#2a1d1d] text-[#ff9b9b] border border-[#e66a6a]/40 hover:bg-[#3d2020] hover:border-[#e66a6a] text-xs font-extrabold active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <StopCircle className="size-3.5" />
+                      <span>End Game Early</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Waiting Queue Card */}
+              {queueEntry && (
+                <div className="bg-[#20362a] border border-[#486352] rounded-2xl p-4 text-left shadow-md shadow-black/10 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-[#e2b85a] uppercase tracking-widest flex items-center gap-1.5">
+                      <Clock className="size-3.5" />
+                      Waiting List
+                    </span>
+                    <span className="text-xs font-bold text-[#e2b85a] bg-[#d9a441]/10 px-2 py-0.5 rounded border border-[#d9a441]/25">
+                      Position #{queueEntry.position ?? 1}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="text-base font-black text-[#edf3ee]">
+                        {queueEntry.courtName || queueEntry.court_name || queueEntry.courts?.name || 'Any Court'}
+                      </div>
+                      <div className="text-[11px] text-[#9eb1a6] mt-0.5">Waiting for court to open</div>
+                    </div>
+                    <button
+                      onClick={handleCancelExisting}
+                      disabled={busy}
+                      className="py-2 px-3 rounded-xl bg-[#2a1d1d] text-[#ff9b9b] border border-[#e66a6a]/40 hover:bg-[#3d2020] hover:border-[#e66a6a] text-xs font-extrabold active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="size-3.5" />
+                      <span>Cancel Queue</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            <div className="flex flex-col gap-2.5 w-full max-w-xs">
-              <button 
-                onClick={() => setStep('select-court')}
-                className="w-full py-3.5 px-6 rounded-xl bg-[#32A45E] hover:bg-[#3bb86b] text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-[#32A45E]/20 flex items-center justify-center gap-2"
-              >
-                <Plus className="size-4 stroke-[2.5]" />
-                <span>Book Another Game</span>
-              </button>
-              <button 
-                onClick={handleCancelExisting}
-                className="w-full py-3.5 px-6 rounded-xl bg-[#1b2a23] text-[#d9e3dc] border border-[#536a5c] hover:text-[#ffb0b0] hover:border-[#e66a6a]/55 hover:bg-[#352323] font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Trash2 className="size-4" />
-                <span>Cancel Booking</span>
-              </button>
-            </div>
+            {/* Add Another Booking Options - only allowed if member does not already hold a queue ticket */}
+            {!queueEntry ? (
+              <div className="w-full bg-[#17261f] border border-[#2b4035] rounded-2xl p-4 mb-4 text-left shadow-md">
+                <div className="text-[10px] font-bold text-[#aebbb2] uppercase tracking-widest mb-1">
+                  Book Another Game
+                </div>
+                <p className="text-[11px] text-[#718178] mb-3">
+                  {activeGame ? 'Max 1 hour while currently in game to give other players a turn.' : 'Choose how you would like to book.'}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    onClick={() => { setScheduleMode(false); setStep('select-court'); }}
+                    disabled={busy}
+                    className="py-3.5 px-4 rounded-xl bg-[#32A45E] hover:bg-[#3bb86b] text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-[#32A45E]/20 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="size-4 stroke-[2.5]" />
+                    <span>Play Now / Queue Up</span>
+                  </button>
+                  <button
+                    onClick={() => { setScheduleMode(true); setStep('select-schedule-datetime'); }}
+                    disabled={busy}
+                    className="py-3.5 px-4 rounded-xl bg-[#0E5E9A] hover:bg-[#1876b5] text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-black/20 flex items-center justify-center gap-2"
+                  >
+                    <Calendar className="size-4" />
+                    <span>Schedule for Later</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full bg-[#17261f] border border-[#3b3223] rounded-2xl p-4 mb-4 text-left shadow-md">
+                <div className="text-[10px] font-bold text-[#e2b85a] uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                  <span>ℹ️</span>
+                  <span>Queue Limit Reached</span>
+                </div>
+                <p className="text-xs text-[#d5c5a3] leading-relaxed">
+                  You already have an active spot in the waiting list. To give everyone a chance to play, you can only hold one queue spot at a time. You can book again once your waiting game begins, or by cancelling your queue ticket above.
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={reset}
+              className="py-2.5 px-5 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 text-xs font-bold transition-all cursor-pointer"
+            >
+              Done / Back to Home
+            </button>
           </div>
         )
       );
@@ -711,19 +862,28 @@ export function BookingKiosk() {
             </>
           ) : decision?.type === 'already active' ? (
             <>
-              <p className="text-xs text-amber-400 mb-8">You are currently playing, but you can still book another match.</p>
+              <p className="text-xs text-amber-400 mb-8">
+                You are currently playing{activeGame?.courtName ? ` on ${activeGame.courtName}` : ''}, but you can still book another match.
+              </p>
               <div className="flex flex-col gap-3 w-full max-w-xs">
                 <button
                   onClick={() => { setScheduleMode(false); setStep('select-court'); }}
                   className="w-full py-4 px-6 rounded-xl bg-secondary hover:bg-secondary/90 text-white font-extrabold text-sm uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-emerald-500/10"
                 >
-                  Play Now
+                  Play Now / Queue Up
                 </button>
                 <button
                   onClick={() => { setScheduleMode(true); setStep('select-schedule-datetime'); }}
                   className="w-full py-4 px-6 rounded-xl bg-[#0E5E9A] hover:bg-[#1876b5] text-white font-extrabold text-sm uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-black/20"
                 >
-                  Schedule
+                  Schedule for Later
+                </button>
+                <button
+                  onClick={handleEndOngoingGame}
+                  className="w-full py-3.5 px-6 rounded-xl bg-[#1b2a23] text-[#ff9b9b] border border-[#e66a6a]/40 hover:bg-[#352323] hover:border-[#e66a6a] font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <StopCircle className="size-4" />
+                  <span>End Ongoing Game</span>
                 </button>
               </div>
             </>
@@ -829,7 +989,17 @@ export function BookingKiosk() {
 
     case 'select-duration':
       return withLayout(
-        config && <SelectDuration member={member} durations={config.durations} rates={config.rates} onSelect={handleSelectDuration} onBack={handleBack} onCancel={reset} />
+        config && (
+          <SelectDuration
+            member={member}
+            durations={activeGame ? config.durations.filter((d) => d <= 60) : config.durations}
+            rates={config.rates}
+            onSelect={handleSelectDuration}
+            onBack={handleBack}
+            onCancel={reset}
+            subtitle={activeGame ? 'Max 1 hour while currently in game (to give other players a turn).' : undefined}
+          />
+        )
       );
 
     case 'confirm':

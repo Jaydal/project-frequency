@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/mqtt', () => ({ publishDisplay: vi.fn(), publishBoard: vi.fn() }))
 vi.mock('@/lib/display/sports-caster', () => ({ generatePayload: vi.fn(() => ({})) }))
+vi.mock('@/lib/display/publish-all', () => ({ publishAllDisplays: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('./booking-engine', () => ({ findAvailableCourt: vi.fn(), isSlotAvailable: vi.fn() }))
 
 type Row = Record<string, any>
@@ -88,6 +89,7 @@ describe('REGRESSION: booking a free court while others wait', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     // isSlotAvailable: court 3 free
     const { isSlotAvailable } = await import('./booking-engine')
     vi.mocked(isSlotAvailable).mockImplementation(async (courtId: string) => courtId === 'c3')

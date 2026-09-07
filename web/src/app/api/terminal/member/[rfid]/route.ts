@@ -55,8 +55,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { data: gamePlayers } = await supabase.from('game_players').select('game_id').eq('member_id', member.id);
   const gameIds = gamePlayers?.map(gp => gp.game_id) ?? [];
   let memberGames: PolicyGame[] = [];
+  let activeGameRecord: any = null;
   if (gameIds.length > 0) {
-    const { data: games } = await supabase.from('games').select('id, court_id, status, start_time, duration').in('id', gameIds);
+    const { data: games } = await supabase.from('games').select('id, court_id, status, start_time, duration, courts(name)').in('id', gameIds);
     if (games && games.length > 0) {
       for (const g of games) {
         const startMs = new Date(g.start_time).getTime();
@@ -77,6 +78,12 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           g.status = 'No-show';
         }
       }
+      activeGameRecord = games.find(g => {
+        if (g.status !== 'In Progress') return false;
+        const startMs = new Date(g.start_time).getTime();
+        const endMs = startMs + g.duration * 60_000;
+        return now.getTime() < endMs;
+      });
     }
     memberGames = (games ?? []).map(g => ({
       id: g.id, courtId: g.court_id, status: g.status as any, startTime: new Date(g.start_time), duration: g.duration, playerIds: [member.id]
@@ -84,7 +91,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 
   // Fetch queue entries
-  const { data: qEntries } = await supabase.from('queue_entries').select('id, status').eq('member_id', member.id).in('status', ['waiting', 'offered']);
+  const { data: qEntries } = await supabase
+    .from('queue_entries')
+    .select('id, status, court_id, courts(name)')
+    .eq('member_id', member.id)
+    .in('status', ['waiting', 'offered'])
+    .order('created_at', { ascending: false });
+
+  const activeQueueRecord = qEntries?.[0] ?? null;
+  let activeQueuePosition = null;
+  if (activeQueueRecord?.id) {
+    const { getQueuePosition } = await import('@/lib/queue/queue-service');
+    activeQueuePosition = await getQueuePosition(activeQueueRecord.id);
+  }
+
   const memberQueueEntries: PolicyQueueEntry[] = (qEntries ?? []).map(q => ({
     id: q.id, memberId: member.id, status: q.status as any
   }));
@@ -99,6 +119,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     lastName: member.last_name, 
     balance: wallet?.balance ?? 0, 
     token,
-    decision
+    decision,
+    activeGame: activeGameRecord ? {
+      id: activeGameRecord.id,
+      courtId: activeGameRecord.court_id,
+      courtName: (activeGameRecord.courts as any)?.[0]?.name ?? (activeGameRecord.courts as any)?.name ?? 'Court',
+      startTime: activeGameRecord.start_time,
+      duration: activeGameRecord.duration,
+    } : null,
+    activeQueue: activeQueueRecord ? {
+      id: activeQueueRecord.id,
+      courtId: activeQueueRecord.court_id,
+      courtName: (activeQueueRecord.courts as any)?.[0]?.name ?? (activeQueueRecord.courts as any)?.name ?? 'Any Court',
+      status: activeQueueRecord.status,
+      position: activeQueuePosition,
+    } : null,
   });
 }

@@ -205,6 +205,22 @@ freq_rest_result_t freq_rest_lookup_member(const char *rfid, kiosk_member_t *out
         const cJSON *cap = cJSON_GetObjectItemCaseSensitive(decision, "capped");
         if (cJSON_IsBool(cap)) out->decision.capped = cJSON_IsTrue(cap);
         copy_json_string(decision, "cutoffTime", out->decision.cutoff_time, sizeof(out->decision.cutoff_time));
+
+        out->decision.has_active_game = (out->decision.type == RFID_DECISION_ALREADY_ACTIVE || out->decision.game_id[0] != '\0');
+        out->decision.has_active_queue = (out->decision.type == RFID_DECISION_ALREADY_QUEUED || out->decision.entry_id[0] != '\0');
+
+        const cJSON *ag = cJSON_GetObjectItemCaseSensitive(json, "activeGame");
+        if (ag && !cJSON_IsNull(ag)) {
+          out->decision.has_active_game = true;
+          if (!out->decision.game_id[0]) copy_json_string(ag, "id", out->decision.game_id, sizeof(out->decision.game_id));
+          if (!out->decision.court_id[0]) copy_json_string(ag, "courtId", out->decision.court_id, sizeof(out->decision.court_id));
+          if (!out->decision.court_name[0]) copy_json_string(ag, "courtName", out->decision.court_name, sizeof(out->decision.court_name));
+        }
+        const cJSON *aq = cJSON_GetObjectItemCaseSensitive(json, "activeQueue");
+        if (aq && !cJSON_IsNull(aq)) {
+          out->decision.has_active_queue = true;
+          if (!out->decision.entry_id[0]) copy_json_string(aq, "id", out->decision.entry_id, sizeof(out->decision.entry_id));
+        }
       }
       
       cJSON_Delete(json);
@@ -329,6 +345,45 @@ freq_rest_result_t freq_rest_cancel_queue(const char *entry_id) {
     char msg[128];
     extract_error(resp.body, msg, sizeof(msg));
     result = result_err(resp.status, msg[0] ? msg : "Cancel failed");
+  }
+
+  http_response_free(&resp);
+  return result;
+}
+
+freq_rest_result_t freq_rest_end_game(const char *member_uuid, const char *game_uuid) {
+  cJSON *req = cJSON_CreateObject();
+  if (member_uuid && member_uuid[0]) cJSON_AddStringToObject(req, "memberId", member_uuid);
+  if (game_uuid && game_uuid[0]) cJSON_AddStringToObject(req, "gameId", game_uuid);
+  char *req_body = cJSON_PrintUnformatted(req);
+  cJSON_Delete(req);
+  if (!req_body) return result_err(0, "OOM formatting request");
+
+  char url[256];
+  int n = snprintf(url, sizeof(url), "%s/api/terminal/game/end", s_base_url);
+  if (n < 0 || n >= (int)sizeof(url)) {
+    free(req_body);
+    return result_err(0, "URL too long");
+  }
+
+  ensure_device_id();
+  http_header_t headers[3] = { { "Content-Type", "application/json" } };
+  size_t header_count = 1;
+  if (s_device_id[0]) headers[header_count++] = (http_header_t){ "x-device-id", s_device_id };
+  if (s_api_key[0]) headers[header_count++] = (http_header_t){ "x-api-key", s_api_key };
+
+  http_response_t resp;
+  bool ok = http_transport_request("POST", url, headers, header_count, req_body, &resp);
+  free(req_body);
+  if (!ok) return result_err(0, "Cannot reach server");
+
+  freq_rest_result_t result;
+  if (resp.status >= 200 && resp.status < 300) {
+    result = result_ok(resp.status);
+  } else {
+    char msg[128];
+    extract_error(resp.body, msg, sizeof(msg));
+    result = result_err(resp.status, msg[0] ? msg : "Failed to end game");
   }
 
   http_response_free(&resp);

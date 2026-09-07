@@ -31,7 +31,28 @@ vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: vi.fn(() => true),
 }));
 
-const mockFrom = vi.fn(() => {
+let mockTableResults: Record<string, Array<{ data: any; error: any }>> = {};
+
+const mockFrom = vi.fn((table?: string) => {
+  const getResult = () => {
+    if (table && mockTableResults[table]?.length) {
+      return mockTableResults[table].shift();
+    }
+    if (mockSupabaseResults.length > 0) {
+      return mockSupabaseResults.shift();
+    }
+    if (table === 'games' || table === 'game_players') {
+      return { data: [], error: null };
+    }
+    if (table === 'queue_entries') {
+      return { data: null, error: null };
+    }
+    if (table === 'courts') {
+      return { data: { name: 'Court 1' }, error: null };
+    }
+    return { data: null, error: null };
+  };
+
   const chain: any = {
     select: vi.fn(() => chain),
     eq: vi.fn(() => chain),
@@ -42,12 +63,16 @@ const mockFrom = vi.fn(() => {
     limit: vi.fn(() => chain),
     delete: vi.fn(() => chain),
     update: vi.fn(() => chain),
+    maybeSingle: vi.fn(() => {
+      const r = getResult();
+      return Promise.resolve(r);
+    }),
     single: vi.fn(() => {
-      const r = mockSupabaseResults.shift() || { data: null, error: null };
+      const r = getResult();
       return Promise.resolve(r);
     }),
     then: (onfulfilled: any, onrejected?: any) => {
-      const r = mockSupabaseResults.shift() || { data: null, error: null };
+      const r = getResult();
       return Promise.resolve(r).then(onfulfilled, onrejected);
     },
   };
@@ -138,14 +163,69 @@ describe('POST /api/queue', () => {
       player_ids: ['p1', 'p2'], created_at: new Date().toISOString(),
       requested_start: '2026-07-07T14:00:00Z', expires_at: null, updated_at: new Date().toISOString(),
     });
-    mockSupabaseResults.push({ data: [], error: null });
-    mockSupabaseResults.push({ data: { name: 'Court 1' }, error: null });
 
     const res = await POST(makeReq(validBody));
     expect(res.status).toBe(201);
     const data = await res.json();
     expect(data.status).toBe('completed');
     expect(data.court_name).toBe('Court 1');
+  });
+
+  it('rejects with 409 if member already has an active queue entry', async () => {
+    mockTableResults.queue_entries = [{ data: { id: 'existing-queue-1' }, error: null }];
+
+    const res = await POST(makeReq(validBody));
+    expect(res.status).toBe(409);
+    const data = await res.json();
+    expect(data.error).toContain('already have an active spot in the queue');
+    expect(mockJoinQueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 400 if member is in an active game and requests duration > 60', async () => {
+    mockTableResults.game_players = [{ data: [{ game_id: 'g-active' }], error: null }];
+    mockTableResults.games = [
+      { data: [], error: null }, // scheduled games check-in check
+      {
+        data: [{
+          id: 'g-active',
+          start_time: new Date(Date.now() - 10 * 60_000).toISOString(),
+          duration: 60,
+        }],
+        error: null,
+      },
+    ];
+
+    const res = await POST(makeReq({ ...validBody, duration: 120 }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain('Maximum duration is 60 minutes while currently playing a match');
+    expect(mockJoinQueue).not.toHaveBeenCalled();
+  });
+
+  it('allows duration <= 60 when member is in an active game', async () => {
+    mockTableResults.game_players = [{ data: [{ game_id: 'g-active' }], error: null }];
+    mockTableResults.games = [
+      { data: [], error: null }, // scheduled games check-in check
+      {
+        data: [{
+          id: 'g-active',
+          start_time: new Date(Date.now() - 10 * 60_000).toISOString(),
+          duration: 60,
+        }],
+        error: null,
+      },
+    ];
+    mockJoinQueue.mockResolvedValue({
+      id: 'q-subsequent', member_id: 'm1', status: 'waiting', court_id: null,
+      duration: 60, party_size: 2, player_ids: ['p1'], created_at: new Date().toISOString(),
+      requested_start: '2026-07-07T14:00:00Z', expires_at: null, updated_at: new Date().toISOString(),
+    });
+    mockGetQueuePosition.mockResolvedValue(1);
+    mockGetEstimatedWait.mockReturnValue('~30 min');
+
+    const res = await POST(makeReq({ ...validBody, duration: 60 }));
+    expect(res.status).toBe(201);
+    expect(mockJoinQueue).toHaveBeenCalled();
   });
 
   it('returns 201 with waiting status when court is busy', async () => {

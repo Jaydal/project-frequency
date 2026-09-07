@@ -118,6 +118,48 @@ export async function POST(request: Request) {
       }
     }
 
+    // Rule 2: Cannot join queue if already holding an active queue entry
+    const { data: existingQueue } = await supabase
+      .from('queue_entries')
+      .select('id')
+      .eq('member_id', result.data.memberId)
+      .in('status', ['waiting', 'offered'])
+      .maybeSingle();
+
+    if (existingQueue) {
+      return NextResponse.json(
+        { error: 'You already have an active spot in the queue. You can only hold one queue ticket at a time.' },
+        { status: 409 }
+      );
+    }
+
+    // Rule 1: Max 60 minutes if currently in an active game
+    const { data: activePlayerGames } = await supabase
+      .from('game_players')
+      .select('game_id')
+      .eq('member_id', result.data.memberId);
+
+    const activeGameIds = activePlayerGames?.map(pg => pg.game_id) ?? [];
+    if (activeGameIds.length > 0) {
+      const { data: inProgressGames } = await supabase
+        .from('games')
+        .select('id, start_time, duration')
+        .in('id', activeGameIds)
+        .eq('status', 'In Progress');
+
+      const isCurrentlyPlaying = (inProgressGames ?? []).some((g) => {
+        const startMs = new Date(g.start_time).getTime();
+        return now.getTime() < startMs + g.duration * 60_000;
+      });
+
+      if (isCurrentlyPlaying && result.data.duration > 60) {
+        return NextResponse.json(
+          { error: 'Maximum duration is 60 minutes while currently playing a match.' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Otherwise, it's a standard walk-in / waitlist join
     const entry = await joinQueue({
       memberId: result.data.memberId,
@@ -137,7 +179,12 @@ export async function POST(request: Request) {
 
     if (entry.status === 'waiting') {
       const position = await getQueuePosition(entry.id);
-      return NextResponse.json({ ...entry, position, estimatedWait: getEstimatedWait(position) }, { status: 201 });
+      let courtName = null;
+      if (entry.court_id) {
+        const { data: court } = await supabase.from('courts').select('name').eq('id', entry.court_id).maybeSingle();
+        courtName = court?.name ?? null;
+      }
+      return NextResponse.json({ ...entry, courtName, court_name: courtName, position, estimatedWait: getEstimatedWait(position) }, { status: 201 });
     }
 
     return NextResponse.json(entry, { status: 201 });

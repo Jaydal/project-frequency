@@ -224,12 +224,15 @@ static void handle_scan(void *user_data, const char *rfid) {
       s_app.step = KIOSK_STEP_ERROR;
       break;
     case RFID_DECISION_ALREADY_QUEUED:
-      s_app.step = KIOSK_STEP_EXISTING_QUEUE;
-      break;
     case RFID_DECISION_ALREADY_ACTIVE:
-      snprintf(s_app.error.title, sizeof(s_app.error.title), "Already Playing");
-      snprintf(s_app.error.message, sizeof(s_app.error.message), "You are already in an active game.");
-      s_app.step = KIOSK_STEP_ERROR;
+      if (!s_app.member.decision.has_active_game && !s_app.member.decision.has_active_queue) {
+        if (s_app.member.decision.type == RFID_DECISION_ALREADY_ACTIVE) {
+          s_app.member.decision.has_active_game = true;
+        } else {
+          s_app.member.decision.has_active_queue = true;
+        }
+      }
+      s_app.step = KIOSK_STEP_EXISTING_QUEUE;
       break;
     case RFID_DECISION_NO_ELIGIBLE_WINDOW:
       snprintf(s_app.error.title, sizeof(s_app.error.title), "Court Unavailable");
@@ -317,7 +320,20 @@ static void handle_cancel_existing(void *user_data) {
   if (!s_app.provider->cancel_waiting(s_app.member.id, &s_app.error)) {
     s_app.step = KIOSK_STEP_ERROR;
   } else {
-    s_app.step = KIOSK_STEP_SELECT_COURT;
+    reset_to_idle();
+    return;
+  }
+  render_current();
+}
+
+static void handle_end_game(void *user_data) {
+  (void)user_data;
+  const char *game_id = s_app.member.decision.game_id[0] ? s_app.member.decision.game_id : NULL;
+  if (!s_app.provider->end_game(s_app.member.id, game_id, &s_app.error)) {
+    s_app.step = KIOSK_STEP_ERROR;
+  } else {
+    reset_to_idle();
+    return;
   }
   render_current();
 }
@@ -388,9 +404,19 @@ static void cancel_existing_click_cb(lv_event_t *e) {
   handle_cancel_existing(NULL);
 }
 
+static void end_game_click_cb(lv_event_t *e) {
+  (void)e;
+  handle_end_game(NULL);
+}
+
 static void book_another_click_cb(lv_event_t *e) {
   (void)e;
   handle_book_another(NULL);
+}
+
+static void close_idle_click_cb(lv_event_t *e) {
+  (void)e;
+  reset_to_idle();
 }
 
 static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
@@ -398,71 +424,137 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
   lv_obj_remove_style_all(root);
   lv_obj_set_size(root, lv_pct(100), lv_pct(100));
   lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(root, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_all(root, 24, 0);
-  
-  lv_obj_t *icon_box = lv_obj_create(root);
-  lv_obj_remove_style_all(icon_box);
-  lv_obj_set_size(icon_box, 80, 80);
-  lv_obj_set_style_radius(icon_box, 40, 0);
-  lv_obj_set_style_bg_color(icon_box, kiosk_theme_color_primary(), 0);
-  lv_obj_set_style_bg_opa(icon_box, LV_OPA_10, 0);
-  lv_obj_set_style_border_width(icon_box, 1, 0);
-  lv_obj_set_style_border_color(icon_box, kiosk_theme_color_primary(), 0);
-  lv_obj_set_style_border_opa(icon_box, LV_OPA_30, 0);
-
-  lv_obj_t *icon = lv_label_create(icon_box);
-  lv_label_set_text(icon, LV_SYMBOL_BELL);
-  lv_obj_set_style_text_font(icon, &lv_font_montserrat_32, 0);
-  lv_obj_set_style_text_color(icon, kiosk_theme_color_primary(), 0);
-  lv_obj_center(icon);
+  lv_obj_set_flex_align(root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_all(root, 16, 0);
+  lv_obj_set_style_pad_row(root, 10, 0);
+  lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *title = lv_label_create(root);
   lv_label_set_text(title, "Active Booking Found");
   lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(title, kiosk_theme_color_text_strong(), 0);
-  lv_obj_set_style_pad_top(title, 20, 0);
 
   lv_obj_t *sub = lv_label_create(root);
-  lv_label_set_text(sub, "You are already in the queue for a court.\\nWould you like to book another match or cancel your existing one?");
+  if (s_app.member.decision.has_active_game && s_app.member.decision.has_active_queue) {
+    lv_label_set_text(sub, "You have an ongoing match and a spot in the queue.");
+  } else if (s_app.member.decision.has_active_game) {
+    lv_label_set_text(sub, "You are currently playing in an active match.");
+  } else {
+    lv_label_set_text(sub, "You are currently on the waiting list.");
+  }
   lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(sub, kiosk_theme_color_text_muted(), 0);
-  lv_obj_set_style_text_align(sub, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_pad_top(sub, 8, 0);
-  lv_obj_set_style_pad_bottom(sub, 32, 0);
 
-  lv_obj_t *btn_row = lv_obj_create(root);
-  lv_obj_remove_style_all(btn_row);
-  lv_obj_set_width(btn_row, lv_pct(80));
-  lv_obj_set_height(btn_row, LV_SIZE_CONTENT);
-  lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(btn_row, 16, 0);
+  /* Card for ongoing game */
+  if (s_app.member.decision.has_active_game) {
+    lv_obj_t *game_card = lv_obj_create(root);
+    lv_obj_remove_style_all(game_card);
+    lv_obj_set_width(game_card, lv_pct(95));
+    lv_obj_set_height(game_card, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(game_card, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(game_card, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(game_card, 12, 0);
+    lv_obj_set_style_radius(game_card, 8, 0);
+    lv_obj_set_style_bg_color(game_card, kiosk_theme_color_panel(), 0);
+    lv_obj_set_style_border_width(game_card, 1, 0);
+    lv_obj_set_style_border_color(game_card, kiosk_theme_color_border(), 0);
 
-  lv_obj_t *cancel_btn = lv_btn_create(btn_row);
-  lv_obj_add_style(cancel_btn, &kiosk_style_btn_secondary, 0);
-  lv_obj_add_style(cancel_btn, &kiosk_style_btn_secondary, LV_STATE_PRESSED);
-  lv_obj_set_style_border_color(cancel_btn, KIOSK_COLOR_RED_500, 0);
-  lv_obj_set_style_bg_color(cancel_btn, KIOSK_COLOR_RED_500, LV_STATE_PRESSED);
-  lv_obj_set_style_bg_opa(cancel_btn, LV_OPA_10, LV_STATE_PRESSED);
-  lv_obj_set_flex_grow(cancel_btn, 1);
-  lv_obj_t *cancel_label = lv_label_create(cancel_btn);
-  lv_label_set_text(cancel_label, LV_SYMBOL_TRASH " Cancel Booking");
-  lv_obj_set_style_text_color(cancel_label, KIOSK_COLOR_RED_500, 0);
-  lv_obj_center(cancel_label);
-  lv_obj_add_event_cb(cancel_btn, cancel_existing_click_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *info = lv_obj_create(game_card);
+    lv_obj_remove_style_all(info);
+    lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
+    lv_obj_t *l1 = lv_label_create(info);
+    lv_label_set_text(l1, "Ongoing Match");
+    lv_obj_set_style_text_font(l1, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(l1, kiosk_theme_color_text_strong(), 0);
+    lv_obj_t *l2 = lv_label_create(info);
+    lv_label_set_text(l2, "Match in progress");
+    lv_obj_set_style_text_font(l2, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(l2, kiosk_theme_color_text_muted(), 0);
 
-  lv_obj_t *another_btn = lv_btn_create(btn_row);
-  lv_obj_add_style(another_btn, &kiosk_style_btn_primary, 0);
-  lv_obj_add_style(another_btn, &kiosk_style_btn_primary, LV_STATE_PRESSED);
-  lv_obj_set_flex_grow(another_btn, 1);
-  lv_obj_t *another_label = lv_label_create(another_btn);
-  lv_label_set_text(another_label, LV_SYMBOL_PLUS " Book Another");
-  lv_obj_center(another_label);
-  lv_obj_add_event_cb(another_btn, book_another_click_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *end_btn = lv_btn_create(game_card);
+    lv_obj_add_style(end_btn, &kiosk_style_btn_secondary, 0);
+    lv_obj_set_style_border_color(end_btn, KIOSK_COLOR_RED_500, 0);
+    lv_obj_t *end_label = lv_label_create(end_btn);
+    lv_label_set_text(end_label, LV_SYMBOL_STOP " End Game Early");
+    lv_obj_set_style_text_color(end_label, KIOSK_COLOR_RED_500, 0);
+    lv_obj_add_event_cb(end_btn, end_game_click_cb, LV_EVENT_CLICKED, NULL);
+  }
+
+  /* Card for queue ticket */
+  if (s_app.member.decision.has_active_queue) {
+    lv_obj_t *q_card = lv_obj_create(root);
+    lv_obj_remove_style_all(q_card);
+    lv_obj_set_width(q_card, lv_pct(95));
+    lv_obj_set_height(q_card, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(q_card, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(q_card, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_all(q_card, 12, 0);
+    lv_obj_set_style_radius(q_card, 8, 0);
+    lv_obj_set_style_bg_color(q_card, kiosk_theme_color_panel(), 0);
+    lv_obj_set_style_border_width(q_card, 1, 0);
+    lv_obj_set_style_border_color(q_card, kiosk_theme_color_border(), 0);
+
+    lv_obj_t *info = lv_obj_create(q_card);
+    lv_obj_remove_style_all(info);
+    lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
+    lv_obj_t *l1 = lv_label_create(info);
+    lv_label_set_text(l1, "Waiting Queue");
+    lv_obj_set_style_text_font(l1, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(l1, kiosk_theme_color_text_strong(), 0);
+    lv_obj_t *l2 = lv_label_create(info);
+    lv_label_set_text(l2, "Waiting for court to open");
+    lv_obj_set_style_text_font(l2, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(l2, kiosk_theme_color_text_muted(), 0);
+
+    lv_obj_t *cancel_btn = lv_btn_create(q_card);
+    lv_obj_add_style(cancel_btn, &kiosk_style_btn_secondary, 0);
+    lv_obj_set_style_border_color(cancel_btn, KIOSK_COLOR_RED_500, 0);
+    lv_obj_t *cancel_label = lv_label_create(cancel_btn);
+    lv_label_set_text(cancel_label, LV_SYMBOL_TRASH " Cancel Queue");
+    lv_obj_set_style_text_color(cancel_label, KIOSK_COLOR_RED_500, 0);
+    lv_obj_add_event_cb(cancel_btn, cancel_existing_click_cb, LV_EVENT_CLICKED, NULL);
+  }
+
+  /* Booking or Notice */
+  if (s_app.member.decision.has_active_queue) {
+    lv_obj_t *notice_box = lv_obj_create(root);
+    lv_obj_remove_style_all(notice_box);
+    lv_obj_set_width(notice_box, lv_pct(95));
+    lv_obj_set_height(notice_box, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_all(notice_box, 10, 0);
+    lv_obj_set_style_radius(notice_box, 8, 0);
+    lv_obj_set_style_bg_color(notice_box, kiosk_theme_color_panel(), 0);
+    lv_obj_set_style_border_width(notice_box, 1, 0);
+    lv_obj_set_style_border_color(notice_box, KIOSK_COLOR_AMBER_500, 0);
+
+    lv_obj_t *notice_title = lv_label_create(notice_box);
+    lv_label_set_text(notice_title, LV_SYMBOL_WARNING " Queue Limit Reached (Max 1 queue spot)");
+    lv_obj_set_style_text_font(notice_title, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(notice_title, KIOSK_COLOR_AMBER_500, 0);
+  } else {
+    lv_obj_t *another_btn = lv_btn_create(root);
+    lv_obj_add_style(another_btn, &kiosk_style_btn_primary, 0);
+    lv_obj_add_style(another_btn, &kiosk_style_btn_primary, LV_STATE_PRESSED);
+    lv_obj_set_width(another_btn, lv_pct(95));
+    lv_obj_set_height(another_btn, 42);
+    lv_obj_t *another_label = lv_label_create(another_btn);
+    lv_label_set_text(another_label, LV_SYMBOL_PLUS " Book Another Match");
+    lv_obj_center(another_label);
+    lv_obj_add_event_cb(another_btn, book_another_click_cb, LV_EVENT_CLICKED, NULL);
+  }
+
+  lv_obj_t *close_btn = lv_btn_create(root);
+  lv_obj_add_style(close_btn, &kiosk_style_btn_secondary, 0);
+  lv_obj_set_width(close_btn, lv_pct(95));
+  lv_obj_set_height(close_btn, 38);
+  lv_obj_t *close_label = lv_label_create(close_btn);
+  lv_label_set_text(close_label, "Done");
+  lv_obj_center(close_label);
+  lv_obj_add_event_cb(close_btn, close_idle_click_cb, LV_EVENT_CLICKED, NULL);
 
   return root;
 }
+
 static lv_obj_t *build_booting_screen(lv_obj_t *parent) {
   lv_obj_t *root = lv_obj_create(parent);
   lv_obj_remove_style_all(root);
@@ -609,6 +701,7 @@ static void render_current(void) {
                                    member_name, s_app.member.balance,
                                    &cfg,
                                    (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2,
+                                   s_app.member.decision.has_active_game,
                                    handle_select_duration,
                                    close_to_idle, NULL,
                                    handle_back_step, NULL, NULL);

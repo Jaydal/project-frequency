@@ -75,6 +75,9 @@ freq_rest_result_t freq_rest_join_queue(const char *member_uuid, const char *sta
 /* DELETE /api/queue/{id}. */
 freq_rest_result_t freq_rest_cancel_queue(const char *entry_id);
 
+/* POST /api/terminal/game/end. Ends active game early. */
+freq_rest_result_t freq_rest_end_game(const char *member_uuid, const char *game_uuid);
+
 /* POST /api/queue/advance. The kiosk calls this when a locally observed game
  * window ends; the server remains responsible for selecting/promoting the
  * correct queue entry. */

@@ -128,6 +128,9 @@ export async function GET(
   const bestCutoff = await getPlayNowCutoff(supabase, now);
   const decision = evaluateRfidScan(policyMember, now, 60, memberGames, memberQueueEntries, bestCutoff === undefined ? undefined : (bestCutoff || undefined));
 
+  const activeGameRecord = memberGames.find(g => g.status === 'In Progress');
+  const activeQueueRecord = memberQueueEntries[0];
+
   return NextResponse.json({
     id: member.id, // UUID — firmware needs this to book (POST /api/queue is uuid-validated)
     memberId: member.member_id,
@@ -135,6 +138,19 @@ export async function GET(
     lastName: member.last_name,
     balance: wallet?.balance ?? 0,
     status: member.status,
-    decision,
+    decision: {
+      ...decision,
+      entryId: decision.type === 'already queued' ? (decision as any).entryId : (activeQueueRecord?.id ?? undefined),
+      gameId: decision.type === 'already active' ? (decision as any).gameId : (activeGameRecord?.id ?? undefined),
+    },
+    activeGame: activeGameRecord ? {
+      id: activeGameRecord.id,
+      courtId: activeGameRecord.courtId,
+      duration: activeGameRecord.duration,
+    } : null,
+    activeQueue: activeQueueRecord ? {
+      id: activeQueueRecord.id,
+      status: activeQueueRecord.status,
+    } : null,
   });
 }

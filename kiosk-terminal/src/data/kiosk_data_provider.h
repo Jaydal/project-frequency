@@ -22,6 +22,7 @@ typedef struct {
                       booking_result_t *out_result, kiosk_error_t *out_error);
 
   bool (*cancel_waiting)(const char *member_id, kiosk_error_t *out_error);
+  bool (*end_game)(const char *member_id, const char *game_id, kiosk_error_t *out_error);
   bool (*is_ready)(void);
   uint32_t (*get_board_version)(void);
 } kiosk_data_provider_t;

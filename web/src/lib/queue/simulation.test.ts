@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/mqtt', () => ({ publishDisplay: vi.fn(), publishBoard: vi.fn(), publishLightsCommand: vi.fn() }))
 vi.mock('@/lib/display/sports-caster', () => ({ generatePayload: vi.fn(() => ({})) }))
+vi.mock('@/lib/display/publish-all', () => ({ publishAllDisplays: vi.fn().mockResolvedValue({ ok: true, failed: 0, total: 0 }) }))
 vi.mock('./booking-engine', () => ({ findAvailableCourt: vi.fn(), isSlotAvailable: vi.fn() }))
 
 type Row = Record<string, any>
@@ -93,6 +94,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(true)
 
     const { joinQueue } = await import('./queue-service')
@@ -117,6 +119,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(false)
 
     const { joinQueue } = await import('./queue-service')
@@ -143,6 +146,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     const { findAvailableCourt, isSlotAvailable } = await import('./booking-engine')
     vi.mocked(findAvailableCourt).mockResolvedValue({ id: 'c2', name: 'Court 2', status: 'Available' })
     vi.mocked(isSlotAvailable).mockResolvedValue(true)
@@ -175,6 +179,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).findAvailableCourt).mockResolvedValue(null)
 
     const { joinQueue } = await import('./queue-service')
@@ -205,6 +210,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     const { isSlotAvailable } = await import('./booking-engine')
     vi.mocked(isSlotAvailable).mockImplementation(async (courtId: string) => courtId === 'c3')
 
@@ -239,6 +245,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(false)
 
     const { joinQueue } = await import('./queue-service')
@@ -266,6 +273,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).findAvailableCourt).mockResolvedValue(null)
 
     const { joinQueue } = await import('./queue-service')
@@ -289,6 +297,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(true)
 
     const { processCourtQueue } = await import('./queue-processor')
@@ -309,6 +318,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(true)
 
     const { processCourtQueue } = await import('./queue-processor')
@@ -335,6 +345,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
     vi.mocked((await import('./booking-engine')).isSlotAvailable).mockResolvedValue(true)
 
     const { processCourtQueue } = await import('./queue-processor')
@@ -370,6 +381,7 @@ describe('Booking simulation', () => {
     }
     const db = makeFakeDb(tables)
     vi.doMock('@/lib/supabase/server', () => ({ createClient: vi.fn(async () => db) }))
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn(() => db) }))
 
     const { leaveQueue } = await import('./queue-service')
     await leaveQueue('qe-1')
