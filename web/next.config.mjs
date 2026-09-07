@@ -6,8 +6,9 @@ const nextConfig = {
   experimental: {
     // Avoid loading the entire icon catalog for each route during Turbopack
     // startup/builds. Imports remain source-compatible (e.g. { Calendar }).
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ['lucide-react', 'framer-motion', 'three', '@tanstack/react-query'],
   },
 };
 
 export default nextConfig;
+
