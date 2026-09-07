@@ -90,18 +90,32 @@ Hold the onboard reset button (**GPIO 17**) for **5 seconds** to clear stored NV
 
 ## Build & Flash Commands
 
+### 1. Initial USB Flash (One-Time)
+Flashes the base firmware with dual-OTA partitioning (`min_spiffs.csv`) and activates the background ArduinoOTA listener on port 3232:
+
 ```bash
 cd display-firmware
 
-# Compile
-pio run -e esp32-hub75-wf2
-
-# Flash
+# Compile and flash via USB-C
 pio run -e esp32-hub75-wf2 -t upload --upload-port /dev/cu.usbmodem*
 
 # Serial monitor
 pio device monitor -e esp32-hub75-wf2 --port /dev/cu.usbmodem*
 ```
+
+### 2. Wireless Local WiFi OTA (Subsequent Updates)
+Once the scoreboard is mounted above the court and connected to the venue WiFi, you can flash updates through the air without plugging in a USB cable:
+
+```bash
+# Upload wirelessly using the scoreboard's IP address:
+pio run -e esp32-hub75-wf2-ota -t upload --upload-port 192.168.1.50
+
+# Or using mDNS hostname:
+pio run -e esp32-hub75-wf2-ota -t upload --upload-port freq-display-c1.local
+```
+
+- **Authentication:** Configured with password `freq123` (override via `-D OTA_PASSWORD=\"your-secret\"`).
+- **Screen Protection:** During OTA transfer, the firmware automatically pauses the LED DMA matrix to eliminate screen tearing and DMA memory collisions, writes to the inactive flash slot, and reboots cleanly.
 
 > [!IMPORTANT]
 > **Boot Freeze Prevention:** The firmware explicitly calls `WiFi.mode(WIFI_OFF); delay(100);` prior to initializing the HUB75 DMA matrix to prevent ESP32-S3 DMA memory bus lockups.

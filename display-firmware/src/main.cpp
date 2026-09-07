@@ -310,7 +310,7 @@ void setup() {
 #ifdef ENABLE_OTA
   ArduinoOTA.setHostname(("freq-display-" + court).c_str());
   #ifndef OTA_PASSWORD
-  #error "ENABLE_OTA requires OTA_PASSWORD supplied via build configuration"
+  #define OTA_PASSWORD "freq123"
   #endif
   ArduinoOTA.setPassword(OTA_PASSWORD);
   ArduinoOTA.onStart([&]() {
