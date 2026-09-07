@@ -23,8 +23,17 @@ export function QueueBoard({ onBookAsGuest }: { onBookAsGuest?: () => void }) {
     }
   }, []);
 
+  const [clockSec, setClockSec] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const id = setInterval(() => setClockSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     fetchInitial();
+
+    const poller = setInterval(fetchInitial, 5000);
 
     const es = new EventSource('/api/queue/events');
     let sseDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -40,6 +49,7 @@ export function QueueBoard({ onBookAsGuest }: { onBookAsGuest?: () => void }) {
     };
 
     return () => {
+      clearInterval(poller);
       es.close();
       if (sseDebounce) clearTimeout(sseDebounce);
     };
@@ -61,7 +71,7 @@ export function QueueBoard({ onBookAsGuest }: { onBookAsGuest?: () => void }) {
 
   const { courts, upcomingGames, nowServing, queue } = snapshot;
 
-  const nowSec = snapshot.serverTime || Math.floor(Date.now() / 1000);
+  const nowSec = clockSec;
   const courtDisplays: CourtStatusData[] = courts.map((c) => {
     const next = upcomingGames.find((g) =>
       g.id === c.id && g.startTime + g.durationMin * 60 > nowSec
@@ -93,7 +103,7 @@ export function QueueBoard({ onBookAsGuest }: { onBookAsGuest?: () => void }) {
   const scheduledDisplays = buildCourtDisplays(courts, upcomingGames, nowSec);
   scheduledDisplays.forEach((scheduled) => {
     const index = courtDisplays.findIndex((court) => court.id === scheduled.id);
-    if (index >= 0 && courtDisplays[index].status === 'Available' && scheduled.status === 'Scheduled') {
+    if (index >= 0 && courtDisplays[index].status === 'Available' && scheduled.status !== 'Available') {
       courtDisplays[index] = scheduled;
     }
   });

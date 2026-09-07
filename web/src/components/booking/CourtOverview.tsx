@@ -73,6 +73,8 @@ export function CourtOverview() {
   useEffect(() => {
     fetchAll();
 
+    const poller = setInterval(fetchAll, 5000);
+
     const es = new EventSource('/api/queue/events');
     let sseDebounce: ReturnType<typeof setTimeout> | null = null;
     es.onmessage = () => { 
@@ -87,6 +89,7 @@ export function CourtOverview() {
     };
 
     return () => {
+      clearInterval(poller);
       es.close();
       if (sseDebounce) clearTimeout(sseDebounce);
     };

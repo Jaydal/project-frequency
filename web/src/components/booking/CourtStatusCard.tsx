@@ -42,10 +42,10 @@ export const CourtStatusCard = memo(function CourtStatusCard({ court }: Props) {
   const isActive = isActiveNow(court, now);
 
   useEffect(() => {
-    if (!isActive || !court.start_time) return;
+    if (!court.start_time) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [isActive, court.start_time]);
+  }, [court.start_time]);
 
   const elapsed = court.start_time ? Math.floor((now - new Date(court.start_time).getTime()) / 1000) : 0;
   const totalSec = court.duration ? court.duration * 60 : 0;

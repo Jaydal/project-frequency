@@ -24,14 +24,15 @@ export function buildCourtDisplays(
       };
     }
 
+    const isLiveNow = scheduled.startTime <= nowSec;
     return {
       id: court.id,
       name: court.name,
-      status: 'Scheduled',
+      status: isLiveNow ? 'In Progress' : 'Scheduled',
       matchType: scheduled.matchType,
       matchTitle: scheduled.matchTitle,
       duration: scheduled.durationMin,
-      elapsed: 0,
+      elapsed: isLiveNow ? nowSec - scheduled.startTime : 0,
       start_time: new Date(scheduled.startTime * 1000).toISOString(),
       players: scheduled.players.map((p) => ({ first_name: p.firstName, last_name: p.lastName })),
     };
