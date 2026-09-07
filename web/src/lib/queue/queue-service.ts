@@ -178,7 +178,73 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
     if (selected) {
       const now = new Date();
       const slotFree = await isSlotAvailable(selected.id, now, new Date(now.getTime() + params.duration * 60_000));
-      if (slotFree) court = selected;
+      if (slotFree) {
+        court = selected;
+      } else {
+        // Court is occupied right now. Find when the current active or scheduled game on this court finishes.
+        const { data: courtGames } = await supabase
+          .from('games')
+          .select('start_time, duration')
+          .eq('court_id', selected.id)
+          .in('status', ['In Progress', 'Scheduled'])
+          .order('start_time', { ascending: false });
+
+        let latestEndMs = 0;
+        for (const g of courtGames ?? []) {
+          if (g.start_time && g.duration) {
+            const endMs = new Date(g.start_time).getTime() + g.duration * 60_000;
+            if (endMs > latestEndMs) latestEndMs = endMs;
+          }
+        }
+
+        if (latestEndMs > now.getTime()) {
+          const nextStart = new Date(latestEndMs);
+          const nextEnd = new Date(latestEndMs + params.duration * 60_000);
+          const nextSlotFree = await isSlotAvailable(selected.id, nextStart, nextEnd);
+          if (nextSlotFree) {
+            // Schedule the game directly on this court!
+            const depositTxId = await deductWallet(params.memberId, charge, `QUEUE_DEPOSIT_${Date.now()}`);
+            const { data: game, error: gameErr } = await supabase
+              .from('games')
+              .insert({
+                court_id: selected.id,
+                match_type: params.partySize === 4 ? '2v2' : '1v1',
+                match_title: params.matchTitle ?? null,
+                duration: params.duration,
+                status: 'Scheduled',
+                start_time: nextStart.toISOString(),
+                charge_amount: charge,
+              })
+              .select()
+              .single();
+
+            if (gameErr) {
+              if (depositTxId) await refundTransaction(depositTxId, 'Booking failed');
+              throw new Error(gameErr.message);
+            }
+
+            await supabase
+              .from('game_players')
+              .insert(params.playerIds.map(pid => ({ game_id: game.id, member_id: pid, team: null })));
+
+            publishAllDisplays().catch(console.error);
+
+            return {
+              id: game.id,
+              member_id: params.memberId,
+              requested_start: nextStart.toISOString(),
+              duration: params.duration,
+              party_size: params.partySize,
+              player_ids: params.playerIds,
+              court_id: selected.id,
+              status: 'scheduled',
+              expires_at: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            } as any;
+          }
+        }
+      }
     }
   } else {
     await processAllCourts();

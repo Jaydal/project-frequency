@@ -445,7 +445,7 @@ export function BookingKiosk() {
           duration: duration ?? 0,
         });
         setStep('schedule-success');
-      } else if (entry.status === 'completed') {
+      } else if (entry.status === 'completed' || entry.status === 'scheduled') {
         setQueueEntry(entry);
         setStep('success');
       } else {

@@ -37,7 +37,10 @@ export async function createAdvancedBooking(input: CreateBookingInput, client?: 
 
   let courtId = input.courtId;
   if (!courtId) {
-    const { data: courts } = await supabase.from('courts').select('id').eq('status', 'Available');
+    const { data: courts } = await supabase
+      .from('courts')
+      .select('id, status')
+      .not('status', 'in', '("Maintenance","Closed")');
     for (const c of courts ?? []) {
       const slotFree = await isSlotAvailable(c.id, start, end);
       if (slotFree) { courtId = c.id; break; }

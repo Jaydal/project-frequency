@@ -20,6 +20,7 @@ export async function findAvailableCourt(
   if (!courts) return null;
 
   for (const court of courts) {
+    if (court.status === 'Maintenance' || court.status === 'Closed') continue;
     if (excludeCourtId && court.id === excludeCourtId) continue;
     const slotFree = await isSlotAvailable(court.id, requestedStart, end);
     if (slotFree) return { id: court.id, name: court.name, status: court.status };
@@ -105,14 +106,14 @@ export async function getPlayNowCutoff(supabase: any, now: Date): Promise<{ cour
 
   const { data: courts } = await supabase
     .from('courts')
-    .select('id, name, status')
-    .in('status', ['Available']);
+    .select('id, name, status');
 
-  if (!courts || courts.length === 0) return undefined; // No available courts right now
+  const eligibleCourts = (courts ?? []).filter((c: any) => c.status !== 'Maintenance' && c.status !== 'Closed');
+  if (eligibleCourts.length === 0) return undefined; // No available courts right now
 
   let bestOption: { courtId: string, courtName: string, cutoff: Date | null } | undefined = undefined;
 
-  for (const court of courts) {
+  for (const court of eligibleCourts) {
     const start = now;
     const end = new Date(start.getTime() + 60_000);
     const isFreeNow = await isSlotAvailable(court.id, start, end);

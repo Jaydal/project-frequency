@@ -27,13 +27,26 @@ export async function processCourtQueue(courtId: string): Promise<boolean> {
       const startMs = new Date(game.start_time).getTime();
       const gameEnd = new Date(startMs + game.duration * 60_000);
       
-      // If a Scheduled game's start time is past the current time, it is a no-show ("done already")
-      if (game.status === 'Scheduled' && now.getTime() >= startMs) {
-        await supabase
-          .from('games')
-          .update({ status: 'No-show', no_show_at: now.toISOString() })
-          .eq('id', game.id);
-        continue;
+      // If a Scheduled game is past its grace period without checking in, mark as No-show
+      const gracePeriodMs = 15 * 60_000;
+      if (game.status === 'Scheduled') {
+        if (now.getTime() >= startMs + gracePeriodMs) {
+          await supabase
+            .from('games')
+            .update({ status: 'No-show', no_show_at: now.toISOString() })
+            .eq('id', game.id);
+          continue;
+        }
+        // If within match window, transition to In Progress and mark court occupied
+        if (now.getTime() >= startMs && now.getTime() < gameEnd.getTime()) {
+          await supabase
+            .from('games')
+            .update({ status: 'In Progress' })
+            .eq('id', game.id);
+          game.status = 'In Progress';
+          isOccupied = true;
+          continue;
+        }
       }
 
       // If the game's scheduled end time is in the past, auto-complete it
