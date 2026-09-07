@@ -1,179 +1,107 @@
 # Freq Court Display — HD-WF2 Firmware
 
-Self-contained firmware for the **Huidu HD-WF2** LED controller (ESP32-S3 + HUB75).
+Firmware for the **Huidu HD-WF2** LED controller (ESP32-S3 + HUB75 connector) driving physical P10 RGB LED scoreboards.
 
-The HD-WF2 is a programmable ESP32-S3 board with a HUB75 connector, battery-backed RTC, and onboard status LED. We flash our own MQTT-driven firmware onto it — no Huidu proprietary protocol, no XiaoHui Cloud, no bridge needed.
+The HD-WF2 is a programmable ESP32-S3 board with a HUB75 connector, battery-backed RTC, and onboard status LED. We flash custom MQTT-driven firmware directly onto the board without proprietary vendor software.
 
-## Target hardware
+---
 
-| Component | Value |
+## Hardware Specifications
+
+| Component | Specification |
 |---|---|
-| Board | Huidu HD-WF2 (ESP32-S3, 4MB flash) |
-| Panel | 2× P10 RGB, 32×16 each, 1/16 scan (ABCDE), chained **horizontal** → 64×16 |
-| Connector | 75EX1 only (75EX2's E pin isn't wired on the S3 — see mrcodetastic/HD-WF1-WF2-LED-MatrixPanel-DMA) |
-| Status LED | GPIO 40 (onboard RUN_LED) — solid = online, blink 500ms = WiFi/MQTT lost |
-| Buzzer | none (no spare pin — 41/42 are RTC I2C) |
-| Broker | HiveMQ Cloud mqtts://…:8883 (matches `web/.env.local`) |
+| Controller Board | Huidu HD-WF2 (ESP32-S3, 4MB Flash) |
+| LED Panels | 2× P10 RGB panels, 32×16 pixels each, 1/16 scan (ABCDE), chained horizontally (64×16 total resolution) |
+| Connector | `75EX1` port |
+| Status LED | GPIO 40 (`RUN_LED`): solid = online; blinking (500ms) = searching for WiFi / MQTT |
+| Factory Reset | GPIO 17 button (hold for 5 seconds to wipe NVS and start captive portal) |
+| MQTT Broker | HiveMQ Cloud MQTTS (`port 8883` with TLS) |
 
-## Pin map (75EX1)
+---
 
-| Signal | GPIO |   | Signal | GPIO |
-|---|---|---|---|---|
-| R1 | 2  |   | A  | 39 |
-| G1 | 6  |   | B  | 38 |
-| B1 | 10 |   | C  | 37 |
-| R2 | 3  |   | D  | 36 |
-| G2 | 7  |   | E  | 21 |
-| B2 | 11 |   | LAT | 33 |
-|   |    |   | OE  | 35 |
-|   |    |   | CLK | 34 |
+## Pin Mapping (75EX1)
 
-Source: `hd-wf2-esp32s3-config.h` from [mrcodetastic/HD-WF1-WF2-LED-MatrixPanel-DMA](https://github.com/mrcodetastic/HD-WF1-WF2-LED-MatrixPanel-DMA).
+| Signal | GPIO | Signal | GPIO |
+|---|---|---|---|
+| R1 | 2 | A | 39 |
+| G1 | 6 | B | 38 |
+| B1 | 10 | C | 37 |
+| R2 | 3 | D | 36 |
+| G2 | 7 | E | 21 |
+| B2 | 11 | LAT | 33 |
+| OE | 35 | CLK | 34 |
 
-## Render model
+---
 
-Strictly matches `web/src/components/display/P10Display.tsx` horizontal layout:
+## Display Architecture & MQTT Contract
 
-- **2 visible rows** of 5×7 bitmap text (line1 y=0, line2 y=8, 1px gap).
-- **line3 is dropped** (matches `P10Display.tsx:147` `slice(0, 2)`).
-- **Short text** (≤ 64px): horizontal-centered static.
-- **Long text** (> 64px): horizontal marquee scroll (left), 18ms tick, wrap when `x + width <= 0`, black `clearScreen` before each redraw.
-- **Font**: 5×7 bitmap table identical to `P10Display.tsx:11-53` (A-Z, 0-9, space, `-`, `.`, `:`, `/`, nbsp). Lowercase auto-uppercased.
+The scoreboard functions as a thin client. It subscribes to topic:
+`courts/{courtId}/display`
 
-## MQTT contract
-
-Unchanged from the rest of the project — `courts/{courtId}/display` retained QoS 1 with payload:
+### Multi-Zone Playlist Payload
+The Next.js publisher (`sports-caster.ts`) emits a JSON playlist payload containing rotation pages and multi-zone layout directives:
 
 ```json
-{"line1":"COURT 1","line2":"12:34","line3":"RUNNING"}
+{
+  "display": {
+    "brightness": 153,
+    "rotation": 0,
+    "pages": [
+      {
+        "durationSeconds": 8,
+        "zones": [
+          {
+            "panelStart": 0,
+            "panelEnd": 1,
+            "lines": [
+              { "text": "COURT 1", "color": "#00FF66", "effect": "STATIC" },
+              { "text": "ALEX & SAM", "color": "#FFFFFF", "effect": "SCROLL" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
 ```
 
-`line3` is read by `MqttDisplayClient` and passed to the driver, but the WF2 driver ignores it. Drop-in compatible with the MAX7219 and 32-tall HUB75 vertical panels on the same broker.
+### Rendering Features
+- **Hardware DMA Double Buffering:** Uses `_matrix->flipDMABuffer()` to guarantee flicker-free text rendering.
+- **Font & Formatting:** 5×7 custom bitmap font with support for bold, tracking/spacing, and special characters.
+- **Superscript Time Format:** Text containing the `\x01` marker renders subsequent characters (e.g. `AM`/`PM`) in a compact superscript font.
+- **Local Playlist Rotation:** Pages rotate automatically based on their individual `durationSeconds` timers without requiring network traffic between page flips.
 
-## Build & flash
+---
 
-### Prerequisites
+## First-Time Setup (Captive Portal)
 
-- PlatformIO CLI
-- USB-A (host) → USB-C (WF2 programming port labelled "type C", on the 75EX1 side)
-- A `wifi_config.h` in `src/` (copy from `wifi_config.h.example`)
+1. **Flash Firmware:** Flash the device via USB-C (labelled "type C" on the 75EX1 side).
+2. **Setup Mode:** If no WiFi credentials exist in NVS flash:
+   - Panel displays: `SETUP MODE / CONNECT TO FREQ WIFI`
+   - LED blinks rapidly (200ms).
+   - An open hotspot is broadcast: `Freq-Setup-XXXX` (last 4 of MAC).
+3. **Configure:** Connect your phone or laptop to `Freq-Setup-XXXX`. The captive configuration portal will open at `http://192.168.4.1`.
+4. **Save:** Enter the venue WiFi SSID/password, HiveMQ credentials, and target Court ID, then tap **Save & Reboot**.
 
-## First-time setup (config portal)
+### Factory Reset
+Hold the onboard reset button (**GPIO 17**) for **5 seconds** to clear stored NVS settings and re-launch the captive portal.
 
-No need to edit `wifi_config.h` or reflash to change settings. The WF2 has a **captive portal** — it starts as its own WiFi hotspot on first boot (or after factory reset), and you configure everything from your phone:
+---
 
-1. **Flash the firmware** (see Build & Flash below) — one-time only
-2. **On first boot**, the WF2 starts in setup mode:
-   - Panel shows `SETUP MODE / CONNECT TO / FREQ WIFI`
-   - Status LED blinks rapidly (200ms)
-   - A new WiFi network appears: `Freq-Setup-XXXX` (last 4 of MAC)
-3. **Connect your phone/laptop** to `Freq-Setup-XXXX` (open, no password)
-4. **A config page pops up automatically** (captive portal). If not, open `http://192.168.4.1` in a browser
-5. **Fill the form**:
-   - WiFi Network (dropdown of nearby networks + manual entry)
-   - WiFi Password
-   - MQTT Broker (pre-filled with your HiveMQ Cloud host)
-   - MQTT Port / Username / Password
-   - Court ID
-6. **Tap "Save & Reboot"** → WF2 saves to flash (NVS), reboots, connects to your WiFi, starts normal operation
-
-### Factory reset (field service)
-
-If the WF2 is already configured but you need to change settings:
-- **Long-press the onboard button (GPIO 17) for 5 seconds** → clears NVS → reboots into setup mode → portal appears again
-
-### When portal mode activates
-
-| Situation | What happens |
-|---|---|
-| First boot (NVS empty) | Portal starts automatically |
-| WiFi fails 3× after config | Falls back to portal |
-| Long-press button 5s | Factory reset → portal |
-| Normal operation | Portal stays off; settings persist across reboots |
-
-## Build & flash
-
-### Prerequisites
-
-- PlatformIO CLI
-- USB-A (host) → USB-C (WF2 programming port labelled "type C", on the 75EX1 side)
-
-### Build
+## Build & Flash Commands
 
 ```bash
+cd display-firmware
+
+# Compile
 pio run -e esp32-hub75-wf2
-```
 
-Expected: `========================= [SUCCESS] =========================`
-
-### Flash (one-time)
-
-```bash
+# Flash
 pio run -e esp32-hub75-wf2 -t upload --upload-port /dev/cu.usbmodem*
-```
 
-After the first flash, all configuration is done via the portal — no reflash needed.
-
-### Monitor (debug)
-
-```bash
+# Serial monitor
 pio device monitor -e esp32-hub75-wf2 --port /dev/cu.usbmodem*
 ```
 
-**Portal mode boot:**
-```
-=== Freq Court Display — HD-WF2 ===
-[main] No settings in NVS → starting config portal
-[portal] Starting AP: Freq-Setup-A1B2
-[portal] Portal active at http://192.168.4.1
-```
-
-**Normal boot (after portal config):**
-```
-=== Freq Court Display — HD-WF2 ===
-[portal] Connecting to saved WiFi: MyVenueWiFi
-[portal] WiFi OK  IP=192.168.1.42
-[health] Connecting MQTT  broker=...:8883  id=court-1
-[health] MQTT OK  topic=courts/court-1/display
-```
-
-## File layout
-
-```
-firmware/hdwf2/
-├── platformio.ini            # env:esp32-hub75-wf2
-├── README.md                  # this file
-└── src/
-    ├── main.cpp               # boot branching: portal vs normal, button reset, MQTT loop
-    ├── ConfigPortal.h         # captive portal AP + NVS storage interface
-    ├── ConfigPortal.cpp       # AP mode, web form, DNS redirect, NVS read/write
-    ├── IDisplayDriver.h       # shared interface (with setBrightness no-op)
-    ├── Hub75Driver.h          # WF2 driver declaration
-    ├── Hub75Driver.cpp        # WF2 pins + 64×16 geometry + 5×7 font + marquee
-    ├── MqttDisplayClient.h    # shared MQTT client (copied from firmware/src)
-    ├── MqttDisplayClient.cpp  # shared MQTT client (copied from firmware/src)
-    ├── wifi_config.h.example  # legacy compile-time fallback (portal is primary)
-```
-
-## Notes on shared files
-
-`IDisplayDriver.h`, `MqttDisplayClient.h`, and `MqttDisplayClient.cpp` are copied from `firmware/src/`. They're stable because the MQTT contract (`courts/{courtId}/display` → `{line1,line2,line3}`) is locked for Phase 1. If the contract changes (e.g. brightness is added in Phase 2), update both copies — or refactor into `firmware/lib/Shared/` as a real PIO library.
-
-## Phase 2 (deferred)
-
-- Add `brightness`, `scrollSpeedMs`, `color` to the MQTT payload (backward-compatible via ArduinoJson's tolerant parsing).
-- Add a `display_settings` column to the `courts` table and an admin editor in `web/src/features/settings/`.
-- `IDisplayDriver::setBrightness(uint8_t)` virtual is already in place; `Hub75Driver` already implements it.
-
-## Acknowledgments
-
-Pin map and `i2sspeed`/`latch_blanking` defaults derived from the proof-of-concept firmware at https://github.com/mrcodetastic/HD-WF1-WF2-LED-MatrixPanel-DMA.
-
-## Troubleshooting / Known ESP32-S3 Issues
-
-During development, several deep hardware/core issues were encountered and resolved on the HD-WF2 (and generic ESP32-S3 boards), including:
-1. Hard Freeze on Boot (DMA / WiFi Conflict)
-2. Silent Logs / Blind Booting (UART0 vs USB-CDC)
-3. Settings Not Saving / NVS Wiped on Reboot (Flash Mode QIO vs DIO)
-
-For a detailed breakdown of these bugs and their solutions, please see [ESP32-S3 Hardware Bugs](../../docs/ESP32_S3_Hardware_Bugs.md).
+> [!IMPORTANT]
+> **Boot Freeze Prevention:** The firmware explicitly calls `WiFi.mode(WIFI_OFF); delay(100);` prior to initializing the HUB75 DMA matrix to prevent ESP32-S3 DMA memory bus lockups.

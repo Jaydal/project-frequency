@@ -1,75 +1,79 @@
-# Kiosk Terminal — LVGL
+# Kiosk Terminal — LVGL Touchscreen Client
 
-Touchscreen kiosk UI for the pickleball court booking system, targeting an
-ESP32-S3 with an LCD + capacitive touch panel. This repo starts as a **PC
-simulator** (LVGL v8.2 + SDL2) for fast UI iteration; the real hardware
-target is a later phase.
+Touchscreen kiosk application for the Freq pickleball court management system, built with **LVGL v8.2** in C. Supports both an interactive **PC simulator** (macOS / Linux via SDL2) and real **ESP32-S3 hardware** (Waveshare 7" Touch LCD + PN532 NFC reader).
 
-The UI mirrors the web terminal (`web/src/components/terminal/*`): a live
-queue board (court status cards, "now serving" offer, waiting queue) plus an
-RFID-triggered booking flow (select court → game type → duration → confirm →
-success / offer / error), and a first-boot WiFi setup screen.
+The kiosk connects to HiveMQ Cloud over MQTT (topic `freq/board`) for live queue updates and communicates with the Next.js backend via HTTP REST (`freq_rest_client.c`) for member RFID lookups, bookings, and queue advancement.
 
-## Build & run (macOS / Linux)
+---
 
-Prerequisites: `cmake`, a C compiler, and SDL2 (`brew install sdl2` on macOS).
+## 1. PC Simulator (macOS / Linux)
+
+The PC simulator allows instant testing of the entire UI, animations, and touch interactions on your development machine.
+
+### Prerequisites
+- CMake 3.16+
+- C compiler (clang or gcc)
+- SDL2 (`brew install sdl2` on macOS, or `sudo apt install libsdl2-dev` on Linux)
+
+### Build & Run
 
 ```bash
+cd kiosk-terminal
 cmake -B build -S .
 cmake --build build -j
 ./build/kiosk_sim
 ```
 
-A 1024×600 window opens. LVGL and lv_drivers are fetched automatically by
-CMake (`FetchContent`) — no submodules.
+- A 1024×600 window will open.
+- The simulator provides simulated RFID tap buttons (**T1–T5**) in test mode to simulate different member scenarios (sufficient credits, low balance, active offers, etc.).
+- Long-press the top-left corner on the idle screen to access WiFi and connection settings.
 
-## Using the simulator
+---
 
-- **First launch** shows the **WiFi Setup** screen (no saved config yet).
-  Tap a field, type with the on-screen keyboard, tap **Save & Continue**.
-  Config is written to `kiosk_config.ini` (a stand-in for ESP32 NVS flash).
-- After setup, the **idle queue board** shows. The top-right **T1–T5**
-  buttons simulate RFID card taps (no real reader exists yet):
-  - **T1** Juan (has credits) → full booking flow
-  - **T2** Maria (low credits) → insufficient-credits path
-  - **T3** Pedro → jumps straight to a reservation **offer**
-  - **T4** Ana → **existing booking** screen
-  - **T5** Jose → **already playing** error
-- **Long-press the top-left corner** of the idle screen to re-open WiFi setup.
+## 2. ESP32-S3 Hardware Target
 
-## Architecture
+### Hardware Specifications
+- **Board:** Waveshare ESP32-S3-Touch-LCD-7 (800×480 RGB LCD with capacitive touch)
+- **NFC Reader:** PN532 NFC/RFID module
+- **Display Configuration:** Single PSRAM framebuffer (`num_fbs = 1`) with LVGL direct mode (`direct_mode = 1`) to eliminate screen tearing and prevent Wi-Fi DMA buffer starvation.
+- **Button Animations:** `LV_THEME_DEFAULT_GROW` is disabled in `lv_conf.h` to ensure smooth rendering on single-buffered displays.
 
-A hard boundary keeps the UI portable to real hardware:
+### I2C / NFC Hardware Conflict & Wiring
+The Waveshare 7" board has an internal screen touch controller (CH32V003) hardcoded at I2C address `0x24`. Connecting the PN532 NFC reader to the standard I2C header causes a hardware bus collision.
 
-- `src/ui/` — LVGL screens/widgets. Pure LVGL C, no SDL/hardware refs.
-  Reused unchanged on the ESP32-S3.
-- `src/data/` — portable model + provider/config **interfaces**
-  (`kiosk_data_provider.h`, `kiosk_config.h`).
-- `src/data/mock/` — the only data source for now: static mock courts/queue
-  with self-advancing timers. Later replaced by an HTTP/MQTT provider
-  implementing the same interface.
-- `src/hal_sim/` — SDL2 display/input glue + file-based config store.
-  Replaced by `src/hal_esp32/` (real LCD/touch driver + NVS) on hardware;
-  nothing in `ui/` or `data/` changes.
+To resolve this, the PN532 is routed to **UART2** pins configured as a secondary I2C bus (`I2C_NUM_1`):
+1. **DIP Switch:** Set the onboard switch labeled `UART selection` to **UART2** (isolates pins from the CP2102 chip).
+2. **USB Port for Flashing:** Plug your USB-C cable into the **"USB"** port (ESP32 Native USB), NOT the UART port.
+3. **Pin Connections:**
+   - PN532 `SDA` → Board `UART2 TX` (GPIO 43)
+   - PN532 `SCL` → Board `UART2 RX` (GPIO 44)
+   - PN532 `VCC` → `5V`
+   - PN532 `GND` → `GND`
 
-## Not yet implemented (future phases)
+### Build & Flash
 
-- ESP32-S3 build target (PlatformIO/ESP-IDF), real LCD + touch driver.
-- Real networking: WiFi association, and swapping the mock provider for the
-  live backend (`/api/queue`, `/api/courts/status`, RFID lookup).
-- Real RFID reader input (the T1–T5 buttons are placeholders).
+```bash
+cd kiosk-terminal
+pio run -e esp32s3 -t upload
+pio device monitor -e esp32s3
+```
 
-## Hardware Wiring (Waveshare ESP32-S3-Touch-LCD-7B)
+---
 
-The NFC reader (PN532) connects via I2C, but **cannot** use the board's I2C header due to a hardcoded address conflict (`0x24`) with the internal screen controller. 
+## Architecture & Code Organization
 
-Instead, the NFC reader is routed to the **UART2** header on the back of the board, which connects to `GPIO 43` and `GPIO 44`.
+```
+kiosk-terminal/
+├── src/
+│   ├── ui/             LVGL screens and components (portable C, no hardware references)
+│   ├── net/            MQTT subscriber (`freq/board`) and HTTP REST client (`/api/*`)
+│   ├── hal_sim/        SDL2 simulator display and input drivers
+│   ├── hal_esp32/      ESP32-S3 RGB LCD, touch panel, and NVS configuration driver
+│   ├── drivers/        PN532 NFC reader driver on secondary I2C bus (GPIO 43/44)
+│   └── data/           Board model interfaces and mock providers
+├── CMakeLists.txt      Simulator build configuration
+└── platformio.ini      ESP32-S3 hardware build configuration
+```
 
-### Wiring Instructions:
-1. **Physical Switch**: You MUST flip the DIP switch on the board (labeled `UART selection: UART1 or UART2`) to **UART2**. If you leave it on UART1, the pins are hijacked by the USB port.
-2. **USB Port**: Since the UART Type-C port is now disabled by the switch, you must plug your USB-C cable into the **"USB"** Type-C port (Native USB) for flashing and serial monitor.
-3. **NFC Connection**: 
-   - `SDA` -> `UART2 TX` (Pin 43)
-   - `SCL` -> `UART2 RX` (Pin 44)
-   - `VCC` -> `5V`
-   - `GND` -> `GND`
+### Memory Safety & Event Cleanup
+Dynamic memory allocated during UI transitions is freed cleanly using `LV_EVENT_DELETE` callbacks on parent containers to avoid memory leaks during extended unattended venue operation.

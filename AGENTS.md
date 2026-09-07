@@ -49,6 +49,7 @@ The physical interactive touchscreen terminal where players scan their RFID card
 2. **Single Source of Truth:** Supabase is the absolute source of truth. The web kiosk and API read directly from it. 
 3. **Cloud Infrastructure Only:** Local Mosquitto brokers and local PostgreSQL databases are strictly **obsolete** for this project. The physical displays (`hdwf2`) and `kiosk-terminal` rely purely on MQTT (HiveMQ Cloud) for live updates. The web application relies exclusively on Supabase for database and real-time features.
 4. **No Client-Side Mutation Races:** UIs should not use `setInterval` to manually advance queue states in the database. Rely on the server-side `queue-processor.ts`.
+5. **No Cron Dependency (Vercel Hobby Compatibility):** Do not add sub-daily cron schedules to `vercel.json`. Queue progression and expired game reconciliation operate opportunistically via `fetchBoardSnapshot()` lazy checking, hardware kiosk triggers (`POST /api/queue/advance`), and event-driven mutations.
 
 ---
 
