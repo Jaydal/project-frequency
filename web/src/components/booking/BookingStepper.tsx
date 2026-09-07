@@ -25,18 +25,18 @@ export function BookingStepper({ current, steps = BOOKING_STEPS.map(step => step
   return (
     <div className="w-full px-3 pt-3 pb-2 sm:px-4 sm:pt-4 flex flex-col gap-3 sm:gap-4">
       {/* Member info header card */}
-      <div className="flex min-w-0 items-center justify-between gap-2 bg-primary/40 backdrop-blur-md border border-primary-foreground/20 rounded-xl px-3 py-2.5 sm:px-4 shadow-sm">
+      <div className="flex min-w-0 items-center justify-between gap-2 bg-[var(--booking-panel)] border border-[var(--booking-border)] rounded-xl px-3 py-2.5 sm:px-4 shadow-xs">
         <div className="flex min-w-0 items-center gap-2.5">
           <img src="/brand/primary-logo.svg" alt="Paddle Point" className="h-8 sm:h-10 w-auto max-w-[112px] object-contain object-left" />
-          <div className="size-7 rounded-full bg-secondary/10 border border-secondary/20 flex items-center justify-center">
+          <div className="size-7 rounded-full bg-secondary/15 border border-secondary/25 flex items-center justify-center shrink-0">
             <User className="size-4 text-secondary" />
           </div>
           <div className="flex min-w-0 flex-col">
             {memberName && (
-              <span className="truncate text-xs font-semibold text-zinc-200 tracking-wide">{memberName}</span>
+              <span className="truncate text-xs font-semibold text-[var(--booking-text)] tracking-wide">{memberName}</span>
             )}
             {balance !== undefined && (
-              <span className="text-[10px] font-medium text-secondary/90">
+              <span className="text-[10px] font-medium text-secondary">
                 Balance: <span className="font-bold">₱{balance.toLocaleString()}</span>
               </span>
             )}
@@ -44,9 +44,10 @@ export function BookingStepper({ current, steps = BOOKING_STEPS.map(step => step
         </div>
         {onCancel && (
           <button
+            type="button"
             onClick={onCancel}
             aria-label="Cancel booking"
-            className="shrink-0 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-transparent hover:border-zinc-800"
+            className="shrink-0 text-xs text-[var(--booking-muted)] hover:text-[var(--booking-text)] hover:bg-[var(--booking-inset)] transition-all cursor-pointer flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-transparent hover:border-[var(--booking-border)]"
           >
             <X className="size-3.5" />
             <span className="hidden sm:inline">Cancel Booking</span>
@@ -69,8 +70,8 @@ export function BookingStepper({ current, steps = BOOKING_STEPS.map(step => step
                     done
                       ? 'bg-secondary border-secondary text-white shadow-[0_0_12px_rgba(50,164,94,0.3)]'
                       : active
-                      ? 'bg-primary border-secondary text-secondary shadow-[0_0_15px_rgba(50,164,94,0.2)]'
-                      : 'bg-primary border-primary-foreground/20 text-primary-foreground/80'
+                      ? 'bg-secondary border-secondary text-white shadow-[0_0_15px_rgba(50,164,94,0.2)]'
+                      : 'bg-[var(--booking-panel)] border-[var(--booking-border)] text-[var(--booking-muted)]'
                   }`}
                 >
                   {done ? (
@@ -81,7 +82,7 @@ export function BookingStepper({ current, steps = BOOKING_STEPS.map(step => step
                 </div>
                 <span
                   className={`mt-1.5 whitespace-nowrap text-[8px] font-bold tracking-[0.08em] uppercase transition-all duration-300 sm:text-[9px] sm:tracking-wider ${
-                    done ? 'text-secondary' : active ? 'text-primary-foreground' : 'text-primary-foreground/80'
+                    done ? 'text-secondary' : active ? 'text-[var(--booking-text)]' : 'text-[var(--booking-muted)]'
                   }`}
                 >
                   {step}
@@ -90,7 +91,7 @@ export function BookingStepper({ current, steps = BOOKING_STEPS.map(step => step
 
               {/* Connector line (not after last) */}
               {i < steps.length - 1 && (
-                <div className="flex-1 h-[2px] mx-2 mb-5 relative bg-primary-foreground/20 rounded-full overflow-hidden">
+                <div className="flex-1 h-[2px] mx-2 mb-5 relative bg-[var(--booking-border)] rounded-full overflow-hidden">
                   <div 
                     className={`absolute inset-y-0 left-0 transition-all duration-500 ease-out bg-gradient-to-r from-secondary to-secondary/80 ${
                       done ? 'w-full' : 'w-0'

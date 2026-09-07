@@ -13,18 +13,19 @@ interface TimeSlotGridProps {
 
 export function TimeSlotGrid({ slots, selectedTime, onSelect }: TimeSlotGridProps) {
   return (
-    <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
       {slots.map((slot) => (
         <button
           key={slot.time}
+          type="button"
           disabled={!slot.available}
           onClick={() => onSelect(slot.time)}
-          className={`py-2 px-3 rounded text-sm font-medium transition-colors ${
+          className={`py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
             selectedTime === slot.time
-              ? 'bg-emerald-500 text-white'
+              ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500'
               : slot.available
-                ? 'bg-white/10 hover:bg-white/20'
-                : 'bg-white/5 text-white/30 line-through cursor-not-allowed'
+                ? 'bg-muted/70 hover:bg-muted text-foreground border border-border/80 hover:border-primary/50'
+                : 'bg-muted/30 text-muted-foreground/40 border border-transparent line-through cursor-not-allowed'
           }`}
         >
           {slot.time}

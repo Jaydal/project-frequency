@@ -698,36 +698,36 @@ export function BookingKiosk() {
       return withLayout(
         member && (queueEntry || activeGame) && (
           <div className="min-h-full flex flex-col items-center justify-center p-6 text-center animate-fade-in max-w-lg mx-auto">
-            <div className="size-12 rounded-full bg-[#32A45E]/15 border border-[#32A45E]/45 flex items-center justify-center mb-3 text-[#72d493]">
+            <div className="size-12 rounded-full bg-[#32A45E]/15 border border-[#32A45E]/45 flex items-center justify-center mb-3 text-emerald-600 dark:text-[#72d493]">
               <AlertCircle className="size-6" />
             </div>
-            <h2 className="text-xl font-black text-[#f3f6f2] tracking-wide">Active Session Found</h2>
-            <p className="text-xs text-[#b8c5bc] mt-1 mb-6">
-              Welcome back, <span className="text-[#edf3ee] font-bold">{member.firstName}</span>. Manage your active game, queue, or add another booking.
+            <h2 className="text-xl font-black text-[var(--booking-text)] tracking-wide">Active Session Found</h2>
+            <p className="text-xs text-[var(--booking-muted)] mt-1 mb-6">
+              Welcome back, <span className="text-[var(--booking-text)] font-bold">{member.firstName}</span>. Manage your active game, queue, or add another booking.
             </p>
 
             <div className="w-full space-y-3 mb-6">
               {/* Ongoing Game Card */}
               {activeGame && (
-                <div className="bg-[#20362a] border border-[#32A45E]/40 rounded-2xl p-4 text-left shadow-md shadow-black/10 space-y-3">
+                <div className="bg-[var(--booking-card)] border border-[var(--booking-border)] rounded-2xl p-4 text-left shadow-xs space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-[#72d493] uppercase tracking-widest flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-[#72d493] uppercase tracking-widest flex items-center gap-1.5">
                       <span className="size-2 rounded-full bg-[#32A45E] animate-pulse" />
                       Ongoing Match
                     </span>
-                    <span className="text-xs font-bold text-[#72d493] bg-[#32A45E]/10 px-2 py-0.5 rounded border border-[#32A45E]/25">
+                    <span className="text-xs font-bold text-emerald-700 dark:text-[#72d493] bg-[#32A45E]/10 px-2 py-0.5 rounded border border-[#32A45E]/25">
                       In Progress
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <div>
-                      <div className="text-base font-black text-[#edf3ee]">{activeGame.courtName || 'Court'}</div>
-                      <div className="text-[11px] text-[#9eb1a6] mt-0.5">{activeGame.duration} min match</div>
+                      <div className="text-base font-black text-[var(--booking-text)]">{activeGame.courtName || 'Court'}</div>
+                      <div className="text-[11px] text-[var(--booking-muted)] mt-0.5">{activeGame.duration} min match</div>
                     </div>
                     <button
                       onClick={handleEndOngoingGame}
                       disabled={busy}
-                      className="py-2 px-3 rounded-xl bg-[#2a1d1d] text-[#ff9b9b] border border-[#e66a6a]/40 hover:bg-[#3d2020] hover:border-[#e66a6a] text-xs font-extrabold active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="py-2 px-3 rounded-xl bg-red-500/10 text-red-600 dark:text-[#ff9b9b] border border-red-500/30 hover:bg-red-500/20 text-xs font-extrabold active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <StopCircle className="size-3.5" />
                       <span>End Game Early</span>
@@ -738,27 +738,27 @@ export function BookingKiosk() {
 
               {/* Waiting Queue Card */}
               {queueEntry && (
-                <div className="bg-[#20362a] border border-[#486352] rounded-2xl p-4 text-left shadow-md shadow-black/10 space-y-3">
+                <div className="bg-[var(--booking-card)] border border-[var(--booking-border)] rounded-2xl p-4 text-left shadow-xs space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-[#e2b85a] uppercase tracking-widest flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-[#e2b85a] uppercase tracking-widest flex items-center gap-1.5">
                       <Clock className="size-3.5" />
                       Waiting List
                     </span>
-                    <span className="text-xs font-bold text-[#e2b85a] bg-[#d9a441]/10 px-2 py-0.5 rounded border border-[#d9a441]/25">
+                    <span className="text-xs font-bold text-amber-700 dark:text-[#e2b85a] bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
                       Position #{queueEntry.position ?? 1}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <div>
-                      <div className="text-base font-black text-[#edf3ee]">
+                      <div className="text-base font-black text-[var(--booking-text)]">
                         {queueEntry.courtName || queueEntry.court_name || queueEntry.courts?.name || 'Any Court'}
                       </div>
-                      <div className="text-[11px] text-[#9eb1a6] mt-0.5">Waiting for court to open</div>
+                      <div className="text-[11px] text-[var(--booking-muted)] mt-0.5">Waiting for court to open</div>
                     </div>
                     <button
                       onClick={handleCancelExisting}
                       disabled={busy}
-                      className="py-2 px-3 rounded-xl bg-[#2a1d1d] text-[#ff9b9b] border border-[#e66a6a]/40 hover:bg-[#3d2020] hover:border-[#e66a6a] text-xs font-extrabold active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="py-2 px-3 rounded-xl bg-red-500/10 text-red-600 dark:text-[#ff9b9b] border border-red-500/30 hover:bg-red-500/20 text-xs font-extrabold active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Trash2 className="size-3.5" />
                       <span>Cancel Queue</span>
@@ -770,18 +770,18 @@ export function BookingKiosk() {
 
             {/* Add Another Booking Options - only allowed if member does not already hold a queue ticket */}
             {!queueEntry ? (
-              <div className="w-full bg-[#17261f] border border-[#2b4035] rounded-2xl p-4 mb-4 text-left shadow-md">
-                <div className="text-[10px] font-bold text-[#aebbb2] uppercase tracking-widest mb-1">
+              <div className="w-full bg-[var(--booking-card)] border border-[var(--booking-border)] rounded-2xl p-4 mb-4 text-left shadow-xs">
+                <div className="text-[10px] font-bold text-[var(--booking-muted)] uppercase tracking-widest mb-1">
                   Book Another Game
                 </div>
-                <p className="text-[11px] text-[#718178] mb-3">
+                <p className="text-[11px] text-[var(--booking-subtle)] mb-3">
                   {activeGame ? 'Max 1 hour while currently in game to give other players a turn.' : 'Choose how you would like to book.'}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     onClick={() => { setScheduleMode(false); setStep('select-court'); }}
                     disabled={busy}
-                    className="py-3.5 px-4 rounded-xl bg-[#32A45E] hover:bg-[#3bb86b] text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-[#32A45E]/20 flex items-center justify-center gap-2"
+                    className="py-3.5 px-4 rounded-xl bg-secondary hover:bg-secondary/90 text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-secondary/10 flex items-center justify-center gap-2"
                   >
                     <Plus className="size-4 stroke-[2.5]" />
                     <span>Play Now / Queue Up</span>
@@ -789,7 +789,7 @@ export function BookingKiosk() {
                   <button
                     onClick={() => { setScheduleMode(true); setStep('select-schedule-datetime'); }}
                     disabled={busy}
-                    className="py-3.5 px-4 rounded-xl bg-[#0E5E9A] hover:bg-[#1876b5] text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-black/20 flex items-center justify-center gap-2"
+                    className="py-3.5 px-4 rounded-xl bg-[#0E5E9A] hover:bg-[#1876b5] text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-black/10 flex items-center justify-center gap-2"
                   >
                     <Calendar className="size-4" />
                     <span>Schedule for Later</span>
@@ -797,12 +797,12 @@ export function BookingKiosk() {
                 </div>
               </div>
             ) : (
-              <div className="w-full bg-[#17261f] border border-[#3b3223] rounded-2xl p-4 mb-4 text-left shadow-md">
-                <div className="text-[10px] font-bold text-[#e2b85a] uppercase tracking-widest mb-1 flex items-center gap-1.5">
+              <div className="w-full bg-[var(--booking-card)] border border-[var(--booking-border)] rounded-2xl p-4 mb-4 text-left shadow-xs">
+                <div className="text-[10px] font-bold text-amber-600 dark:text-[#e2b85a] uppercase tracking-widest mb-1 flex items-center gap-1.5">
                   <span>ℹ️</span>
                   <span>Queue Limit Reached</span>
                 </div>
-                <p className="text-xs text-[#d5c5a3] leading-relaxed">
+                <p className="text-xs text-[var(--booking-muted)] leading-relaxed">
                   You already have an active spot in the waiting list. To give everyone a chance to play, you can only hold one queue spot at a time. You can book again once your waiting game begins, or by cancelling your queue ticket above.
                 </p>
               </div>
@@ -810,7 +810,7 @@ export function BookingKiosk() {
 
             <button
               onClick={reset}
-              className="py-2.5 px-5 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 text-xs font-bold transition-all cursor-pointer"
+              className="py-2.5 px-5 rounded-xl text-[var(--booking-muted)] hover:text-[var(--booking-text)] hover:bg-[var(--booking-panel)] text-xs font-bold transition-all cursor-pointer"
             >
               Done / Back to Home
             </button>
@@ -821,11 +821,11 @@ export function BookingKiosk() {
     case 'rfid-decision':
       return withLayout(
         <div className="min-h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-          <h2 className="text-lg font-black text-zinc-100 tracking-wide mb-2">Welcome, {member?.firstName}</h2>
+          <h2 className="text-lg font-black text-[var(--booking-text)] tracking-wide mb-2">Welcome, {member?.firstName}</h2>
           
           {decision?.type === 'check-in scheduled' ? (
             <>
-              <p className="text-xs text-zinc-400 mb-8">You have a scheduled booking starting soon.</p>
+              <p className="text-xs text-[var(--booking-muted)] mb-8">You have a scheduled booking starting soon.</p>
               <div className="flex flex-col gap-3 w-full max-w-xs">
                 <button
                   onClick={() => {
@@ -844,7 +844,7 @@ export function BookingKiosk() {
             </>
           ) : decision?.type === 'no eligible window' ? (
             <>
-              <p className="text-xs text-red-400 mb-8">{decision.reason}</p>
+              <p className="text-xs text-red-500 dark:text-red-400 mb-8">{decision.reason}</p>
               <div className="flex flex-col gap-3 w-full max-w-xs">
                 <button
                   onClick={() => { setScheduleMode(true); setStep('select-schedule-datetime'); }}
@@ -854,7 +854,7 @@ export function BookingKiosk() {
                 </button>
                 <button
                   onClick={reset}
-                  className="w-full py-4 px-6 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 font-extrabold text-sm uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer"
+                  className="w-full py-4 px-6 rounded-xl border border-[var(--booking-border)] hover:bg-[var(--booking-panel)] text-[var(--booking-text)] font-extrabold text-sm uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -862,7 +862,7 @@ export function BookingKiosk() {
             </>
           ) : decision?.type === 'already active' ? (
             <>
-              <p className="text-xs text-amber-400 mb-8">
+              <p className="text-xs text-amber-600 dark:text-amber-400 mb-8">
                 You are currently playing{activeGame?.courtName ? ` on ${activeGame.courtName}` : ''}, but you can still book another match.
               </p>
               <div className="flex flex-col gap-3 w-full max-w-xs">
@@ -880,7 +880,7 @@ export function BookingKiosk() {
                 </button>
                 <button
                   onClick={handleEndOngoingGame}
-                  className="w-full py-3.5 px-6 rounded-xl bg-[#1b2a23] text-[#ff9b9b] border border-[#e66a6a]/40 hover:bg-[#352323] hover:border-[#e66a6a] font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-3.5 px-6 rounded-xl bg-red-500/10 text-red-600 dark:text-[#ff9b9b] border border-red-500/30 hover:bg-red-500/20 font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   <StopCircle className="size-4" />
                   <span>End Ongoing Game</span>
@@ -889,7 +889,7 @@ export function BookingKiosk() {
             </>
           ) : (
             <>
-              <p className="text-xs text-zinc-400 mb-8">How would you like to book?</p>
+              <p className="text-xs text-[var(--booking-muted)] mb-8">How would you like to book?</p>
               <div className="flex flex-col gap-3 w-full max-w-xs">
                 {decision?.type === 'play now' && (
                   <button
@@ -928,10 +928,10 @@ export function BookingKiosk() {
     case 'select-schedule-datetime':
       return withLayout(
         <div className="min-h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-          <h2 className="text-lg font-black text-zinc-100 tracking-wide mb-6">Select Date & Time</h2>
+          <h2 className="text-lg font-black text-[var(--booking-text)] tracking-wide mb-6">Select Date & Time</h2>
           <div className="flex flex-col gap-4 w-full max-w-xs">
             <div>
-              <label htmlFor="schedule-date" className="block text-xs font-bold text-zinc-300 mb-2 text-left">Date</label>
+              <label htmlFor="schedule-date" className="block text-xs font-bold text-[var(--booking-muted)] mb-2 text-left">Date</label>
               <input
                 id="schedule-date"
                 type="date"
@@ -939,16 +939,16 @@ export function BookingKiosk() {
                 max={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                 value={scheduleDate}
                 onChange={(e) => setScheduleDate(e.target.value)}
-                className="w-full bg-[#15231d] border border-[#40584a] rounded-lg px-4 py-3 text-[#FCFCF6] text-sm focus:outline-none focus:border-[#0E5E9A]"
+                className="w-full bg-[var(--booking-inset)] border border-[var(--booking-border)] rounded-lg px-4 py-3 text-[var(--booking-text)] text-sm focus:outline-none focus:border-secondary"
               />
             </div>
             <div>
-              <label htmlFor="schedule-time" className="block text-xs font-bold text-zinc-300 mb-2 text-left">Time</label>
+              <label htmlFor="schedule-time" className="block text-xs font-bold text-[var(--booking-muted)] mb-2 text-left">Time</label>
               <select
                 id="schedule-time"
                 value={scheduleTime}
                 onChange={(e) => setScheduleTime(e.target.value)}
-                className="w-full bg-[#15231d] border border-[#40584a] rounded-lg px-4 py-3 text-[#FCFCF6] text-sm focus:outline-none focus:border-[#0E5E9A]"
+                className="w-full bg-[var(--booking-inset)] border border-[var(--booking-border)] rounded-lg px-4 py-3 text-[var(--booking-text)] text-sm focus:outline-none focus:border-secondary"
               >
                 <option value="">Select time</option>
                 {Array.from({ length: 14 }, (_, i) => {
@@ -959,6 +959,7 @@ export function BookingKiosk() {
               </select>
             </div>
             <button
+              type="button"
               onClick={() => {
                 if (!scheduleDate || !scheduleTime) return;
                 setStep('select-court');
@@ -1057,32 +1058,33 @@ export function BookingKiosk() {
       return withLayout(
         scheduledBooking && (
           <div className="min-h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-            <div className="size-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4 text-emerald-400">
+            <div className="size-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4 text-emerald-500">
               <CalendarCheck className="size-6" />
             </div>
-            <h2 className="text-lg font-black text-zinc-100 tracking-wide mb-2">Booking Scheduled</h2>
-            <div className="bg-gradient-to-br from-primary/40 to-primary/20 border border-primary-foreground/10 rounded-2xl p-5 mb-8 w-full max-w-sm text-left shadow-md shadow-black/10 space-y-3">
+            <h2 className="text-lg font-black text-[var(--booking-text)] tracking-wide mb-2">Booking Scheduled</h2>
+            <div className="bg-[var(--booking-card)] border border-[var(--booking-border)] rounded-2xl p-5 mb-8 w-full max-w-sm text-left shadow-xs space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">Booking ID</span>
-                <span className="text-xs font-black text-zinc-200">{scheduledBooking.id}</span>
+                <span className="text-[10px] font-bold text-[var(--booking-muted)] uppercase tracking-widest">Booking ID</span>
+                <span className="text-xs font-black text-[var(--booking-text)]">{scheduledBooking.id}</span>
               </div>
-              <div className="h-px bg-zinc-850" />
+              <div className="h-px bg-[var(--booking-border)]/60" />
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">Court</span>
-                <span className="text-xs font-black text-zinc-200">{scheduledBooking.courtName}</span>
+                <span className="text-[10px] font-bold text-[var(--booking-muted)] uppercase tracking-widest">Court</span>
+                <span className="text-xs font-black text-[var(--booking-text)]">{scheduledBooking.courtName}</span>
               </div>
-              <div className="h-px bg-zinc-850" />
+              <div className="h-px bg-[var(--booking-border)]/60" />
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">Date/Time</span>
-                <span className="text-xs font-black text-zinc-200">{new Date(scheduledBooking.start).toLocaleString()}</span>
+                <span className="text-[10px] font-bold text-[var(--booking-muted)] uppercase tracking-widest">Date/Time</span>
+                <span className="text-xs font-black text-[var(--booking-text)]">{new Date(scheduledBooking.start).toLocaleString()}</span>
               </div>
-              <div className="h-px bg-zinc-850" />
+              <div className="h-px bg-[var(--booking-border)]/60" />
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-zinc-550 uppercase tracking-widest">Duration</span>
-                <span className="text-xs font-black text-zinc-200">{scheduledBooking.duration} min</span>
+                <span className="text-[10px] font-bold text-[var(--booking-muted)] uppercase tracking-widest">Duration</span>
+                <span className="text-xs font-black text-[var(--booking-text)]">{scheduledBooking.duration} min</span>
               </div>
             </div>
             <button
+              type="button"
               onClick={reset}
               className="w-full py-3.5 px-6 rounded-xl bg-secondary hover:bg-secondary/90 text-white font-extrabold text-xs uppercase tracking-wider active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-emerald-500/10"
             >

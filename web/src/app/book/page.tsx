@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BookingConfirmation } from '@/components/bookings/BookingConfirmation';
-import { User, Wallet, AlertCircle, CheckCircle2, Search } from 'lucide-react';
+import { User, Wallet, AlertCircle, CheckCircle2, Search, Sun, Moon, ArrowLeft, Calendar, Clock } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import Link from 'next/link';
 
 interface Court { id: string; name: string; status: string; }
 
@@ -35,6 +37,10 @@ export default function BookPage() {
   const [error, setError] = useState<string | null>(null);
   const [price, setPrice] = useState<number | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   // Member management
   const [isStaff, setIsStaff] = useState(false);
@@ -209,242 +215,280 @@ export default function BookPage() {
   }
 
   return (
-    <>
-      {bookingId && (
-        <BookingConfirmation
-          booking={{
-            id: bookingId,
-            status: 'Scheduled',
-            court_id: selectedCourt?.id ?? null,
-            start_time: `${date}T${selectedTime}:00.000Z`,
-            duration,
-          }}
-          courtName={selectedCourt?.name}
-        />
-      )}
-      {!bookingId && (
-        <div className="max-w-4xl mx-auto py-12 px-4 space-y-8">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100">Schedule Court Booking</h1>
-            <p className="text-sm text-zinc-400 mt-1">Reserve a court ahead of time with automated queue processing.</p>
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Top Navigation Bar */}
+      <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90">
+            <img
+              src="/brand/primary-logo.svg"
+              alt="Paddle Point"
+              className="h-8 sm:h-9 w-auto object-contain"
+            />
+          </Link>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="/booking/queue"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
+            >
+              Live Queue
+            </Link>
+            <Link
+              href="/bookings"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
+            >
+              My Bookings
+            </Link>
+            {mounted && (
+              <button
+                type="button"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                aria-label="Toggle theme"
+                className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
+            )}
           </div>
+        </div>
+      </header>
 
-          {/* Member Selection Section */}
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardHeader className="border-b border-zinc-800/60 pb-3">
-              <CardTitle className="text-base flex items-center gap-2 text-zinc-100">
-                <User size={18} className="text-emerald-400" />
-                {isStaff ? 'Select Player / Member' : 'Member Account'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              {loadingUser ? (
-                <p className="text-sm text-zinc-500">Loading user profile...</p>
-              ) : isStaff ? (
-                <div className="space-y-3">
-                  <div className="relative">
-                    <Search size={16} className="absolute left-3 top-3 text-zinc-400" />
-                    <input
-                      type="text"
-                      placeholder="Search member by name or member ID..."
-                      value={memberSearch}
-                      onChange={(e) => setMemberSearch(e.target.value)}
-                      className="w-full bg-zinc-950/70 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
+      <main className="flex-1 max-w-4xl w-full mx-auto py-8 sm:py-12 px-4 space-y-6 sm:space-y-8">
+        {bookingId ? (
+          <BookingConfirmation
+            booking={{
+              id: bookingId,
+              status: 'Scheduled',
+              court_id: selectedCourt?.id ?? null,
+              start_time: `${date}T${selectedTime}:00.000Z`,
+              duration,
+            }}
+            courtName={selectedCourt?.name}
+          />
+        ) : (
+          <>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">Schedule Court Booking</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">Reserve a court ahead of time with automated queue processing.</p>
+            </div>
 
-                  {filteredMembers.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
-                      {filteredMembers.map((m) => {
-                        const isSelected = selectedMember?.id === m.id;
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => setSelectedMember(m)}
-                            className={`p-3 rounded-lg text-left border transition-all text-xs flex flex-col justify-between gap-1 ${
-                              isSelected
-                                ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500'
-                                : 'bg-zinc-950/40 border-zinc-800 hover:border-zinc-700'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-zinc-200 truncate">{m.first_name} {m.last_name}</span>
-                              {isSelected && <CheckCircle2 size={14} className="text-emerald-400" />}
-                            </div>
-                            <div className="flex items-center justify-between text-zinc-400">
-                              <span>ID: {m.member_id}</span>
-                              <span className="font-mono text-emerald-300 font-bold">₱{m.balance.toFixed(2)}</span>
-                            </div>
-                          </button>
-                        );
-                      })}
+            {/* Member Selection Section */}
+            <Card className="border-border bg-card shadow-xs">
+              <CardHeader className="border-b border-border/60 pb-3">
+                <CardTitle className="text-sm sm:text-base flex items-center gap-2 text-foreground">
+                  <User size={18} className="text-emerald-500" />
+                  {isStaff ? 'Select Player / Member' : 'Member Account'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                {loadingUser ? (
+                  <p className="text-sm text-muted-foreground">Loading user profile...</p>
+                ) : isStaff ? (
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3 top-3 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Search member by name or member ID..."
+                        value={memberSearch}
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
                     </div>
-                  ) : (
-                    <p className="text-xs text-zinc-500 py-2">No active members found matching query.</p>
-                  )}
 
-                  {selectedMember && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/30 text-xs">
-                      <div className="flex items-center gap-2">
-                        <Wallet size={15} className="text-emerald-400" />
-                        <span className="text-zinc-300">
-                          Booking for: <strong className="text-zinc-100">{selectedMember.first_name} {selectedMember.last_name}</strong> ({selectedMember.member_id})
+                    {filteredMembers.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                        {filteredMembers.map((m) => {
+                          const isSelected = selectedMember?.id === m.id;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setSelectedMember(m)}
+                              className={`p-3 rounded-lg text-left border transition-all text-xs flex flex-col justify-between gap-1 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-500/15 border-emerald-500 ring-1 ring-emerald-500 text-foreground'
+                                  : 'bg-muted/40 border-border hover:border-primary/50 text-foreground'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-foreground truncate">{m.first_name} {m.last_name}</span>
+                                {isSelected && <CheckCircle2 size={14} className="text-emerald-500" />}
+                              </div>
+                              <div className="flex items-center justify-between text-muted-foreground">
+                                <span>ID: {m.member_id}</span>
+                                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">₱{m.balance.toFixed(2)}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-2">No active members found matching query.</p>
+                    )}
+
+                    {selectedMember && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                        <div className="flex items-center gap-2">
+                          <Wallet size={15} className="text-emerald-500" />
+                          <span className="text-foreground">
+                            Booking for: <strong className="text-foreground font-bold">{selectedMember.first_name} {selectedMember.last_name}</strong> ({selectedMember.member_id})
+                          </span>
+                        </div>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                          Wallet: ₱{selectedMember.balance.toFixed(2)}
                         </span>
                       </div>
-                      <span className="font-mono text-emerald-400 font-bold">
-                        Wallet: ₱{selectedMember.balance.toFixed(2)}
+                    )}
+                  </div>
+                ) : selectedMember ? (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs">
+                    <div className="flex items-center gap-2">
+                      <User size={15} className="text-emerald-500" />
+                      <span className="text-foreground">
+                        Logged in as: <strong className="text-foreground font-bold">{selectedMember.first_name} {selectedMember.last_name}</strong> ({selectedMember.member_id})
                       </span>
                     </div>
-                  )}
-                </div>
-              ) : selectedMember ? (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/30 text-xs">
-                  <div className="flex items-center gap-2">
-                    <User size={15} className="text-emerald-400" />
-                    <span className="text-zinc-300">
-                      Logged in as: <strong className="text-zinc-100">{selectedMember.first_name} {selectedMember.last_name}</strong> ({selectedMember.member_id})
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                      Balance: ₱{selectedMember.balance.toFixed(2)}
                     </span>
                   </div>
-                  <span className="font-mono text-emerald-400 font-bold">
-                    Balance: ₱{selectedMember.balance.toFixed(2)}
-                  </span>
-                </div>
-              ) : !hasUser ? (
-                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle size={16} />
-                    <span>Please log in to your account to book a court.</span>
+                ) : !hasUser ? (
+                  <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      <span>Please log in to your account to book a court.</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push('/login?redirect=/book')}
+                      className="border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 text-xs"
+                    >
+                      Log In
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push('/login?redirect=/book')}
-                    className="border-amber-500/40 text-amber-300 hover:bg-amber-500/20 text-xs"
-                  >
-                    Log In
-                  </Button>
-                </div>
-              ) : (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
-                  <AlertCircle size={15} />
-                  <span>No member record linked to this login account. Please contact an administrator or register an RFID card.</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardHeader className="border-b border-zinc-800/60 pb-3">
-              <CardTitle className="text-base text-zinc-100">Select Court</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <CourtGrid courts={courts} selectedCourtId={selectedCourt?.id} onSelect={setSelectedCourt} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardHeader className="border-b border-zinc-800/60 pb-3">
-              <CardTitle className="text-base text-zinc-100">Select Date</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <input
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                max={maxDate}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="bg-zinc-950/70 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </CardContent>
-          </Card>
-
-          {selectedCourt && (
-            <Card className="border-zinc-800 bg-zinc-900/50">
-              <CardHeader className="border-b border-zinc-800/60 pb-3">
-                <CardTitle className="text-base text-zinc-100">Select Time Slot ({selectedCourt.name})</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <TimeSlotGrid slots={slots} selectedTime={selectedTime ?? undefined} onSelect={setSelectedTime} />
+                ) : (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <AlertCircle size={15} />
+                    <span>No member record linked to this login account. Please contact an administrator or register an RFID card.</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
 
-          <Card className="border-zinc-800 bg-zinc-900/50">
-            <CardHeader className="border-b border-zinc-800/60 pb-3">
-              <CardTitle className="text-base text-zinc-100">Booking Details & Payment</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-zinc-400">Duration</Label>
-                  <select
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
-                    className="mt-1 w-full bg-zinc-950/70 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="30">30 minutes</option>
-                    <option value="60">60 minutes</option>
-                    <option value="90">90 minutes</option>
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs text-zinc-400">Game Type</Label>
-                  <select
-                    value={gameType}
-                    onChange={(e) => setGameType(e.target.value as '1v1' | '2v2')}
-                    className="mt-1 w-full bg-zinc-950/70 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="1v1">1v1 Singles (2 players)</option>
-                    <option value="2v2">2v2 Doubles (4 players)</option>
-                  </select>
-                </div>
-              </div>
+            <Card className="border-border bg-card shadow-xs">
+              <CardHeader className="border-b border-border/60 pb-3">
+                <CardTitle className="text-sm sm:text-base text-foreground">Select Court</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <CourtGrid courts={courts} selectedCourtId={selectedCourt?.id} onSelect={setSelectedCourt} />
+              </CardContent>
+            </Card>
 
-              <div>
-                <Label className="text-xs text-zinc-400">Match Title (optional)</Label>
+            <Card className="border-border bg-card shadow-xs">
+              <CardHeader className="border-b border-border/60 pb-3">
+                <CardTitle className="text-sm sm:text-base text-foreground">Select Date</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
                 <input
-                  value={matchTitle}
-                  onChange={(e) => setMatchTitle(e.target.value)}
-                  placeholder="e.g. Weekly Club Match, Practice Rally..."
-                  className="mt-1 w-full bg-zinc-950/70 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  type="date"
+                  min={new Date().toISOString().split('T')[0]}
+                  max={maxDate}
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
-              </div>
+              </CardContent>
+            </Card>
 
-              {price !== null && (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-950/50 border border-zinc-800">
-                  <span className="text-xs text-zinc-400">Estimated cost: ₱{price}</span>
-                  <span className="font-mono text-sm font-bold text-emerald-400">₱{price.toFixed(2)}</span>
+            {selectedCourt && (
+              <Card className="border-border bg-card shadow-xs">
+                <CardHeader className="border-b border-border/60 pb-3">
+                  <CardTitle className="text-sm sm:text-base text-foreground">Select Time Slot ({selectedCourt.name})</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <TimeSlotGrid slots={slots} selectedTime={selectedTime ?? undefined} onSelect={setSelectedTime} />
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="border-border bg-card shadow-xs">
+              <CardHeader className="border-b border-border/60 pb-3">
+                <CardTitle className="text-sm sm:text-base text-foreground">Booking Details & Payment</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Duration</Label>
+                    <select
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                      className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="30">30 minutes</option>
+                      <option value="60">60 minutes</option>
+                      <option value="90">90 minutes</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Game Type</Label>
+                    <select
+                      value={gameType}
+                      onChange={(e) => setGameType(e.target.value as '1v1' | '2v2')}
+                      className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="1v1">1v1 Singles (2 players)</option>
+                      <option value="2v2">2v2 Doubles (4 players)</option>
+                    </select>
+                  </div>
                 </div>
-              )}
 
-              {hasInsufficientCredits && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
-                  <AlertCircle size={16} />
-                  <span>
-                    Insufficient balance: Member currently has ₱{selectedMember?.balance.toFixed(2)}, but ₱{price} is required. Please reload the wallet first.
-                  </span>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Match Title (optional)</Label>
+                  <input
+                    value={matchTitle}
+                    onChange={(e) => setMatchTitle(e.target.value)}
+                    placeholder="e.g. Weekly Club Match, Practice Rally..."
+                    className="mt-1 w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
                 </div>
-              )}
 
-              {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
-                  <AlertCircle size={16} />
-                  <span>{error}</span>
-                </div>
-              )}
+                {price !== null && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border">
+                    <span className="text-xs text-muted-foreground">Estimated cost: ₱{price}</span>
+                    <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">₱{price.toFixed(2)}</span>
+                  </div>
+                )}
 
-              <Button
-                onClick={handleConfirm}
-                disabled={!selectedMember || !selectedCourt || !selectedTime || hasInsufficientCredits || loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Confirming Booking...' : 'Confirm Booking'}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </>
+                {hasInsufficientCredits && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    <span>
+                      Insufficient balance: Member currently has ₱{selectedMember?.balance.toFixed(2)}, but ₱{price} is required. Please reload the wallet first.
+                    </span>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleConfirm}
+                  disabled={!selectedMember || !selectedCourt || !selectedTime || hasInsufficientCredits || loading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {loading ? 'Confirming Booking...' : 'Confirm Booking'}
+                </Button>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </main>
+    </div>
   );
 }
