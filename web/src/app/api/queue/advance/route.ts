@@ -6,7 +6,9 @@ import { authenticateControllerDevice } from '@/lib/controller-device-auth';
 
 async function advance(request: Request) {
   const device = await authenticateControllerDevice(request, 'kiosk');
-  if (!device && !checkControllerKey(request)) {
+  const authHeader = request.headers.get('authorization');
+  const isVercelCron = Boolean(process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`);
+  if (!device && !checkControllerKey(request) && !isVercelCron) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const started = Date.now();
