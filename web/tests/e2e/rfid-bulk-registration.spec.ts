@@ -46,7 +46,7 @@ test.describe('Bulk RFID Registration', () => {
   });
 
   test('registers a new card via simulated RFID input', async ({ page }) => {
-    const uid = `TEST-${Date.now()}`;
+    const uid = `TEST-REG-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await page.goto('/rfid/bulk');
     await page.waitForLoadState('networkidle');
 
@@ -65,7 +65,7 @@ test.describe('Bulk RFID Registration', () => {
   });
 
   test('shows success toast after registering a new card', async ({ page }) => {
-    const uid = `TEST-${Date.now()}`;
+    const uid = `TEST-TOAST-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await page.goto('/rfid/bulk');
     await page.waitForLoadState('networkidle');
 
@@ -73,13 +73,13 @@ test.describe('Bulk RFID Registration', () => {
     await input.fill(uid);
     await input.press('Enter');
 
-    const toast = page.locator('[role="status"], [role="alert"], .toast, [data-sonner-toast]').first();
+    const toast = page.locator('[data-sonner-toast]').first();
     await expect(toast).toBeVisible({ timeout: 10000 });
     await expect(toast).toContainText(/success|registered|added/i);
   });
 
   test('prevents duplicate registration and shows warning', async ({ page }) => {
-    const uid = `TEST-${Date.now()}`;
+    const uid = `TEST-DUP-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await page.goto('/rfid/bulk');
     await page.waitForLoadState('networkidle');
 
@@ -94,7 +94,7 @@ test.describe('Bulk RFID Registration', () => {
     await input.fill(uid);
     await input.press('Enter');
 
-    const warningToast = page.locator('[role="status"], [role="alert"], .toast, [data-sonner-toast]').first();
+    const warningToast = page.locator('[data-sonner-toast]').first();
     await expect(warningToast).toBeVisible({ timeout: 10000 });
     await expect(warningToast).toContainText(/duplicate|already|exists/i);
 
@@ -103,7 +103,7 @@ test.describe('Bulk RFID Registration', () => {
   });
 
   test('updates card status via dropdown', async ({ page }) => {
-    const uid = `TEST-${Date.now()}`;
+    const uid = `TEST-STAT-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await page.goto('/rfid/bulk');
     await page.waitForLoadState('networkidle');
 
@@ -113,18 +113,15 @@ test.describe('Bulk RFID Registration', () => {
     await page.waitForSelector(`text=${uid}`, { timeout: 10000 });
 
     const row = page.locator(`tr:has-text("${uid}")`);
-    const statusCell = row.locator('td').nth(3);
-    const dropdown = statusCell.locator('select, [role="combobox"], button').first();
-    await dropdown.click();
-
-    const option = page.locator('[role="option"], option').first();
-    await option.click();
-
-    await page.waitForTimeout(1000);
+    const dropdown = row.locator('select').first();
+    await dropdown.selectOption('Active');
+    await expect(dropdown).toHaveValue('Active');
   });
 
   test('deletes a registered card', async ({ page }) => {
-    const uid = `TEST-${Date.now()}`;
+    page.on('dialog', dialog => dialog.accept());
+
+    const uid = `TEST-DEL-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await page.goto('/rfid/bulk');
     await page.waitForLoadState('networkidle');
 
@@ -134,13 +131,8 @@ test.describe('Bulk RFID Registration', () => {
     await page.waitForSelector(`text=${uid}`, { timeout: 10000 });
 
     const row = page.locator(`tr:has-text("${uid}")`);
-    const deleteButton = row.locator('button[aria-label*="Delete" i], button:has-text("Delete")').first();
+    const deleteButton = row.locator('button:has-text("Delete")').first();
     await deleteButton.click();
-
-    const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("Delete"), [data-testid="confirm-delete"]').first();
-    if (await confirmButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await confirmButton.click();
-    }
 
     await expect(row).not.toBeVisible({ timeout: 10000 });
   });

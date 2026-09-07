@@ -135,7 +135,7 @@ test.describe('Booking Matrix: All Courts, Prices/Durations, and Times', () => {
 
         // Confirm Screen checks
         await expect(page.locator('text=Review Booking Details')).toBeVisible();
-        await expect(page.locator(`text=${expectedName}`)).toBeVisible();
+        await expect(page.locator(`text=${expectedName}`).first()).toBeVisible();
 
         // Confirm
         await page.locator('button:has-text("Confirm & Book Match")').click();
