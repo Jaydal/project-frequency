@@ -209,7 +209,7 @@ static bool join_queue(const char *member_id, const char *court_id, game_type_t 
 
   memset(out_result, 0, sizeof(*out_result));
   out_result->duration_min = duration_min;
-  out_result->success = (strcmp(resp.status, "completed") == 0);
+  out_result->success = (strcmp(resp.status, "completed") == 0 || strcmp(resp.status, "scheduled") == 0);
   snprintf(out_result->court_name, sizeof(out_result->court_name), "%s", resp.court_name);
   /* Credits/balance aren't returned by the join endpoint; left at 0 for now. */
   return true;

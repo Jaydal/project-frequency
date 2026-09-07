@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       matchTitle: result.data.matchTitle,
     });
 
-    if (entry.status === 'completed' && entry.court_id) {
+    if ((entry.status === 'completed' || entry.status === 'scheduled') && entry.court_id) {
       const supabase = auth.supabase;
       const { data: court } = await supabase.from('courts').select('name').eq('id', entry.court_id).single();
       return NextResponse.json({ ...entry, court_name: court?.name ?? null }, { status: 201 });

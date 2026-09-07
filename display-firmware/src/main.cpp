@@ -260,9 +260,9 @@ void setup() {
   g_mqtt = new MqttDisplayClient(*g_display);
   String ssid   = g_portal.getWifiSsid();
   String pass   = g_portal.getWifiPass();
-  String broker = g_portal.getMqttBroker();
-  String user   = g_portal.getMqttUser();
-  String mpwd   = g_portal.getMqttPass();
+  broker        = g_portal.getMqttBroker();
+  user          = g_portal.getMqttUser();
+  mpwd          = g_portal.getMqttPass();
   String court  = g_portal.getCourtId();
   uint16_t port = g_portal.getMqttPort();
   uint8_t brightness = g_portal.getBrightness();

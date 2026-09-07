@@ -1,6 +1,8 @@
 #ifdef HD_WF2
 #include "ConfigPortal.h"
+#if __has_include("wifi_config.h")
 #include "wifi_config.h"
+#endif
 #include "freq_root_ca.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
