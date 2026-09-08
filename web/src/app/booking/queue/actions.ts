@@ -19,9 +19,12 @@ export async function fetchBoardSnapshot() {
     snapshot.courts.some((c) => c.startTime === 0 || c.startTime + c.durationMin * 60 <= snapshot.serverTime);
 
   if (hasExpiredGame || hasWaitersWithOpenCourt) {
-    processAllCourts()
-      .then(() => publishAllDisplays())
-      .catch(console.error);
+    try {
+      await processAllCourts();
+      await publishAllDisplays();
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   return snapshot;

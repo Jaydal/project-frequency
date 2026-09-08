@@ -87,6 +87,32 @@ static const char *KEYS_SYMBOLS[] = {
   "ABC", "SPACE", "BKSP", "abc", "CANCEL", "OK", ""
 };
 
+static void repaint_input_preview(setup_ctx_t *ctx) {
+  if (!ctx->input_modal) return;
+  size_t len = strlen(ctx->input_text);
+  
+  if (len >= ctx->input_page_start + INPUT_CELL_COUNT) {
+    ctx->input_page_start = len - INPUT_CELL_COUNT + 1;
+  } else if (len < ctx->input_page_start) {
+    ctx->input_page_start = 0;
+  }
+
+  for (size_t i = 0; i < INPUT_CELL_COUNT; i++) {
+    size_t char_idx = ctx->input_page_start + i;
+    if (char_idx < len) {
+      if (ctx->input_password) {
+        ctx->input_cell_text[i][0] = '*';
+      } else {
+        ctx->input_cell_text[i][0] = ctx->input_text[char_idx];
+      }
+      ctx->input_cell_text[i][1] = '\0';
+    } else {
+      ctx->input_cell_text[i][0] = '\0';
+    }
+    lv_label_set_text_static(ctx->input_cells[i], ctx->input_cell_text[i]);
+  }
+}
+
 static void close_input_modal(setup_ctx_t *ctx) {
   if (!ctx->input_modal) return;
   lv_obj_del(ctx->input_modal);
@@ -135,9 +161,7 @@ static void static_keyboard_event_cb(lv_event_t *e) {
     }
   }
 
-  /* Keep the edit buffer private while the keyboard is active.  The target
-   * field is updated atomically when OK is pressed, avoiding redraws for every
-   * keystroke (and preventing typed text from flickering on the single buffer). */
+  repaint_input_preview(ctx);
 }
 
 static void field_focus_cb(lv_event_t *e) {
@@ -225,6 +249,7 @@ static void field_focus_cb(lv_event_t *e) {
   kiosk_theme_style_keyboard(kb);
 
   lv_obj_add_event_cb(kb, static_keyboard_event_cb, LV_EVENT_VALUE_CHANGED, ctx);
+  repaint_input_preview(ctx);
 }
 
 static void wifi_list_btn_cb(lv_event_t *e) {
@@ -374,10 +399,12 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
 
   char device_id[32];
   char mac_address[24];
+  char ip_address[24];
   freq_device_id_get(device_id, sizeof(device_id));
   format_mac_address(device_id, mac_address, sizeof(mac_address));
+  kiosk_wifi_get_ip(ip_address, sizeof(ip_address));
   lv_obj_t *device_status = lv_label_create(top_bar);
-  lv_label_set_text_fmt(device_status, "MAC Address: %s", mac_address);
+  lv_label_set_text_fmt(device_status, "MAC: %s  |  IP: %s", mac_address, ip_address);
   lv_obj_set_style_text_font(device_status, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(device_status, KIOSK_COLOR_ZINC_300, 0);
 

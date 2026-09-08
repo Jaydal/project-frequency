@@ -12,6 +12,7 @@ import { BookingConfirmation } from '@/components/bookings/BookingConfirmation';
 import { User, Wallet, AlertCircle, CheckCircle2, Search, Sun, Moon, ArrowLeft, Calendar, Clock } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
+import { getLocalDateString } from '@/lib/utils';
 
 interface Court { id: string; name: string; status: string; }
 
@@ -27,7 +28,7 @@ export default function BookPage() {
   const router = useRouter();
   const [courts, setCourts] = useState<Court[]>([]);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDateString());
   const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [duration, setDuration] = useState(60);
@@ -50,7 +51,7 @@ export default function BookPage() {
   const [loadingUser, setLoadingUser] = useState(true);
   const [hasUser, setHasUser] = useState(false);
 
-  const maxDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const maxDate = getLocalDateString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
   useEffect(() => {
     const supabase = createClient();
@@ -173,7 +174,7 @@ export default function BookPage() {
 
     setLoading(true);
     setError(null);
-    const start = `${date}T${selectedTime}:00.000Z`;
+    const start = new Date(`${date}T${selectedTime}:00+08:00`).toISOString();
 
     try {
       const res = await fetch('/api/bookings', {
@@ -260,7 +261,7 @@ export default function BookPage() {
               id: bookingId,
               status: 'Scheduled',
               court_id: selectedCourt?.id ?? null,
-              start_time: `${date}T${selectedTime}:00.000Z`,
+              start_time: new Date(`${date}T${selectedTime}:00+08:00`).toISOString(),
               duration,
             }}
             courtName={selectedCourt?.name}

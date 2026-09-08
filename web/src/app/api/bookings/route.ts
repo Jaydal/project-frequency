@@ -79,8 +79,8 @@ export async function POST(request: Request) {
 
     if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
     
-    // Fire-and-forget: update the physical kiosk and LED scoreboards
-    import('@/lib/display/publish-all').then(m => m.publishAllDisplays().catch(console.error));
+    // Update the physical kiosk and LED scoreboards
+    await (await import('@/lib/display/publish-all')).publishAllDisplays();
     
     return NextResponse.json(result.booking, { status: 201 });
   } catch (err) {

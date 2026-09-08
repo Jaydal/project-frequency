@@ -107,7 +107,7 @@ export async function POST(request: Request) {
           }).eq('id', game.id);
           
           // Fire-and-forget: publish board update and displays without blocking
-          import('@/lib/display/publish-all').then(m => m.publishAllDisplays().catch(console.error));
+          await (await import('@/lib/display/publish-all')).publishAllDisplays();
           
           return NextResponse.json({ 
             status: 'completed', 

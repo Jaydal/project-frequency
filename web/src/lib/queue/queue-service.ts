@@ -157,7 +157,7 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
       if (depositTxId) await refundTransaction(depositTxId, 'Scheduled booking failed');
       throw new Error(error.message);
     }
-    publishAllDisplays().catch(console.error);
+    await publishAllDisplays();
     return entry as QueueEntry;
   }
 
@@ -227,7 +227,7 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
               .from('game_players')
               .insert(params.playerIds.map(pid => ({ game_id: game.id, member_id: pid, team: null })));
 
-            publishAllDisplays().catch(console.error);
+            await publishAllDisplays();
 
             return {
               id: game.id,
@@ -283,7 +283,7 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
     await deductWallet(params.memberId, charge, game.id);
 
     // Fire-and-forget: publish board update without blocking the response
-    publishAllDisplays().catch(console.error);
+    await publishAllDisplays();
 
     return {
       id: game.id,
@@ -329,7 +329,7 @@ export async function joinQueue(params: JoinQueueParams): Promise<QueueEntry> {
   }
 
   // Fire-and-forget: publish board update and displays without blocking
-  publishAllDisplays().catch(console.error);
+  await publishAllDisplays();
 
   return entry as QueueEntry;
 }

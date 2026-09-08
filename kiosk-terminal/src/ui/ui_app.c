@@ -25,6 +25,7 @@
 typedef enum {
   KIOSK_STEP_SETUP,
   KIOSK_STEP_BOOTING,
+  KIOSK_STEP_LOADING,
   KIOSK_STEP_IDLE,
   KIOSK_STEP_EXISTING_QUEUE,
   KIOSK_STEP_SELECT_COURT,
@@ -209,9 +210,15 @@ static void handle_scan(void *user_data, const char *rfid) {
   (void)user_data;
   s_app.error.title[0] = '\0';
   s_app.error.message[0] = '\0';
-  if (!s_app.provider->lookup_member(rfid, &s_app.member)) {
+
+  s_app.step = KIOSK_STEP_LOADING;
+  render_current();
+  lv_refr_now(NULL);
+
+  freq_rest_result_t r = freq_rest_lookup_member(rfid, &s_app.member);
+  if (!r.ok) {
     snprintf(s_app.error.title, sizeof(s_app.error.title), "RFID Read Failed");
-    snprintf(s_app.error.message, sizeof(s_app.error.message), "Error looking up %s", rfid);
+    snprintf(s_app.error.message, sizeof(s_app.error.message), "Error: %.80s\n(%.32s)", r.error, rfid);
     s_app.step = KIOSK_STEP_ERROR;
     render_current();
     return;
@@ -293,6 +300,10 @@ static void handle_select_duration(void *user_data, int32_t duration_min) {
 
 static void handle_confirm(void *user_data) {
   (void)user_data;
+  s_app.step = KIOSK_STEP_LOADING;
+  render_current();
+  lv_refr_now(NULL);
+
   bool ok = s_app.provider->join_queue(s_app.member.id, s_app.selected_court.id, s_app.game_type,
                                         s_app.duration_min, s_app.match_title, &s_app.result, &s_app.error);
   if (!ok) {
@@ -317,6 +328,10 @@ static void handle_confirm(void *user_data) {
 
 static void handle_cancel_existing(void *user_data) {
   (void)user_data;
+  s_app.step = KIOSK_STEP_LOADING;
+  render_current();
+  lv_refr_now(NULL);
+
   const char *entry_id = s_app.member.decision.entry_id[0] ? s_app.member.decision.entry_id : NULL;
   if (!s_app.provider->cancel_waiting(s_app.member.id, entry_id, &s_app.error)) {
     s_app.step = KIOSK_STEP_ERROR;
@@ -329,6 +344,10 @@ static void handle_cancel_existing(void *user_data) {
 
 static void handle_end_game(void *user_data) {
   (void)user_data;
+  s_app.step = KIOSK_STEP_LOADING;
+  render_current();
+  lv_refr_now(NULL);
+
   const char *game_id = s_app.member.decision.game_id[0] ? s_app.member.decision.game_id : NULL;
   if (!s_app.provider->end_game(s_app.member.id, game_id, &s_app.error)) {
     s_app.step = KIOSK_STEP_ERROR;
@@ -428,7 +447,9 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
   lv_obj_set_flex_align(root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_all(root, 16, 0);
   lv_obj_set_style_pad_row(root, 10, 0);
-  lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_add_flag(root, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
 
   lv_obj_t *title = lv_label_create(root);
   lv_label_set_text(title, "Active Booking Found");
@@ -602,12 +623,14 @@ static void ensure_screen_root(void) {
 }
 
 static void render_current(void) {
+  lv_timer_pause(_lv_disp_get_refr_timer(NULL));
   static kiosk_board_t board;
 
   ensure_screen_root();
   char member_name[64];
 
-  bool needs_terminal = (s_app.step == KIOSK_STEP_EXISTING_QUEUE ||
+  bool needs_terminal = (s_app.step == KIOSK_STEP_LOADING ||
+                         s_app.step == KIOSK_STEP_EXISTING_QUEUE ||
                          s_app.step == KIOSK_STEP_SELECT_COURT ||
                          s_app.step == KIOSK_STEP_SELECT_GAME ||
                          s_app.step == KIOSK_STEP_SELECT_DURATION ||
@@ -733,6 +756,15 @@ static void render_current(void) {
                                    handle_back_step, NULL, NULL);
       break;
     }
+    case KIOSK_STEP_LOADING: {
+      terminal_layout_set_sidebar(&s_app.terminal_layout, false);
+      lv_obj_t *lbl = lv_label_create(s_app.terminal_layout.content);
+      lv_label_set_text(lbl, "Loading...");
+      lv_obj_set_style_text_font(lbl, &lv_font_montserrat_32, 0);
+      lv_obj_set_style_text_color(lbl, kiosk_theme_color_text_strong(), 0);
+      lv_obj_center(lbl);
+      break;
+    }
     case KIOSK_STEP_SUCCESS: {
       terminal_layout_set_sidebar(&s_app.terminal_layout, false);
       step_booking_success_create(s_app.terminal_layout.content, &s_app.result);
@@ -744,6 +776,8 @@ static void render_current(void) {
       break;
     }
   }
+  
+  lv_timer_resume(_lv_disp_get_refr_timer(NULL));
 }
 
 /* ---- periodic refresh ---- */
@@ -799,7 +833,8 @@ static void on_tick(lv_timer_t *timer) {
   }
 #endif
 
-  bool is_booking_step = (s_app.step == KIOSK_STEP_EXISTING_QUEUE ||
+  bool is_booking_step = (s_app.step == KIOSK_STEP_LOADING ||
+                          s_app.step == KIOSK_STEP_EXISTING_QUEUE ||
                           s_app.step == KIOSK_STEP_SELECT_COURT ||
                           s_app.step == KIOSK_STEP_SELECT_GAME ||
                           s_app.step == KIOSK_STEP_SELECT_DURATION ||
@@ -853,14 +888,18 @@ static void on_tick(lv_timer_t *timer) {
     kiosk_board_t board;
     s_app.provider->get_board(&board);
     bool local_activity_changed = !s_have_court_activity;
-    bool court_window_ended = false;
+    bool has_expired_game_on_server = false;
     bool has_available_court = false;
     for (uint8_t i = 0; i < board.court_count && i < KIOSK_MAX_COURTS; i++) {
         bool active = court_is_active(&board.courts[i]);
-        if (!active) has_available_court = true;
+        if (!active) {
+            has_available_court = true;
+            if (board.courts[i].start_time > 0) {
+                has_expired_game_on_server = true;
+            }
+        }
         if (s_have_court_activity && active != s_last_court_active[i]) {
             local_activity_changed = true;
-            if (s_last_court_active[i] && !active) court_window_ended = true;
         }
         s_last_court_active[i] = active;
     }
@@ -873,11 +912,10 @@ static void on_tick(lv_timer_t *timer) {
     }
 #ifdef ESP_PLATFORM
     /* A transition can be missed while booting or offline. Reconcile whenever
-     * a queued player exists and at least one court is available. The endpoint
-     * is idempotent and the cooldown keeps this from becoming polling spam. */
+     * an expired game is stuck on the server, or a queued player exists. */
     uint32_t now_tick = lv_tick_get();
     bool advance_cooldown_elapsed = (now_tick - s_last_queue_advance_tick) >= 10000;
-    if ((court_window_ended || (board.queue_count > 0 && has_available_court)) &&
+    if ((has_expired_game_on_server || (board.queue_count > 0 && has_available_court)) &&
         advance_cooldown_elapsed && !s_queue_advance_running) {
         s_last_queue_advance_tick = now_tick;
         s_queue_advance_running = true;

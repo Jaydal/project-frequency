@@ -129,7 +129,8 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
   lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_all(scroll, 12, 0);
   lv_obj_set_style_pad_row(scroll, 8, 0);
-  lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
+  lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO);
 
   lv_obj_t *title = lv_label_create(scroll);
   lv_label_set_text(title, "Choose a Court");

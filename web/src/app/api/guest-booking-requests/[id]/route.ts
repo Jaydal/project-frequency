@@ -59,7 +59,7 @@ export async function PATCH(
     const { isSlotAvailable } = await import('@/lib/queue/booking-engine');
     const start = new Date(requestRecord.start_time);
     const end = new Date(start.getTime() + requestRecord.duration * 60_000);
-    const available = await isSlotAvailable(requestRecord.court_id, start, end);
+    const available = await isSlotAvailable(requestRecord.court_id, start, end, undefined, admin, id);
     
     if (!available) {
       return NextResponse.json({ error: 'Court is no longer available for this time slot' }, { status: 409 });
@@ -102,8 +102,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Failed to update request status' }, { status: 500 });
     }
 
-    // Fire-and-forget: update displays with the new booking
-    import('@/lib/display/publish-all').then(m => m.publishAllDisplays().catch(console.error));
+    // Update displays with the new booking
+    await (await import('@/lib/display/publish-all')).publishAllDisplays();
 
     return NextResponse.json({ success: true, status: 'Confirmed', gameId: game.id });
   } catch (err: any) {

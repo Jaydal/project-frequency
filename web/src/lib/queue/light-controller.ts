@@ -17,7 +17,13 @@ const SUNSET_HOUR = parseInt(process.env.LIGHT_SUNSET_HOUR ?? '18', 10);
 const WAIT_MINUTES = parseInt(process.env.LIGHT_WAIT_MINUTES ?? '10', 10);
 
 function isEvening(): boolean {
-  const hour = new Date().getHours();
+  // Venue is in Asia/Manila (UTC+8)
+  const hourStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila',
+    hour: 'numeric',
+    hour12: false,
+  }).format(new Date());
+  const hour = parseInt(hourStr, 10);
   return hour >= SUNSET_HOUR;
 }
 

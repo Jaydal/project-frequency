@@ -7,16 +7,22 @@
 
 export function hexToDec(hex: string): string {
   const cleanHex = hex.replace(/[:\s]/g, '').trim();
-  const num = parseInt(cleanHex, 16);
-  if (isNaN(num)) return '';
-  return String(num).padStart(10, '0');
+  try {
+    const num = BigInt('0x' + cleanHex);
+    return num.toString().padStart(10, '0');
+  } catch (e) {
+    return '';
+  }
 }
 
 export function decToHex(dec: string): string {
   const cleanDec = dec.trim();
-  const num = parseInt(cleanDec, 10);
-  if (isNaN(num)) return '';
-  return num.toString(16).toUpperCase().padStart(8, '0');
+  try {
+    const num = BigInt(cleanDec);
+    return num.toString(16).toUpperCase().padStart(8, '0');
+  } catch (e) {
+    return '';
+  }
 }
 
 export function reverseHexBytes(hex: string): string {
@@ -44,16 +50,20 @@ export function getRfidFormats(uid: string): string[] {
     const hex = decToHex(cleaned);
     if (hex) formats.add(hex);
     // Add both padded (10 digits) and unpadded decimal
-    const num = parseInt(cleaned, 10);
-    formats.add(String(num));
-    formats.add(String(num).padStart(10, '0'));
+    try {
+      const num = BigInt(cleaned);
+      formats.add(num.toString());
+      formats.add(num.toString().padStart(10, '0'));
+    } catch(e) {}
   } else {
     // If it contains hex characters (A-F), it's likely hex
     const dec = hexToDec(cleaned);
     if (dec) {
       formats.add(dec);
-      const num = parseInt(dec, 10);
-      formats.add(String(num));
+      try {
+        const num = BigInt(dec);
+        formats.add(num.toString());
+      } catch(e) {}
     }
   }
 
@@ -68,7 +78,9 @@ export function getRfidFormats(uid: string): string[] {
       const revDec = hexToDec(reversed);
       if (revDec) {
         formats.add(revDec);
-        formats.add(String(parseInt(revDec, 10)));
+        try {
+          formats.add(BigInt(revDec).toString());
+        } catch(e) {}
       }
     }
   }

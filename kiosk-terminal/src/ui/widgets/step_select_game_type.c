@@ -72,7 +72,7 @@ lv_obj_t *step_select_game_type_create(lv_obj_t *parent,
 
   booking_stepper_create(root, 1, member_name, balance, on_cancel, cancel_user_data);
 
-  lv_obj_t *scroll = lv_obj_create(root); lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_t *scroll = lv_obj_create(root); lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO); lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
   lv_obj_remove_style_all(scroll);
   lv_obj_set_width(scroll, lv_pct(100));
   lv_obj_set_flex_grow(scroll, 1);

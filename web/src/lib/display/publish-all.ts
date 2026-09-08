@@ -92,14 +92,19 @@ export async function publishAllDisplays(): Promise<PublishAllResult> {
         nextName = next.name;
         nextMatch = next.name; // or matchType if we had it separated
         
-        // Format time with \x01 superscript marker before AM/PM so it renders smaller on the LED
+        // Format time in Asia/Manila timezone with \x01 superscript marker before AM/PM for LED matrix
         const formatTime = (isoString: string) => {
           const d = new Date(isoString);
-          const h = d.getHours();
-          const m = d.getMinutes().toString().padStart(2, '0');
-          const ampm = h >= 12 ? 'PM' : 'AM';
-          const hour = h % 12 || 12;
-          return `${hour}:${m}\x01${ampm}`; // \x01 = superscript marker
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Manila',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          }).formatToParts(d);
+          const hour = parts.find(p => p.type === 'hour')?.value ?? '12';
+          const minute = parts.find(p => p.type === 'minute')?.value ?? '00';
+          const dayPeriod = (parts.find(p => p.type === 'dayPeriod')?.value ?? 'AM').toUpperCase();
+          return `${hour}:${minute}\x01${dayPeriod}`; // \x01 = superscript marker
         };
         
         nextBookedTime = formatTime(next.startTime);

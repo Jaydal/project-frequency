@@ -34,7 +34,8 @@ export async function isSlotAvailable(
   start: Date,
   end: Date,
   excludeQueueEntryId?: string,
-  client?: SupabaseClient
+  client?: SupabaseClient,
+  excludeGuestBookingRequestId?: string
 ): Promise<boolean> {
   const supabase = client ?? await createClient();
 
@@ -66,6 +67,29 @@ export async function isSlotAvailable(
         return false;
       }
     }
+  }
+
+  // Also check if there are any active guest booking requests on hold for this court
+  try {
+    const { data: pendingGuests } = await supabase
+      .from('guest_booking_requests')
+      .select('id, start_time, duration, hold_expires_at')
+      .eq('court_id', courtId)
+      .eq('status', 'Pending Confirmation')
+      .gt('hold_expires_at', new Date().toISOString());
+
+    if (pendingGuests && pendingGuests.length > 0) {
+      for (const req of pendingGuests) {
+        if (excludeGuestBookingRequestId && req.id === excludeGuestBookingRequestId) continue;
+        const reqStart = new Date(req.start_time);
+        const reqEnd = new Date(reqStart.getTime() + req.duration * 60_000);
+        if (isOverlapping(start, end, reqStart, reqEnd)) {
+          return false;
+        }
+      }
+    }
+  } catch {
+    // Fail open if table query fails or permissions are restricted
   }
 
   const { data: straddling } = await supabase

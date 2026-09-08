@@ -66,7 +66,7 @@ bool http_transport_request(const char *method, const char *url,
     .timeout_ms        = 10000,
     .event_handler     = http_event_handler,
     .user_data         = &buf,
-    .cert_pem          = FREQ_GTS_ROOT_R1,
+    .crt_bundle_attach = esp_crt_bundle_attach,
   };
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -80,6 +80,7 @@ bool http_transport_request(const char *method, const char *url,
   esp_http_client_set_redirection(client);
 
   /* Apply request headers. */
+  esp_http_client_set_header(client, "User-Agent", "ESP32-Kiosk/1.0");
   for (size_t i = 0; i < header_count; i++) {
     esp_http_client_set_header(client, headers[i].name, headers[i].value);
   }

@@ -3,6 +3,7 @@
 import React from 'react';
 import { ArrowLeft, ArrowRight, Check, Clock, CreditCard, MapPin, UserRound } from 'lucide-react';
 import { BookingStepper } from './BookingStepper';
+import { getLocalDateString } from '@/lib/utils';
 
 interface Court { id: string; name: string; }
 type PaymentMethod = 'E-wallet' | 'Bank Transfer' | 'Walk-in';
@@ -22,7 +23,7 @@ const fieldClass = 'mt-1 w-full rounded-xl border border-[var(--booking-border)]
 const choiceClass = 'rounded-2xl border border-[var(--booking-border)] bg-[var(--booking-card)] p-4 text-left transition hover:border-secondary/60 hover:bg-[var(--booking-panel)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7bd694] active:scale-[0.98]';
 
 export function GuestBookingForm({ courts, durations, onSubmit, onBack, busy }: Props) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   const [step, setStep] = React.useState(0);
   const [date, setDate] = React.useState(today);
   const [time, setTime] = React.useState('');
@@ -47,7 +48,8 @@ export function GuestBookingForm({ courts, durations, onSubmit, onBack, busy }: 
         const now = new Date();
         const times = (data.slots ?? []).filter((slot: { time: string; available: boolean }) => {
           if (!slot.available) return false;
-          if (date !== today) return true;
+          if (date < today) return false;
+          if (date > today) return true;
           const [hours, minutes] = slot.time.split(':').map(Number);
           return hours * 60 + minutes > now.getHours() * 60 + now.getMinutes();
         }).map((slot: { time: string }) => slot.time);

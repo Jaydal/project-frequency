@@ -13,7 +13,11 @@ export async function POST(request: Request) {
     if (!input.success) return NextResponse.json({ error: 'Please complete all guest booking details.' }, { status: 400 });
 
     const start = new Date(input.data.start);
-    if (start <= new Date()) return NextResponse.json({ error: 'The selected time must be in the future.' }, { status: 400 });
+    // Allow a 5-minute grace period to prevent rejections due to form submission latency or clock drift
+    const GRACE_MS = 5 * 60_000;
+    if (start.getTime() < Date.now() - GRACE_MS) {
+      return NextResponse.json({ error: 'The selected time must be in the future.' }, { status: 400 });
+    }
 
     // Reverting to the Admin Client to bypass RLS since the database doesn't have an anon policy
     const supabase = createAdminClient();

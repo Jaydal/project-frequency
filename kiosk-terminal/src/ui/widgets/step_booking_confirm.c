@@ -199,7 +199,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
 
   lv_obj_add_event_cb(root, free_ctx_cb, LV_EVENT_DELETE, ctx);
 
-  lv_obj_t *scroll = lv_obj_create(root); lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_t *scroll = lv_obj_create(root); lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO); lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
   lv_obj_remove_style_all(scroll);
   lv_obj_set_width(scroll, lv_pct(100));
   lv_obj_set_flex_grow(scroll, 1);

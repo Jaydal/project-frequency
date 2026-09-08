@@ -1,5 +1,6 @@
 #include "net/wifi_scanner.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -76,4 +77,16 @@ void kiosk_wifi_scan_start(kiosk_wifi_scan_cb_t cb, void *user_data) {
     args->user_data = user_data;
     
     xTaskCreate(scan_task, "wifi_scan", 4096, args, 5, NULL);
+}
+
+void kiosk_wifi_get_ip(char *out_ip, size_t max_len) {
+    if (!out_ip || max_len == 0) return;
+    
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip_info;
+    if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+        snprintf(out_ip, max_len, IPSTR, IP2STR(&ip_info.ip));
+    } else {
+        snprintf(out_ip, max_len, "Not connected");
+    }
 }

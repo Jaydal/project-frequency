@@ -112,7 +112,7 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
     set_label(header, "AVAILABLE", &lv_font_montserrat_14, kiosk_theme_color_success());
   }
 
-  if (court->match_title[0] != '\0') {
+  if (court_is_active(court) && court->match_title[0] != '\0') {
     set_label(card, court->match_title, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
   }
 

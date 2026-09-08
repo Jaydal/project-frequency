@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     .from('courts').select('id, name').eq('name', courtName).single();
 
   if (court) {
-    publishAllDisplays().catch(e => console.error('Failed to publish display after register', e));
+    await publishAllDisplays();
   }
 
   return NextResponse.json({ success: true, gameId });

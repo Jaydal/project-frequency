@@ -18,6 +18,7 @@ import { GuestBookingSuccess } from './GuestBookingSuccess';
 import type { ProductsConfig } from '@/lib/products-config-types';
 import { getCost } from '@/lib/products-config-types';
 import { fetchBoardSnapshot } from '@/app/booking/queue/actions';
+import { getLocalDateString } from '@/lib/utils';
 import { AlertCircle, Trash2, Plus, CalendarCheck, Calendar, Clock, StopCircle } from 'lucide-react';
 
 interface ActiveGameInfo {
@@ -935,8 +936,8 @@ export function BookingKiosk() {
               <input
                 id="schedule-date"
                 type="date"
-                min={new Date().toISOString().split('T')[0]}
-                max={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                min={getLocalDateString()}
+                max={getLocalDateString(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))}
                 value={scheduleDate}
                 onChange={(e) => setScheduleDate(e.target.value)}
                 className="w-full bg-[var(--booking-inset)] border border-[var(--booking-border)] rounded-lg px-4 py-3 text-[var(--booking-text)] text-sm focus:outline-none focus:border-secondary"

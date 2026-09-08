@@ -27,8 +27,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const result = await cancelBooking(id, !!isGame);
   if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
 
-  // Fire-and-forget: update displays
-  import('@/lib/display/publish-all').then(m => m.publishAllDisplays().catch(console.error));
+  // Update displays
+  await (await import('@/lib/display/publish-all')).publishAllDisplays();
 
   return NextResponse.json({ success: true, refunded: result.refunded });
 }

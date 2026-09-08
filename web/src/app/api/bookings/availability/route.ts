@@ -11,8 +11,10 @@ export async function GET(request: Request) {
   if (!courtId || !date) return NextResponse.json({ error: 'courtId and date required' }, { status: 400 });
 
   const supabase = await createClient();
-  const dayStart = new Date(date + 'T00:00:00Z');
-  const dayEnd = new Date(date + 'T23:59:59Z');
+  // Venue operates in Philippine Standard Time (UTC+8)
+  const PHT_OFFSET = '+08:00';
+  const dayStart = new Date(`${date}T00:00:00${PHT_OFFSET}`);
+  const dayEnd = new Date(`${date}T23:59:59${PHT_OFFSET}`);
 
   const { data: games } = await supabase
     .from('games')
@@ -39,7 +41,7 @@ export async function GET(request: Request) {
   for (let h = 8; h < 22; h++) {
     for (let m = 0; m < 60; m += 30) {
       const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      const slotStart = new Date(`${date}T${timeStr}:00Z`);
+      const slotStart = new Date(`${date}T${timeStr}:00${PHT_OFFSET}`);
       const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60_000);
       const busy = [...(games ?? []), ...(pendingRequests ?? [])].some((g: any) => {
         const gStart = new Date(g.start_time);

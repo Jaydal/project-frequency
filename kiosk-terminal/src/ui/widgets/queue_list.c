@@ -13,9 +13,12 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
   lv_obj_t *list = lv_obj_create(parent);
   lv_obj_remove_style_all(list);
   lv_obj_set_width(list, lv_pct(100));
-  lv_obj_set_height(list, LV_SIZE_CONTENT);
+  lv_obj_set_height(list, 0);
+  lv_obj_set_flex_grow(list, 1);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(list, 8, 0);
+  lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
 
   if (count == 0) {
     set_label(list, "No one waiting", &lv_font_montserrat_14, kiosk_theme_color_text_muted());
@@ -28,15 +31,16 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
     lv_obj_set_width(row, lv_pct(100));
     /* Fixed row geometry prevents long names/titles from reflowing the queue
      * panel when an MQTT snapshot replaces the data. */
-    lv_obj_set_height(row, 76);
+    lv_obj_set_height(row, 84);
     lv_obj_set_style_bg_color(row, kiosk_theme_color_panel(), 0);
     lv_obj_set_style_bg_opa(row, KIOSK_GLASS_ROW_OPA, 0);
     lv_obj_set_style_border_width(row, 0, 0);
     lv_obj_set_style_radius(row, 6, 0);
-    lv_obj_set_style_pad_all(row, 12, 0);
+    lv_obj_set_style_pad_ver(row, 6, 0);
+    lv_obj_set_style_pad_hor(row, 12, 0);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(row, 12, 0);
+    lv_obj_set_style_pad_column(row, 10, 0);
 
     lv_obj_t *badge = lv_obj_create(row);
     lv_obj_set_size(badge, 28, 28);
@@ -77,10 +81,11 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
 
     lv_obj_t *meta_col = lv_obj_create(row);
     lv_obj_remove_style_all(meta_col);
-    lv_obj_set_width(meta_col, 122);
-    lv_obj_set_height(meta_col, 68);
+    lv_obj_set_width(meta_col, 126);
+    lv_obj_set_height(meta_col, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(meta_col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(meta_col, 2, 0);
+    lv_obj_clear_flag(meta_col, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *type_badge = lv_obj_create(meta_col);
     lv_obj_remove_style_all(type_badge);
@@ -90,20 +95,25 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
     lv_obj_set_style_radius(type_badge, 4, 0);
     lv_obj_set_style_pad_hor(type_badge, 6, 0);
     lv_obj_set_style_pad_ver(type_badge, 2, 0);
-    set_label(type_badge, q->match_type, &lv_font_montserrat_14, kiosk_theme_color_text());
+    set_label(type_badge, q->match_type, &lv_font_montserrat_12, kiosk_theme_color_text());
 
     char court_buf[40];
     snprintf(court_buf, sizeof(court_buf), "%s · %dm", q->court_name[0] ? q->court_name : "Any", (int)q->duration_min);
-    set_label(meta_col, court_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    set_label(meta_col, court_buf, &lv_font_montserrat_12, kiosk_theme_color_text_muted());
 
     char wait_buf[32];
     snprintf(wait_buf, sizeof(wait_buf), "Wait: %s", q->estimated_wait);
-    set_label(meta_col, wait_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    set_label(meta_col, wait_buf, &lv_font_montserrat_12, kiosk_theme_color_text_muted());
 
     char actual_time_buf[32];
-    struct tm *timeinfo = localtime(&q->estimated_start_time);
-    strftime(actual_time_buf, sizeof(actual_time_buf), "ETA: %I:%M %p", timeinfo);
-    set_label(meta_col, actual_time_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    if (q->estimated_start_time > 0) {
+      struct tm tm_info;
+      localtime_r(&q->estimated_start_time, &tm_info);
+      strftime(actual_time_buf, sizeof(actual_time_buf), "ETA: %I:%M %p", &tm_info);
+    } else {
+      snprintf(actual_time_buf, sizeof(actual_time_buf), "ETA: Soon");
+    }
+    set_label(meta_col, actual_time_buf, &lv_font_montserrat_12, kiosk_theme_color_text_muted());
   }
 
   return list;
