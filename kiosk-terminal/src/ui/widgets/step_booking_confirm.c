@@ -290,15 +290,17 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
 
   lv_obj_add_event_cb(root, free_ctx_cb, LV_EVENT_DELETE, ctx);
 
-  lv_obj_t *scroll = lv_obj_create(root); lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO); lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
-  lv_obj_remove_style_all(scroll);
-  lv_obj_set_width(scroll, lv_pct(100));
-  lv_obj_set_flex_grow(scroll, 1);
-  lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(scroll, 10, 0);
-  lv_obj_set_style_pad_row(scroll, 8, 0);
+  lv_obj_t *body = lv_obj_create(root);
+  lv_obj_remove_style_all(body);
+  lv_obj_set_width(body, lv_pct(100));
+  lv_obj_set_flex_grow(body, 1);
+  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(body, 6, 0);
+  lv_obj_set_style_pad_row(body, 6, 0);
+  lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
 
-  lv_obj_t *header = lv_label_create(scroll);
+  lv_obj_t *header = lv_label_create(body);
   lv_label_set_text(header, is_check_in ? "Review Check-In Details" : "Review Booking Details");
   lv_obj_set_style_text_font(header, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(header, kiosk_theme_color_text_muted(), 0);
@@ -311,13 +313,14 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
     snprintf(dur_buf, sizeof(dur_buf), "%d mins", (int)duration_min);
   }
 
-  lv_obj_t *cards_row = lv_obj_create(scroll);
+  lv_obj_t *cards_row = lv_obj_create(body);
   lv_obj_remove_style_all(cards_row);
   lv_obj_set_width(cards_row, lv_pct(100));
-  lv_obj_set_height(cards_row, LV_SIZE_CONTENT);
+  lv_obj_set_height(cards_row, 54);
   lv_obj_set_flex_flow(cards_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(cards_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(cards_row, 6, 0);
+  lv_obj_clear_flag(cards_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
   for (int i = 0; i < 3; i++) {
     const char *lbl = NULL, *val = NULL;
@@ -334,11 +337,12 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
     lv_obj_set_style_border_width(card, 1, 0);
     lv_obj_set_style_radius(card, 8, 0);
     lv_obj_set_width(card, lv_pct(31));
-    lv_obj_set_height(card, LV_SIZE_CONTENT);
+    lv_obj_set_height(card, 54);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(card, 10, 0);
-    lv_obj_set_style_pad_row(card, 4, 0);
+    lv_obj_set_style_pad_all(card, 6, 0);
+    lv_obj_set_style_pad_row(card, 2, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
     lv_obj_t *clbl = lv_label_create(card);
     lv_label_set_text(clbl, lbl);
@@ -352,7 +356,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   }
 
   /* Payment receipt */
-  lv_obj_t *receipt = lv_obj_create(scroll);
+  lv_obj_t *receipt = lv_obj_create(body);
   lv_obj_remove_style_all(receipt);
   lv_obj_set_style_bg_color(receipt, kiosk_theme_color_panel(), 0);
   lv_obj_set_style_bg_opa(receipt, LV_OPA_COVER, 0);
@@ -363,16 +367,25 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_width(receipt, lv_pct(100));
   lv_obj_set_height(receipt, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(receipt, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(receipt, 12, 0);
-  lv_obj_set_style_pad_row(receipt, 4, 0);
+  lv_obj_set_style_pad_all(receipt, 8, 0);
+  lv_obj_set_style_pad_row(receipt, 3, 0);
+  lv_obj_clear_flag(receipt, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
-  lv_obj_t *receipt_title = lv_label_create(receipt);
+  /* Receipt header row: title on left, status on right */
+  lv_obj_t *r_hdr = lv_obj_create(receipt);
+  lv_obj_remove_style_all(r_hdr);
+  lv_obj_set_width(r_hdr, lv_pct(100));
+  lv_obj_set_height(r_hdr, LV_SIZE_CONTENT);
+  lv_obj_set_flex_flow(r_hdr, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(r_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(r_hdr, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+  lv_obj_t *receipt_title = lv_label_create(r_hdr);
   lv_label_set_text(receipt_title, "Payment Receipt");
   lv_obj_set_style_text_font(receipt_title, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(receipt_title, kiosk_theme_color_text(), 0);
 
-  /* Status badge: Ready / Insufficient */
-  lv_obj_t *status_badge = lv_label_create(receipt);
+  lv_obj_t *status_badge = lv_label_create(r_hdr);
   lv_label_set_text(status_badge, sufficient ? LV_SYMBOL_OK " Ready" : LV_SYMBOL_WARNING " Insufficient Credits");
   lv_obj_set_style_text_font(status_badge, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(status_badge, sufficient ? kiosk_theme_color_success() : kiosk_theme_color_danger(), 0);
@@ -394,6 +407,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_height(bal_row, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(bal_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(bal_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(bal_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *bal_lbl = lv_label_create(bal_row);
   lv_label_set_text(bal_lbl, "Account Balance");
   lv_obj_set_style_text_font(bal_lbl, &lv_font_montserrat_14, 0);
@@ -412,6 +426,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_height(cost_row, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(cost_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(cost_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(cost_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *cost_lbl = lv_label_create(cost_row);
   lv_label_set_text(cost_lbl, "Booking Cost");
   lv_obj_set_style_text_font(cost_lbl, &lv_font_montserrat_14, 0);
@@ -438,22 +453,24 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_height(rem_row, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(rem_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(rem_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(rem_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *rem_lbl = lv_label_create(rem_row);
   lv_label_set_text(rem_lbl, "Balance After Booking");
   lv_obj_set_style_text_font(rem_lbl, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(rem_lbl, kiosk_theme_color_text(), 0);
   lv_obj_t *rem_val = lv_label_create(rem_row);
   lv_label_set_text(rem_val, rem_buf);
-  lv_obj_set_style_text_font(rem_val, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_font(rem_val, &lv_font_montserrat_16, 0);
   lv_obj_set_style_text_color(rem_val, sufficient ? kiosk_theme_color_success() : kiosk_theme_color_danger(), 0);
 
   /* Match title input */
-  lv_obj_t *match_title_col = lv_obj_create(scroll);
+  lv_obj_t *match_title_col = lv_obj_create(body);
   lv_obj_remove_style_all(match_title_col);
   lv_obj_set_width(match_title_col, lv_pct(100));
   lv_obj_set_height(match_title_col, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(match_title_col, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_row(match_title_col, 4, 0);
+  lv_obj_set_style_pad_row(match_title_col, 2, 0);
+  lv_obj_clear_flag(match_title_col, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
   lv_obj_t *mt_label = lv_label_create(match_title_col);
   lv_label_set_text(mt_label, "Match Title (Optional)");
@@ -463,7 +480,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_t *ta = lv_textarea_create(match_title_col);
   lv_textarea_set_one_line(ta, true);
   lv_textarea_set_max_length(ta, 64);
-  lv_obj_set_height(ta, 44);
+  lv_obj_set_height(ta, 38);
   lv_obj_clear_flag(ta, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_textarea_set_placeholder_text(ta, "e.g. Weekend Showdown");
   lv_obj_set_width(ta, lv_pct(100));
@@ -475,19 +492,22 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_add_event_cb(ta, ta_event_cb, LV_EVENT_ALL, ctx);
 
   /* Action buttons */
-  lv_obj_t *btn_row = lv_obj_create(scroll);
+  lv_obj_t *btn_row = lv_obj_create(body);
   lv_obj_remove_style_all(btn_row);
   lv_obj_set_width(btn_row, lv_pct(100));
-  lv_obj_set_height(btn_row, LV_SIZE_CONTENT);
+  lv_obj_set_height(btn_row, 44);
   lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(btn_row, 8, 0);
+  lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
   lv_obj_t *back_btn = lv_btn_create(btn_row);
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, 0);
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, LV_STATE_PRESSED);
   lv_obj_set_width(back_btn, LV_SIZE_CONTENT);
+  lv_obj_set_height(back_btn, 42);
   lv_obj_set_flex_grow(back_btn, 1);
+  lv_obj_clear_flag(back_btn, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *back_label = lv_label_create(back_btn);
   lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back");
   lv_obj_center(back_label);
@@ -501,7 +521,8 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   ctx->confirm_btn = lv_btn_create(btn_row);
   lv_obj_set_style_bg_color(ctx->confirm_btn, kiosk_theme_color_primary(), 0);
   lv_obj_set_flex_grow(ctx->confirm_btn, 2);
-  lv_obj_set_style_min_height(ctx->confirm_btn, KIOSK_MIN_TOUCH_PX, 0);
+  lv_obj_set_height(ctx->confirm_btn, 42);
+  lv_obj_clear_flag(ctx->confirm_btn, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   if (!sufficient) lv_obj_add_state(ctx->confirm_btn, LV_STATE_DISABLED);
 
   ctx->confirm_label = lv_label_create(ctx->confirm_btn);

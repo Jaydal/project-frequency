@@ -49,7 +49,8 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *name, const char *badge
   lv_obj_add_style(tile, &kiosk_style_tile, 0);
   lv_obj_add_style(tile, &kiosk_style_tile, LV_STATE_PRESSED);
   lv_obj_set_width(tile, lv_pct(48));
-  lv_obj_set_height(tile, 140);
+  lv_obj_set_height(tile, 130);
+  lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_set_style_pad_all(tile, 12, 0);
   lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(tile, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -122,28 +123,30 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
 
   booking_stepper_create(root, 0, member_name, balance, on_cancel, cancel_user_data);
 
-  lv_obj_t *scroll = lv_obj_create(root);
-  lv_obj_remove_style_all(scroll);
-  lv_obj_set_width(scroll, lv_pct(100));
-  lv_obj_set_flex_grow(scroll, 1);
-  lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(scroll, 12, 0);
-  lv_obj_set_style_pad_row(scroll, 8, 0);
-  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
-  lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_t *body = lv_obj_create(root);
+  lv_obj_remove_style_all(body);
+  lv_obj_set_width(body, lv_pct(100));
+  lv_obj_set_flex_grow(body, 1);
+  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(body, 10, 0);
+  lv_obj_set_style_pad_row(body, 8, 0);
+  lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
 
-  lv_obj_t *title = lv_label_create(scroll);
+  lv_obj_t *title = lv_label_create(body);
   lv_label_set_text(title, "Choose a Court");
   lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(title, kiosk_theme_color_text_muted(), 0);
 
-  lv_obj_t *grid = lv_obj_create(scroll);
+  lv_obj_t *grid = lv_obj_create(body);
   lv_obj_remove_style_all(grid);
   lv_obj_set_width(grid, lv_pct(100));
   lv_obj_set_flex_grow(grid, 1);
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_style_pad_column(grid, 8, 0);
   lv_obj_set_style_pad_row(grid, 8, 0);
+  lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
 
   /* Any Court tile */
   court_btn_closure_t *any_closure = malloc(sizeof(court_btn_closure_t));
@@ -157,7 +160,8 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
   lv_obj_add_style(any_tile, &kiosk_style_tile, 0);
   lv_obj_add_style(any_tile, &kiosk_style_tile, LV_STATE_PRESSED);
   lv_obj_set_width(any_tile, lv_pct(48));
-  lv_obj_set_height(any_tile, 140);
+  lv_obj_set_height(any_tile, 130);
+  lv_obj_clear_flag(any_tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_set_style_pad_all(any_tile, 12, 0);
   lv_obj_set_style_border_color(any_tile, kiosk_theme_color_primary(), 0);
   lv_obj_set_style_border_opa(any_tile, LV_OPA_40, 0);

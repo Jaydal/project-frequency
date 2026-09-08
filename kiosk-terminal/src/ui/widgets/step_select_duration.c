@@ -44,17 +44,17 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
 
   booking_stepper_create(root, 2, member_name, balance, on_cancel, cancel_user_data);
 
-  lv_obj_t *scroll = lv_obj_create(root);
-  lv_obj_remove_style_all(scroll);
-  lv_obj_set_width(scroll, lv_pct(100));
-  lv_obj_set_flex_grow(scroll, 1);
-  lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(scroll, 12, 0);
-  lv_obj_set_style_pad_row(scroll, 8, 0);
-  lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO);
-  lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
+  lv_obj_t *body = lv_obj_create(root);
+  lv_obj_remove_style_all(body);
+  lv_obj_set_width(body, lv_pct(100));
+  lv_obj_set_flex_grow(body, 1);
+  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(body, 10, 0);
+  lv_obj_set_style_pad_row(body, 8, 0);
+  lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
 
-  lv_obj_t *title = lv_label_create(scroll);
+  lv_obj_t *title = lv_label_create(body);
   if (has_active_game) {
     lv_label_set_text(title, "Choose Match Duration (Max 1 hr while in game)");
   } else {
@@ -63,13 +63,15 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
   lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(title, kiosk_theme_color_text_muted(), 0);
 
-  lv_obj_t *grid = lv_obj_create(scroll);
+  lv_obj_t *grid = lv_obj_create(body);
   lv_obj_remove_style_all(grid);
   lv_obj_set_width(grid, lv_pct(100));
   lv_obj_set_flex_grow(grid, 1);
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_style_pad_column(grid, 8, 0);
   lv_obj_set_style_pad_row(grid, 8, 0);
+  lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
 
   for (uint8_t i = 0; i < config->duration_count; i++) {
     int32_t d = config->durations_min[i];
@@ -84,11 +86,12 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_obj_add_style(tile, &kiosk_style_tile, 0);
     lv_obj_add_style(tile, &kiosk_style_tile, LV_STATE_PRESSED);
     lv_obj_set_width(tile, lv_pct(48));
-    lv_obj_set_height(tile, 140);
-    lv_obj_set_style_pad_all(tile, 12, 0);
+    lv_obj_set_height(tile, 105);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_set_style_pad_all(tile, 10, 0);
     lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(tile, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_row(tile, 4, 0);
+    lv_obj_set_style_pad_row(tile, 2, 0);
 
     lv_obj_t *top_row = lv_obj_create(tile);
     lv_obj_remove_style_all(top_row);
@@ -163,10 +166,12 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_obj_add_event_cb(tile, free_closure_cb, LV_EVENT_DELETE, closure);
   }
 
-  lv_obj_t *back_btn = lv_btn_create(scroll);
+  lv_obj_t *back_btn = lv_btn_create(body);
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, 0);
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, LV_STATE_PRESSED);
   lv_obj_set_width(back_btn, lv_pct(100));
+  lv_obj_set_height(back_btn, 44);
+  lv_obj_clear_flag(back_btn, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *back_label = lv_label_create(back_btn);
   lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back to Game Format");
   lv_obj_center(back_label);

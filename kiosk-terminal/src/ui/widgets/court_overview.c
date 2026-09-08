@@ -16,8 +16,8 @@ lv_obj_t *court_overview_create(lv_obj_t *parent, const court_status_t *courts, 
   lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_all(panel, 12, 0);
   lv_obj_set_style_pad_row(panel, 6, 0);
-  lv_obj_set_scrollbar_mode(panel, LV_SCROLLBAR_MODE_AUTO);
-  lv_obj_add_flag(panel, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
+  lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(panel, LV_SCROLLBAR_MODE_OFF);
 
   set_label(panel, "COURTS", &lv_font_montserrat_14, kiosk_theme_color_text_muted());
 
@@ -28,8 +28,9 @@ lv_obj_t *court_overview_create(lv_obj_t *parent, const court_status_t *courts, 
     court_phase_t phase = court_is_active(c) ? kiosk_phase_for_elapsed(elapsed, prep_sec) : COURT_PHASE_AVAILABLE;
 
     lv_obj_t *row = lv_obj_create(panel);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_set_width(row, lv_pct(100));
-    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_height(row, 36);
     lv_obj_set_style_bg_color(row, kiosk_theme_color_bg(), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(row, kiosk_theme_color_border(), 0);

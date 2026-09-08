@@ -17,8 +17,8 @@ lv_obj_t *queue_list_create(lv_obj_t *parent, const queue_row_t *rows, uint8_t c
   lv_obj_set_flex_grow(list, 1);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(list, 8, 0);
-  lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
-  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
 
   if (count == 0) {
     set_label(list, "No one waiting", &lv_font_montserrat_14, kiosk_theme_color_text_muted());

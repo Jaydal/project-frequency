@@ -102,16 +102,8 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
    * compact fixed footprint so up to three courts fit without scrolling. */
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(left, 6, 0);
-  /* The idle board has a fixed 3-court viewport. If court count exceeds 3,
-   * enable scrolling so additional courts can be viewed. */
-  if (board->court_count > 3) {
-    lv_obj_add_flag(left, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_pad_right(left, 4, 0);
-  } else {
-    lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_OFF);
-  }
+  lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *courts_title = lv_label_create(left);
   lv_label_set_text(courts_title, "Courts");

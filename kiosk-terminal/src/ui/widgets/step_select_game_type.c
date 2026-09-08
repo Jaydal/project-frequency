@@ -72,27 +72,32 @@ lv_obj_t *step_select_game_type_create(lv_obj_t *parent,
 
   booking_stepper_create(root, 1, member_name, balance, on_cancel, cancel_user_data);
 
-  lv_obj_t *scroll = lv_obj_create(root); lv_obj_set_scrollbar_mode(scroll, LV_SCROLLBAR_MODE_AUTO); lv_obj_add_flag(scroll, LV_OBJ_FLAG_SCROLLABLE); lv_obj_clear_flag(scroll, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
-  lv_obj_remove_style_all(scroll);
-  lv_obj_set_width(scroll, lv_pct(100));
-  lv_obj_set_flex_grow(scroll, 1);
-  lv_obj_set_flex_flow(scroll, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(scroll, 12, 0);
-  lv_obj_set_style_pad_row(scroll, 8, 0);
+  lv_obj_t *body = lv_obj_create(root);
+  lv_obj_remove_style_all(body);
+  lv_obj_set_width(body, lv_pct(100));
+  lv_obj_set_flex_grow(body, 1);
+  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_all(body, 10, 0);
+  lv_obj_set_style_pad_row(body, 12, 0);
+  lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
 
-  lv_obj_t *title = lv_label_create(scroll);
+  lv_obj_t *title = lv_label_create(body);
   lv_label_set_text(title, "Select Game Format");
   lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(title, kiosk_theme_color_text_muted(), 0);
 
-  lv_obj_t *row = lv_obj_create(scroll);
+  lv_obj_t *row = lv_obj_create(body);
   lv_obj_remove_style_all(row);
   lv_obj_set_width(row, lv_pct(100));
-  lv_obj_set_flex_grow(row, 1);
+  lv_obj_set_height(row, 150);
   lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *t1 = make_tile(row, "1 vs 1", "Singles", "2 players  o  1 credit rate");
+  lv_obj_clear_flag(t1, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   game_type_closure_t *c1 = malloc(sizeof(game_type_closure_t));
   c1->game_type = GAME_TYPE_1V1;
   c1->cb = on_select;
@@ -101,6 +106,7 @@ lv_obj_t *step_select_game_type_create(lv_obj_t *parent,
   lv_obj_add_event_cb(t1, free_closure_cb, LV_EVENT_DELETE, c1);
 
   lv_obj_t *t2 = make_tile(row, "2 vs 2", "Doubles", "4 players  o  Split or single pay");
+  lv_obj_clear_flag(t2, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   game_type_closure_t *c2 = malloc(sizeof(game_type_closure_t));
   c2->game_type = GAME_TYPE_2V2;
   c2->cb = on_select;
@@ -109,10 +115,12 @@ lv_obj_t *step_select_game_type_create(lv_obj_t *parent,
   lv_obj_add_event_cb(t2, free_closure_cb, LV_EVENT_DELETE, c2);
 
   /* Back button */
-  lv_obj_t *back_btn = lv_btn_create(scroll);
+  lv_obj_t *back_btn = lv_btn_create(body);
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, 0);
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, LV_STATE_PRESSED);
   lv_obj_set_width(back_btn, lv_pct(100));
+  lv_obj_set_height(back_btn, 44);
+  lv_obj_clear_flag(back_btn, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *back_label = lv_label_create(back_btn);
   lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back to Court Selection");
   lv_obj_center(back_label);

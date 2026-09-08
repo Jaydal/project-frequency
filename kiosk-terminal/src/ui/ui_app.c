@@ -447,9 +447,8 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
   lv_obj_set_flex_align(root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_all(root, 16, 0);
   lv_obj_set_style_pad_row(root, 10, 0);
-  lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_AUTO);
-  lv_obj_add_flag(root, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM);
+  lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(root, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *title = lv_label_create(root);
   lv_label_set_text(title, "Active Booking Found");
