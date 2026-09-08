@@ -44,12 +44,14 @@ export async function POST(request: Request) {
 
   const { data: pricesRow } = await supabase
     .from('settings').select('value').eq('key', 'prices').single();
-  let ratePer30 = 150;
+  let rates: Record<string, number> = { '15': 100, '30': 150, '60': 300, '90': 450 };
   try {
-    if (pricesRow?.value) ratePer30 = JSON.parse(pricesRow.value)['30'] ?? 150;
+    if (pricesRow?.value) rates = JSON.parse(pricesRow.value);
   } catch {}
 
-  const chargeAmount = ratePer30 * (duration / 30);
+  const chargeAmount = rates[String(duration)] !== undefined
+    ? rates[String(duration)]
+    : Math.round(((rates['30'] ?? 150) * duration) / 30);
 
   if (balance < chargeAmount)
     return NextResponse.json({ approved: false, remainingBalance: balance, chargeAmount, reason: 'Insufficient balance' }, { status: 400 });

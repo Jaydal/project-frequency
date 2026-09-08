@@ -17,5 +17,12 @@ export async function saveProducts(formData: FormData) {
   await supabase.from('settings').upsert({ key: 'products', value: JSON.stringify({ matchTypes, durations }) }, { onConflict: 'key' });
   await supabase.from('settings').upsert({ key: 'prices', value: JSON.stringify(rates) }, { onConflict: 'key' });
 
+  try {
+    const { publishAllDisplays } = await import('@/lib/display/publish-all');
+    await publishAllDisplays();
+  } catch (err) {
+    console.error('Failed to broadcast updated products/rates:', err);
+  }
+
   revalidatePath('/settings');
 }

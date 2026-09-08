@@ -12,7 +12,7 @@
 #define KIOSK_MAX_PLAYERS  4
 #define KIOSK_MAX_COURTS   8
 #define KIOSK_MAX_QUEUE    16
-#define KIOSK_MAX_DURATIONS 4
+#define KIOSK_MAX_DURATIONS 8
 
 typedef enum {
   COURT_PHASE_AVAILABLE,
@@ -151,15 +151,18 @@ typedef enum { GAME_TYPE_1V1, GAME_TYPE_2V2 } game_type_t;
 
 /* getCost() from products-config-types.ts, ported verbatim. */
 static inline int32_t kiosk_get_cost(const kiosk_products_config_t *cfg, int32_t duration_min, int32_t party_size) {
-  int32_t rate = 0;
+  int32_t rate = -1;
   for (uint8_t i = 0; i < cfg->duration_count; i++) {
     if (cfg->durations_min[i] == duration_min) { rate = cfg->rates[i]; break; }
   }
-  if (rate == 0 && cfg->duration_count > 0) {
-    rate = cfg->rates[0]; // fallback to base rate if not an exact match
+  if (rate >= 0) {
+    return (party_size == 4) ? (rate / 2) : rate;
   }
-  int32_t total = (rate * duration_min) / 30;
-  return (party_size == 4) ? (total / 2) : total;
+  if (cfg->duration_count > 0 && cfg->durations_min[0] > 0) {
+    int32_t total = (cfg->rates[0] * duration_min) / cfg->durations_min[0];
+    return (party_size == 4) ? (total / 2) : total;
+  }
+  return 0;
 }
 
 /* Result of joining the queue (mirrors the 'success' step's two variants). */

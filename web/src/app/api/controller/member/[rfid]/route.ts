@@ -48,8 +48,28 @@ export async function GET(
       }));
       const { getPlayNowCutoff } = await import('@/lib/queue/booking-engine');
       const { evaluateRfidScan } = await import('@/lib/queue/reservation-policy');
+      const { data: settingsRows } = await supabase.from('settings').select('key, value').in('key', ['products', 'prices']);
+      const settingsMap = new Map((settingsRows ?? []).map((r: any) => [r.key, r.value]));
+      const tryParse = (val: any) => { try { return val ? JSON.parse(val) : undefined; } catch { return undefined; } };
+      const products = tryParse(settingsMap.get('products'));
+      const rates = tryParse(settingsMap.get('prices'));
+      const configuredDurations: number[] = products?.durations ?? [15, 30, 60, 90];
+      const validDurations = rates 
+        ? configuredDurations.filter(d => rates[String(d)] !== undefined && Number(rates[String(d)]) > 0)
+        : configuredDurations;
+      const effectiveDurations = validDurations.length > 0 ? validDurations : configuredDurations;
+      const minDuration = Math.min(...effectiveDurations);
+
       const bestCutoff = await getPlayNowCutoff(supabase, now);
-      const decision = evaluateRfidScan(policyMember, now, 60, memberGames, memberQueueEntries, bestCutoff === undefined ? undefined : (bestCutoff || undefined));
+      const decision = evaluateRfidScan(
+        policyMember,
+        now,
+        60,
+        memberGames,
+        memberQueueEntries,
+        bestCutoff === undefined ? undefined : (bestCutoff || undefined),
+        { minDuration, allowedDurations: effectiveDurations }
+      );
 
       return NextResponse.json({
         id: member.id,
@@ -125,8 +145,28 @@ export async function GET(
   const { getPlayNowCutoff } = await import('@/lib/queue/booking-engine');
   const { evaluateRfidScan } = await import('@/lib/queue/reservation-policy');
 
+  const { data: settingsRows } = await supabase.from('settings').select('key, value').in('key', ['products', 'prices']);
+  const settingsMap = new Map((settingsRows ?? []).map((r: any) => [r.key, r.value]));
+  const tryParse = (val: any) => { try { return val ? JSON.parse(val) : undefined; } catch { return undefined; } };
+  const products = tryParse(settingsMap.get('products'));
+  const rates = tryParse(settingsMap.get('prices'));
+  const configuredDurations: number[] = products?.durations ?? [15, 30, 60, 90];
+  const validDurations = rates 
+    ? configuredDurations.filter(d => rates[String(d)] !== undefined && Number(rates[String(d)]) > 0)
+    : configuredDurations;
+  const effectiveDurations = validDurations.length > 0 ? validDurations : configuredDurations;
+  const minDuration = Math.min(...effectiveDurations);
+
   const bestCutoff = await getPlayNowCutoff(supabase, now);
-  const decision = evaluateRfidScan(policyMember, now, 60, memberGames, memberQueueEntries, bestCutoff === undefined ? undefined : (bestCutoff || undefined));
+  const decision = evaluateRfidScan(
+    policyMember,
+    now,
+    60,
+    memberGames,
+    memberQueueEntries,
+    bestCutoff === undefined ? undefined : (bestCutoff || undefined),
+    { minDuration, allowedDurations: effectiveDurations }
+  );
 
   const activeGameRecord = memberGames.find(g => g.status === 'In Progress');
   const activeQueueRecord = memberQueueEntries[0];

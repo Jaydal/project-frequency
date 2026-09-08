@@ -274,8 +274,8 @@ export function BookingKiosk() {
         const prepTimeSec = parseInt(map.get('preparationTime') ?? '', 10);
         setConfig({
           matchTypes: products?.matchTypes ?? ['1v1', '2v2'],
-          durations: products?.durations ?? [30, 60, 90],
-          rates: rates ?? { '30': 150, '60': 300, '90': 450 },
+          durations: products?.durations ?? [15, 30, 60, 90],
+          rates: rates ?? { '15': 100, '30': 150, '60': 300, '90': 450 },
           
         });
       }

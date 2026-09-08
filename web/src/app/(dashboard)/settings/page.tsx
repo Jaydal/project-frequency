@@ -16,8 +16,8 @@ export default async function SettingsPage() {
   const sequenceRow = settings?.find(s => s.key === 'displaySequence');
 
   const matchTypes: string[] = productsRow?.value ? JSON.parse(productsRow.value).matchTypes ?? ['1v1', '2v2'] : ['1v1', '2v2'];
-  const durations: number[] = productsRow?.value ? JSON.parse(productsRow.value).durations ?? [30, 60, 90] : [30, 60, 90];
-  const rates: Record<string, number> = pricesRow?.value ? JSON.parse(pricesRow.value) : { '30': 150, '60': 300, '90': 450 };
+  const durations: number[] = productsRow?.value ? JSON.parse(productsRow.value).durations ?? [15, 30, 60, 90] : [15, 30, 60, 90];
+  const rates: Record<string, number> = pricesRow?.value ? JSON.parse(pricesRow.value) : { '15': 100, '30': 150, '60': 300, '90': 450 };
 
   return (
     <div className="space-y-6 animate-fade-in">

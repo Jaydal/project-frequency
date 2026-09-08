@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     operatingHours:  map['operatingHours']  ?? '06:00-22:00',
-    prices:          map['prices']          ?? '{"30":150,"60":300,"90":450}',
+    prices:          map['prices']          ?? '{"15":100,"30":150,"60":300,"90":450}',
     preparationTime: map['preparationTime'] ?? '120',
     cooldownTime:    map['cooldownTime']    ?? '60',
     nightMode:       map['nightMode']       ?? '18:00',

@@ -3,8 +3,8 @@ import type { ProductsConfig } from './products-config-types';
 
 const DEFAULTS: ProductsConfig = {
   matchTypes: ['1v1', '2v2'],
-  durations: [30, 60, 90],
-  rates: { '30': 150, '60': 300, '90': 450 },
+  durations: [15, 30, 60, 90],
+  rates: { '15': 100, '30': 150, '60': 300, '90': 450 },
 };
 
 export async function getProductsConfig(): Promise<ProductsConfig> {

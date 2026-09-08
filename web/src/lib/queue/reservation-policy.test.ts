@@ -74,6 +74,70 @@ describe('Reservation Policy', () => {
       expect(result).toEqual({ type: 'no eligible window', courtId: 'c1', reason: 'Court is reserved soon', nextReservationStart: nextRes });
     });
 
+    it('allows 15-minute quick-play when configured and upcoming reservation is 15 mins away (8:45 AM for 9:00 AM)', () => {
+      const walkInTime = new Date('2026-08-30T08:45:00Z');
+      const reservationAt9AM = new Date('2026-08-30T09:00:00Z');
+      const result = evaluateRfidScan(
+        activeMember,
+        walkInTime,
+        60,
+        [],
+        [],
+        { courtId: 'c1', courtName: 'Court 1', cutoff: reservationAt9AM },
+        { minDuration: 15, allowedDurations: [15, 30, 60, 90] }
+      );
+      expect(result).toEqual({
+        type: 'play now',
+        courtId: 'c1',
+        courtName: 'Court 1',
+        duration: 15,
+        capped: true,
+        cutoffTime: reservationAt9AM,
+      });
+    });
+
+    it('denies 15-minute quick-play if minimum duration is set to 30 mins', () => {
+      const walkInTime = new Date('2026-08-30T08:45:00Z');
+      const reservationAt9AM = new Date('2026-08-30T09:00:00Z');
+      const result = evaluateRfidScan(
+        activeMember,
+        walkInTime,
+        60,
+        [],
+        [],
+        { courtId: 'c1', courtName: 'Court 1', cutoff: reservationAt9AM },
+        { minDuration: 30, allowedDurations: [30, 60, 90] }
+      );
+      expect(result).toEqual({
+        type: 'no eligible window',
+        courtId: 'c1',
+        courtName: 'Court 1',
+        reason: 'Court is reserved soon',
+        nextReservationStart: reservationAt9AM,
+      });
+    });
+
+    it('denies 15-minute quick-play if reservation is too close (< 15 mins, e.g. 10 mins)', () => {
+      const walkInTime = new Date('2026-08-30T08:50:00Z');
+      const reservationAt9AM = new Date('2026-08-30T09:00:00Z');
+      const result = evaluateRfidScan(
+        activeMember,
+        walkInTime,
+        60,
+        [],
+        [],
+        { courtId: 'c1', courtName: 'Court 1', cutoff: reservationAt9AM },
+        { minDuration: 15, allowedDurations: [15, 30, 60, 90] }
+      );
+      expect(result).toEqual({
+        type: 'no eligible window',
+        courtId: 'c1',
+        courtName: 'Court 1',
+        reason: 'Court is reserved soon',
+        nextReservationStart: reservationAt9AM,
+      });
+    });
+
     it('allows play now and assigns to queue (any court) if no courts are available', () => {
       const result = evaluateRfidScan(activeMember, now, 60, [], [], undefined);
       expect(result).toEqual({ type: 'play now', courtId: 'any', duration: 60, capped: false });

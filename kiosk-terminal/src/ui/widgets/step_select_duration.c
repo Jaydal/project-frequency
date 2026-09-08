@@ -21,6 +21,7 @@ static void back_cb(lv_event_t *e) {
 }
 
 static const char *duration_label(int32_t mins) {
+  if (mins <= 15) return "Express Match";
   if (mins <= 30) return "Quick Match";
   if (mins <= 60) return "Standard Play";
   return "Extended Session";

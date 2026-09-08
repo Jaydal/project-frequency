@@ -120,6 +120,9 @@ export function ProductsEditor({ matchTypes, durations, rates }: Props) {
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-zinc-500 mt-2">
+          Tip: Adding a 15-minute duration (e.g. ₱100) enables walk-in micro-sessions at the kiosk when an upcoming reservation is ~15–25 minutes away, maximizing court revenue.
+        </p>
       </div>
 
 

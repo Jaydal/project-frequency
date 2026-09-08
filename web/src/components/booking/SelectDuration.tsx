@@ -15,6 +15,7 @@ export function SelectDuration({ member, durations, rates, onSelect, onBack, onC
 
   // Simple helper to describe durations
   const getDurationLabel = (mins: number) => {
+    if (mins <= 15) return 'Express Match';
     if (mins <= 30) return 'Quick Match';
     if (mins <= 60) return 'Standard Play';
     return 'Extended Session';
@@ -36,10 +37,11 @@ export function SelectDuration({ member, durations, rates, onSelect, onBack, onC
             <div className="mt-1 text-xs text-[var(--booking-muted)]">{subtitle || 'Pick a duration and review the credit requirement.'}</div>
           </div>
 
-          <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-3 w-full max-w-lg mx-auto">
+          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-xl mx-auto">
             {durations.map(d => {
-              const per30 = rates[String(d)] ?? 0;
-              const total = per30 * (d / 30);
+              const total = rates[String(d)] !== undefined
+                ? rates[String(d)]
+                : (rates['30'] ? Math.round((rates['30'] * d) / 30) : 0);
               const label = getDurationLabel(d);
               const isPopular = d === 60; // Standard 60 mins is usually popular
 

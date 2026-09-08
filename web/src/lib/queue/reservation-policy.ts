@@ -48,6 +48,11 @@ export type GuestReferenceDecision =
   | { type: 'guest payment pending'; requestId: string }
   | { type: 'invalid reference'; reason: string };
 
+export interface EvaluateRfidScanOptions {
+  minDuration?: number;
+  allowedDurations?: number[];
+}
+
 /**
  * Evaluates what should happen when a member taps their RFID card at the kiosk.
  */
@@ -57,7 +62,8 @@ export function evaluateRfidScan(
   requestedDuration: number,
   memberGames: PolicyGame[],
   memberQueueEntries: PolicyQueueEntry[],
-  bestOption?: { courtId: string, courtName?: string, cutoff: Date | null }
+  bestOption?: { courtId: string, courtName?: string, cutoff: Date | null },
+  options?: EvaluateRfidScanOptions
 ): RfidDecision {
   if (member.status !== 'Active') {
     return { type: 'member unavailable', reason: `Member status is ${member.status}` };
@@ -106,10 +112,23 @@ export function evaluateRfidScan(
   }
 
   if (bestOption.cutoff) {
-    const availableMinutes = (bestOption.cutoff.getTime() - now.getTime()) / (60 * 1000);
-    const cappedDuration = Math.floor(availableMinutes / 30) * 30;
+    // Add 30 seconds tolerance so e.g. 14m45s rounds up to 15 mins
+    const availableMinutes = Math.floor(((bestOption.cutoff.getTime() - now.getTime()) + 30_000) / (60 * 1000));
     
-    if (cappedDuration < MINIMUM_DURATION_MINUTES) {
+    let cappedDuration = 0;
+    const minDur = options?.minDuration ?? MINIMUM_DURATION_MINUTES;
+
+    if (options?.allowedDurations && options.allowedDurations.length > 0) {
+      // Find the largest configured duration that fits both within availableMinutes and requestedDuration
+      const sorted = [...options.allowedDurations].sort((a, b) => b - a);
+      const fitting = sorted.find(d => d <= availableMinutes && d <= requestedDuration);
+      cappedDuration = fitting ?? 0;
+    } else {
+      const step = minDur;
+      cappedDuration = Math.floor(availableMinutes / step) * step;
+    }
+    
+    if (cappedDuration < minDur) {
       return { 
         type: 'no eligible window', 
         reason: 'Court is reserved soon',

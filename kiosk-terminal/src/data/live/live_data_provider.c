@@ -169,10 +169,10 @@ static void get_products_config(kiosk_products_config_t *out) {
   }
   UNLOCK_BOARD();
   memset(out, 0, sizeof(*out));
-  const int32_t durations[] = { 30, 60, 90 };
-  const int32_t rates[] = { 150, 300, 450 };
-  out->duration_count = 3;
-  for (uint8_t i = 0; i < 3; i++) { out->durations_min[i] = durations[i]; out->rates[i] = rates[i]; }
+  const int32_t durations[] = { 15, 30, 60, 90 };
+  const int32_t rates[] = { 100, 150, 300, 450 };
+  out->duration_count = 4;
+  for (uint8_t i = 0; i < 4; i++) { out->durations_min[i] = durations[i]; out->rates[i] = rates[i]; }
   out->prep_time_sec = 300;
 }
 

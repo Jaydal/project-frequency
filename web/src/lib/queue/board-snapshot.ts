@@ -116,8 +116,8 @@ export async function getBoardSnapshot(supabase: SupabaseClient): Promise<BoardS
 
   const settings = new Map<string, string>((settingsRows ?? []).map((r: any) => [r.key, r.value]));
   const tryParse = (v: string | undefined): any => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
-  const durations: number[] = tryParse(settings.get('products'))?.durations ?? [30, 60, 90];
-  const priceMap: Record<string, number> = tryParse(settings.get('prices')) ?? { '30': 150, '60': 300, '90': 450 };
+  const durations: number[] = tryParse(settings.get('products'))?.durations ?? [15, 30, 60, 90];
+  const priceMap: Record<string, number> = tryParse(settings.get('prices')) ?? { '15': 100, '30': 150, '60': 300, '90': 450 };
   const config: BoardConfig = {
     durations,
     rates: durations.map((d) => priceMap[String(d)] ?? 0),
