@@ -66,7 +66,7 @@ bool http_transport_request(const char *method, const char *url,
     .timeout_ms        = 10000,
     .event_handler     = http_event_handler,
     .user_data         = &buf,
-    .crt_bundle_attach = esp_crt_bundle_attach,
+    .cert_pem          = FREQ_GTS_ROOT_R1,
   };
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
