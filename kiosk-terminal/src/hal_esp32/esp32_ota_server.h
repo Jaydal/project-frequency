@@ -13,6 +13,7 @@ extern "C" {
  *   - GET  /update : Web dashboard with upload form and system partition info
  *   - POST /update : Streams and flashes incoming .bin firmware to the inactive OTA partition
  *   - GET  /status : System health, current partition, and heap stats JSON
+ *   - GET  /logs   : Real-time chunked log stream from a safe static 4KB ring buffer
  *
  * @return ESP_OK on success, or error code on failure.
  */

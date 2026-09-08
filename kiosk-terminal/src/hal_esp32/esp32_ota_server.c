@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_http_server.h"
@@ -9,10 +10,63 @@
 #include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "ota_server";
 
 static httpd_handle_t s_server = NULL;
+
+/* ── Safe Static Ring Buffer for OTA Logging ─────────────────────────── */
+#define LOG_RING_BUF_SIZE 4096
+
+static char s_log_ring_buf[LOG_RING_BUF_SIZE];
+static uint32_t s_log_write_count = 0;
+static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
+static SemaphoreHandle_t s_log_sem = NULL;
+static vprintf_like_t s_default_vprintf = NULL;
+static volatile bool s_log_stream_active = false;
+
+static int ota_log_vprintf(const char *fmt, va_list args)
+{
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int ret = 0;
+    if (s_default_vprintf) {
+        ret = s_default_vprintf(fmt, args);
+    } else {
+        ret = vprintf(fmt, args);
+    }
+
+    char line_buf[256];
+    int len = vsnprintf(line_buf, sizeof(line_buf), fmt, args_copy);
+    va_end(args_copy);
+
+    if (len > 0) {
+        if ((size_t)len >= sizeof(line_buf)) {
+            len = sizeof(line_buf) - 1;
+        }
+
+        portENTER_CRITICAL(&s_log_mux);
+        for (int i = 0; i < len; i++) {
+            size_t idx = s_log_write_count % LOG_RING_BUF_SIZE;
+            s_log_ring_buf[idx] = line_buf[i];
+            s_log_write_count++;
+        }
+        portEXIT_CRITICAL(&s_log_mux);
+
+        if (s_log_sem && s_log_stream_active) {
+            if (xPortInIsrContext()) {
+                BaseType_t high_task_woken = pdFALSE;
+                xSemaphoreGiveFromISR(s_log_sem, &high_task_woken);
+                if (high_task_woken) portYIELD_FROM_ISR();
+            } else {
+                xSemaphoreGive(s_log_sem);
+            }
+        }
+    }
+
+    return ret;
+}
 
 static void restart_task(void *arg)
 {
@@ -43,7 +97,7 @@ static const char *HTML_HEADER =
     "</style></head><body>"
     "<div class='card'>"
     "<h1>Freq Kiosk OTA Update</h1>"
-    "<p>Upload a new <code>firmware.bin</code> over the local venue Wi-Fi.</p>"
+    "<p>Upload a new <code>firmware.bin</code> over venue Wi-Fi, or <a href='/logs' target='_blank' style='color:#38bdf8;text-decoration:underline;'>view live console logs</a>.</p>"
     "<div class='badge'>";
 
 static const char *HTML_FOOTER =
@@ -194,10 +248,77 @@ static esp_err_t status_get_handler(httpd_req_t *req)
     return httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
 }
 
+static esp_err_t logs_get_handler(httpd_req_t *req)
+{
+    if (s_log_stream_active) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_send(req, "Another log stream is already active\n", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+    s_log_stream_active = true;
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache, no-store, must-revalidate");
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+    uint32_t client_read_count = 0;
+    portENTER_CRITICAL(&s_log_mux);
+    if (s_log_write_count > LOG_RING_BUF_SIZE) {
+        client_read_count = s_log_write_count - LOG_RING_BUF_SIZE;
+    } else {
+        client_read_count = 0;
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+
+    char chunk[512];
+    esp_err_t err = ESP_OK;
+
+    while (s_log_stream_active) {
+        size_t chunk_len = 0;
+
+        portENTER_CRITICAL(&s_log_mux);
+        if (s_log_write_count - client_read_count > LOG_RING_BUF_SIZE) {
+            client_read_count = s_log_write_count - LOG_RING_BUF_SIZE;
+        }
+
+        while (client_read_count < s_log_write_count && chunk_len < sizeof(chunk)) {
+            size_t idx = client_read_count % LOG_RING_BUF_SIZE;
+            chunk[chunk_len++] = s_log_ring_buf[idx];
+            client_read_count++;
+        }
+        portEXIT_CRITICAL(&s_log_mux);
+
+        if (chunk_len > 0) {
+            err = httpd_resp_send_chunk(req, chunk, chunk_len);
+            if (err != ESP_OK) {
+                break;
+            }
+        } else {
+            if (s_log_sem) {
+                xSemaphoreTake(s_log_sem, pdMS_TO_TICKS(500));
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+        }
+    }
+
+    s_log_stream_active = false;
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
 esp_err_t esp32_ota_server_start(void)
 {
     if (s_server != NULL) {
         return ESP_OK; /* Already started */
+    }
+
+    if (!s_log_sem) {
+        s_log_sem = xSemaphoreCreateBinary();
+    }
+    if (!s_default_vprintf) {
+        s_default_vprintf = esp_log_set_vprintf(ota_log_vprintf);
     }
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -236,6 +357,14 @@ esp_err_t esp32_ota_server_start(void)
     };
     httpd_register_uri_handler(s_server, &uri_get_status);
 
-    ESP_LOGI(TAG, "Local WiFi OTA server running on port 80 (http://<ip>/update)");
+    httpd_uri_t uri_get_logs = {
+        .uri = "/logs",
+        .method = HTTP_GET,
+        .handler = logs_get_handler,
+        .user_ctx = NULL,
+    };
+    httpd_register_uri_handler(s_server, &uri_get_logs);
+
+    ESP_LOGI(TAG, "Local WiFi OTA server running on port 80 (http://<ip>/update, http://<ip>/logs)");
     return ESP_OK;
 }
