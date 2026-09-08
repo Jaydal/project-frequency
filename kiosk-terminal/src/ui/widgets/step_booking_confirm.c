@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define INPUT_CELL_COUNT 48
+#define INPUT_CELL_WIDTH 20
+
 typedef struct {
   step_confirm_cb_t on_confirm;
   void *user_data;
@@ -18,6 +21,10 @@ typedef struct {
   char *match_title_buf;
   size_t match_title_buf_size;
   lv_timer_t *confirm_timer;
+  lv_obj_t *input_cells[INPUT_CELL_COUNT];
+  char input_cell_text[INPUT_CELL_COUNT][2];
+  char input_text[64];
+  size_t input_page_start;
 } confirm_ctx_t;
 
 static void sync_match_title(confirm_ctx_t *ctx) {
@@ -60,29 +67,99 @@ static void free_ctx_cb(lv_event_t *e) {
   free(ctx);
 }
 
+static const char *KEYS_LOWER[] = {
+  "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
+  "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
+  "z", "x", "c", "v", "b", "n", "m", "\n",
+  "ABC", "SPACE", "BKSP", "123", "CANCEL", "OK", ""
+};
 
-static void modal_kb_event_cb(lv_event_t *e) {
+static const char *KEYS_UPPER[] = {
+  "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
+  "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
+  "Z", "X", "C", "V", "B", "N", "M", "\n",
+  "abc", "SPACE", "BKSP", "123", "CANCEL", "OK", ""
+};
+
+static const char *KEYS_SYMBOLS[] = {
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
+  "@", ".", "/", ":", "-", "_", "?", "&", "=", "\n",
+  "+", "*", "#", "%", "!", "~", "\\", "\n",
+  "ABC", "SPACE", "BKSP", "abc", "CANCEL", "OK", ""
+};
+
+static void repaint_input_preview(confirm_ctx_t *ctx) {
+  if (!ctx->input_modal) return;
+  size_t len = strlen(ctx->input_text);
+
+  if (len >= ctx->input_page_start + INPUT_CELL_COUNT) {
+    ctx->input_page_start = len - INPUT_CELL_COUNT + 1;
+  } else if (len < ctx->input_page_start) {
+    ctx->input_page_start = 0;
+  }
+
+  for (size_t i = 0; i < INPUT_CELL_COUNT; i++) {
+    size_t char_idx = ctx->input_page_start + i;
+    if (char_idx < len) {
+      ctx->input_cell_text[i][0] = ctx->input_text[char_idx];
+      ctx->input_cell_text[i][1] = '\0';
+    } else {
+      ctx->input_cell_text[i][0] = '\0';
+    }
+    lv_label_set_text_static(ctx->input_cells[i], ctx->input_cell_text[i]);
+  }
+}
+
+static void close_input_modal(confirm_ctx_t *ctx) {
+  if (!ctx->input_modal) return;
+  lv_obj_del(ctx->input_modal);
+  ctx->input_modal = NULL;
+  memset(ctx->input_cells, 0, sizeof(ctx->input_cells));
+  memset(ctx->input_cell_text, 0, sizeof(ctx->input_cell_text));
+  ctx->input_page_start = 0;
+  ctx->editing_ta = NULL;
+  lv_obj_clear_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void static_keyboard_event_cb(lv_event_t *e) {
   confirm_ctx_t *ctx = lv_event_get_user_data(e);
-  lv_event_code_t code = lv_event_get_code(e);
   lv_obj_t *kb = lv_event_get_target(e);
+  uint16_t btn = lv_btnmatrix_get_selected_btn(kb);
+  const char *key = lv_btnmatrix_get_btn_text(kb, btn);
+  if (!key || !ctx->input_cells[0]) return;
 
-  if (code == LV_EVENT_READY) {
-    lv_obj_t *ta = lv_keyboard_get_textarea(kb);
-    if (ta && ctx->editing_ta) {
-      lv_textarea_set_text(ctx->editing_ta, lv_textarea_get_text(ta));
-      /* set_text doesn't emit VALUE_CHANGED, so sync the buffer explicitly. */
+  if (strcmp(key, "ABC") == 0) {
+    lv_btnmatrix_set_map(kb, KEYS_UPPER);
+  } else if (strcmp(key, "abc") == 0) {
+    lv_btnmatrix_set_map(kb, KEYS_LOWER);
+  } else if (strcmp(key, "123") == 0) {
+    lv_btnmatrix_set_map(kb, KEYS_SYMBOLS);
+  } else if (strcmp(key, "SPACE") == 0) {
+    size_t length = strlen(ctx->input_text);
+    if (length + 1 < sizeof(ctx->input_text)) {
+      ctx->input_text[length] = ' ';
+      ctx->input_text[length + 1] = '\0';
+    }
+  } else if (strcmp(key, "BKSP") == 0) {
+    size_t length = strlen(ctx->input_text);
+    if (length > 0) ctx->input_text[length - 1] = '\0';
+  } else if (strcmp(key, "OK") == 0) {
+    if (ctx->editing_ta) {
+      lv_textarea_set_text(ctx->editing_ta, ctx->input_text);
       sync_match_title(ctx);
     }
-  }
-
-  if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
-    if (ctx->input_modal) {
-      lv_obj_del(ctx->input_modal);
-      ctx->input_modal = NULL;
-      ctx->editing_ta = NULL;
-      lv_obj_clear_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
+    close_input_modal(ctx);
+  } else if (strcmp(key, "CANCEL") == 0) {
+    close_input_modal(ctx);
+  } else {
+    size_t length = strlen(ctx->input_text);
+    size_t key_length = strlen(key);
+    if (length + key_length < sizeof(ctx->input_text)) {
+      strncat(ctx->input_text, key, sizeof(ctx->input_text) - length - 1);
     }
   }
+
+  repaint_input_preview(ctx);
 }
 
 static void ta_event_cb(lv_event_t * e) {
@@ -107,58 +184,72 @@ static void ta_event_cb(lv_event_t * e) {
       lv_obj_set_style_bg_opa(ctx->input_modal, LV_OPA_COVER, 0);
       lv_obj_clear_flag(ctx->input_modal, LV_OBJ_FLAG_SCROLLABLE);
 
-      /* Keyboard height: 4 rows × ~46px + padding ≈ 200px */
-      int kb_h = 200;
-      int ta_h = 44;
-      int hdr_h = 40;
-
       /* Header */
       lv_obj_t *hdr = lv_obj_create(ctx->input_modal);
       lv_obj_remove_style_all(hdr);
-      lv_obj_set_size(hdr, lv_pct(100), hdr_h);
+      lv_obj_set_width(hdr, lv_pct(100));
+      lv_obj_set_height(hdr, 40);
+      lv_obj_align(hdr, LV_ALIGN_TOP_MID, 0, 0);
       lv_obj_set_style_bg_color(hdr, kiosk_theme_color_bg(), 0);
       lv_obj_set_style_bg_opa(hdr, LV_OPA_COVER, 0);
       lv_obj_clear_flag(hdr, LV_OBJ_FLAG_SCROLLABLE);
+
       lv_obj_t *hdr_label = lv_label_create(hdr);
       lv_label_set_text(hdr_label, "Match Title");
       lv_obj_set_style_text_font(hdr_label, &lv_font_montserrat_14, 0);
       lv_obj_set_style_text_color(hdr_label, kiosk_theme_color_text_muted(), 0);
       lv_obj_align(hdr_label, LV_ALIGN_BOTTOM_LEFT, 20, -4);
 
-      /* Textarea — positioned below header */
-      lv_obj_t *large_ta = lv_textarea_create(ctx->input_modal);
-      lv_obj_set_size(large_ta, lv_pct(100), ta_h);
-      lv_obj_set_pos(large_ta, 0, hdr_h);
-      lv_obj_set_style_pad_hor(large_ta, 20, 0);
-      lv_textarea_set_text(large_ta, lv_textarea_get_text(target_ta));
-      lv_textarea_set_one_line(large_ta, true);
-      lv_textarea_set_max_length(large_ta, 64);
-      lv_obj_clear_flag(large_ta, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-      lv_textarea_set_cursor_click_pos(large_ta, false);
-      kiosk_theme_style_modal_ta(large_ta);
-      /* Keep the edit buffer invisible until the keyboard signals READY. */
-      lv_obj_set_style_text_color(large_ta, kiosk_theme_color_bg(), LV_PART_MAIN);
-      lv_obj_set_style_text_color(large_ta, kiosk_theme_color_bg(), LV_PART_SELECTED);
-      lv_obj_set_style_bg_opa(large_ta, LV_OPA_COVER, LV_PART_CURSOR);
-      lv_obj_set_style_bg_color(large_ta, kiosk_theme_color_bg(), LV_PART_CURSOR);
+      snprintf(ctx->input_text, sizeof(ctx->input_text), "%s",
+               lv_textarea_get_text(target_ta));
 
-      /* Keyboard — fixed at bottom of screen, not managed by flex/percent
-       * layout. Keeping a constant rectangle prevents geometry changes while
-       * LVGL processes key press/release state transitions. */
-      lv_obj_t *kb = lv_keyboard_create(ctx->input_modal);
-      lv_keyboard_set_popovers(kb, false);
-      lv_obj_set_size(kb, 1024, kb_h);
-      lv_obj_set_style_min_height(kb, kb_h, 0);
-      lv_obj_set_style_max_height(kb, kb_h, 0);
-      lv_obj_set_pos(kb, 0, 600 - kb_h);
+      /* Fixed, non-interactive display */
+      lv_obj_t *input_box = lv_obj_create(ctx->input_modal);
+      lv_obj_remove_style_all(input_box);
+      lv_obj_set_width(input_box, lv_pct(100));
+      lv_obj_set_height(input_box, 44);
+      lv_obj_align(input_box, LV_ALIGN_TOP_MID, 0, 40);
+      lv_obj_set_style_pad_hor(input_box, 20, 0);
+      lv_obj_set_style_bg_color(input_box, kiosk_theme_color_bg(), 0);
+      lv_obj_set_style_bg_opa(input_box, LV_OPA_COVER, 0);
+      lv_obj_set_style_text_color(input_box, kiosk_theme_color_text_strong(), 0);
+      lv_obj_set_style_border_color(input_box, kiosk_theme_color_primary(), 0);
+      lv_obj_set_style_border_width(input_box, 2, 0);
+      lv_obj_clear_flag(input_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+      memset(ctx->input_cells, 0, sizeof(ctx->input_cells));
+      memset(ctx->input_cell_text, 0, sizeof(ctx->input_cell_text));
+      ctx->input_page_start = 0;
+
+      for (size_t i = 0; i < INPUT_CELL_COUNT; i++) {
+        lv_obj_t *cell = lv_label_create(input_box);
+        ctx->input_cells[i] = cell;
+        lv_obj_set_size(cell, INPUT_CELL_WIDTH, 44);
+        lv_obj_set_pos(cell, i * INPUT_CELL_WIDTH, 0);
+        lv_label_set_long_mode(cell, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_align(cell, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(cell, kiosk_theme_color_text_strong(), 0);
+        lv_obj_set_style_pad_all(cell, 0, 0);
+        lv_obj_set_style_anim_time(cell, 0, 0);
+        lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_text_static(cell, ctx->input_cell_text[i]);
+      }
+
+      /* Keyboard — fixed at bottom, not managed by flex */
+      lv_obj_t *kb = lv_btnmatrix_create(ctx->input_modal);
+      lv_btnmatrix_set_map(kb, KEYS_LOWER);
+      lv_obj_set_size(kb, 1024, 360);
+      lv_obj_set_style_min_height(kb, 360, 0);
+      lv_obj_set_style_max_height(kb, 360, 0);
+      lv_obj_set_pos(kb, 0, 240);
       lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
       lv_obj_add_flag(kb, LV_OBJ_FLAG_IGNORE_LAYOUT);
+
       kiosk_theme_style_keyboard(kb);
 
-      lv_keyboard_set_textarea(kb, large_ta);
+      lv_obj_add_event_cb(kb, static_keyboard_event_cb, LV_EVENT_VALUE_CHANGED, ctx);
 
-      lv_obj_add_event_cb(kb, modal_kb_event_cb, LV_EVENT_READY, ctx);
-      lv_obj_add_event_cb(kb, modal_kb_event_cb, LV_EVENT_CANCEL, ctx);
+      repaint_input_preview(ctx);
   }
 }
 
@@ -267,7 +358,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_style_bg_opa(receipt, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(receipt, sufficient ? kiosk_theme_color_success() : kiosk_theme_color_danger(), 0);
   lv_obj_set_style_border_width(receipt, 1, 0);
-  lv_obj_set_style_border_opa(receipt, LV_OPA_40, 0);
+  lv_obj_set_style_border_opa(receipt, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(receipt, 8, 0);
   lv_obj_set_width(receipt, lv_pct(100));
   lv_obj_set_height(receipt, LV_SIZE_CONTENT);
@@ -292,7 +383,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_width(sep, lv_pct(100));
   lv_obj_set_height(sep, 1);
   lv_obj_set_style_bg_color(sep, kiosk_theme_color_border(), 0);
-  lv_obj_set_style_bg_opa(sep, LV_OPA_80, 0);
+  lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
 
   /* Balance row */
   char bal_buf[16];
@@ -336,7 +427,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
   lv_obj_set_width(sep2, lv_pct(100));
   lv_obj_set_height(sep2, 1);
   lv_obj_set_style_bg_color(sep2, kiosk_theme_color_border(), 0);
-  lv_obj_set_style_bg_opa(sep2, LV_OPA_80, 0);
+  lv_obj_set_style_bg_opa(sep2, LV_OPA_COVER, 0);
 
   /* Remaining balance */
   char rem_buf[16];

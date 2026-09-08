@@ -30,10 +30,11 @@ lv_obj_t *court_overview_create(lv_obj_t *parent, const court_status_t *courts, 
     lv_obj_t *row = lv_obj_create(panel);
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(row, kiosk_theme_color_panel(), 0);
-    lv_obj_set_style_bg_opa(row, LV_OPA_50, 0);
-    lv_obj_set_style_border_width(row, 0, 0);
-    lv_obj_set_style_radius(row, 4, 0);
+    lv_obj_set_style_bg_color(row, kiosk_theme_color_bg(), 0);
+    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(row, kiosk_theme_color_border(), 0);
+    lv_obj_set_style_border_width(row, 1, 0);
+    lv_obj_set_style_radius(row, 6, 0);
     lv_obj_set_style_pad_hor(row, 8, 0);
     lv_obj_set_style_pad_ver(row, 6, 0);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);

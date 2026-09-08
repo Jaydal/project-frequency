@@ -23,7 +23,7 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *big, const char *sub, c
   lv_obj_t *tile = lv_btn_create(parent);
   lv_obj_add_style(tile, &kiosk_style_tile, 0);
   lv_obj_add_style(tile, &kiosk_style_tile, LV_STATE_PRESSED);
-  lv_obj_set_width(tile, lv_pct(45));
+  lv_obj_set_width(tile, lv_pct(48));
   lv_obj_set_height(tile, 140);
   lv_obj_set_style_pad_all(tile, 12, 0);
   lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);

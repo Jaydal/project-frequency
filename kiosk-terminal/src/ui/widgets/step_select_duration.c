@@ -120,9 +120,8 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
 
     if (is_popular) {
       lv_obj_set_style_border_color(tile, kiosk_theme_color_primary(), 0);
-      lv_obj_set_style_border_opa(tile, LV_OPA_50, 0);
-      lv_obj_set_style_bg_color(tile, kiosk_theme_color_primary(), 0);
-      lv_obj_set_style_bg_opa(tile, LV_OPA_10, 0);
+      lv_obj_set_style_border_width(tile, 2, 0);
+      lv_obj_set_style_border_opa(tile, LV_OPA_COVER, 0);
 
       lv_obj_t *pop_badge = lv_label_create(top_row);
       lv_label_set_text(pop_badge, "Popular");
