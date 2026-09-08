@@ -49,11 +49,31 @@ describe('PATCH /api/guest-booking-requests/[id]', () => {
     expect(data.status).toBe('Declined');
   });
 
-  it('approves a request and creates a game successfully', async () => {
+  it('rejects approval without proof of payment / payment reference', async () => {
     const req = new Request('http://localhost/api/guest-booking-requests/123', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'approve' }),
+    });
+    
+    const context = { params: Promise.resolve({ id: '123' }) };
+    const res = await PATCH(req as any, context);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/Proof of payment/i);
+  });
+
+  it('approves a request and creates a game when proof of payment is provided', async () => {
+    const req = new Request('http://localhost/api/guest-booking-requests/123', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve',
+        paymentReference: 'GCASH-123456789',
+        paymentMethod: 'E-wallet',
+        paymentDetails: 'Paid via GCash to 0917-xxx-xxxx',
+        amountPaid: 300,
+      }),
     });
     
     const context = { params: Promise.resolve({ id: '123' }) };

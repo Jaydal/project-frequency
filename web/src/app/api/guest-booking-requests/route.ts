@@ -58,12 +58,27 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await createClient();
   const { data: { user } } = await auth.auth.getUser();
   if (!user || !hasStaffRole(user)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  
+  const { searchParams } = new URL(request.url);
+  const statusParam = searchParams.get('status');
+
   const admin = createAdminClient();
-  const { data, error } = await admin.from('guest_booking_requests').select('*, courts(name)').in('status', ['Pending Confirmation', 'Expired']).order('created_at', { ascending: false });
+  let query = admin.from('guest_booking_requests').select('*, courts(name)').order('created_at', { ascending: false });
+
+  if (statusParam === 'all') {
+    // All statuses
+  } else if (statusParam) {
+    const statuses = statusParam.split(',').map(s => s.trim());
+    query = query.in('status', statuses);
+  } else {
+    query = query.in('status', ['Pending Confirmation', 'Confirmed', 'Expired', 'Declined']);
+  }
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }

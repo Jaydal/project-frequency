@@ -4,9 +4,20 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { hasStaffRole } from '@/lib/auth/authorization';
 import { z } from 'zod';
 
-const actionSchema = z.object({
-  action: z.enum(['approve', 'decline'])
-});
+const actionSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('decline'),
+    reason: z.string().trim().optional(),
+  }),
+  z.object({
+    action: z.literal('approve'),
+    paymentReference: z.string({ required_error: 'Proof of payment / payment reference is required' }).trim().min(1, 'Proof of payment / payment reference is required'),
+    paymentDetails: z.string().trim().optional(),
+    paymentMethod: z.string().trim().optional(),
+    amountPaid: z.coerce.number().min(0).optional(),
+    adminNotes: z.string().trim().optional(),
+  }),
+]);
 
 export async function PATCH(
   request: NextRequest,
@@ -22,10 +33,16 @@ export async function PATCH(
 
     const { id } = await context.params;
     const body = await request.json();
+
+    if (body.action === 'approve' && (!body.paymentReference || typeof body.paymentReference !== 'string' || !body.paymentReference.trim())) {
+      return NextResponse.json({ error: 'Proof of payment (reference number or payment details) is required' }, { status: 400 });
+    }
+
     const input = actionSchema.safeParse(body);
     
     if (!input.success) {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+      const errorMsg = input.error.issues?.[0]?.message || 'Invalid action or missing payment proof';
+      return NextResponse.json({ error: errorMsg, details: input.error.flatten() }, { status: 400 });
     }
 
     const admin = createAdminClient();
@@ -66,16 +83,20 @@ export async function PATCH(
     }
 
     // Insert into games
+    const chargeAmount = input.data.amountPaid !== undefined 
+      ? input.data.amountPaid 
+      : 0;
+
     const { data: game, error: gameErr } = await admin
       .from('games')
       .insert({
         court_id: requestRecord.court_id,
         match_type: requestRecord.party_size === 4 ? '2v2' : '1v1',
-        match_title: requestRecord.match_title,
+        match_title: requestRecord.match_title || `Guest: ${requestRecord.guest_name}`,
         duration: requestRecord.duration,
         status: 'Scheduled',
         start_time: requestRecord.start_time,
-        charge_amount: 0 // Could look up cost, but guests pay staff physically
+        charge_amount: chargeAmount,
       })
       .select('id')
       .single();
@@ -84,15 +105,20 @@ export async function PATCH(
       return NextResponse.json({ error: 'Failed to create game reservation' }, { status: 500 });
     }
 
-    // Update request
+    // Update request with proof of payment details
     const { error: updateErr } = await admin
       .from('guest_booking_requests')
       .update({
         status: 'Confirmed',
         confirmed_game_id: game.id,
         payment_status: 'Confirmed',
+        payment_method: input.data.paymentMethod || requestRecord.payment_method,
+        payment_reference: input.data.paymentReference.trim(),
+        payment_details: input.data.paymentDetails?.trim() || null,
+        admin_notes: input.data.adminNotes?.trim() || input.data.paymentDetails?.trim() || null,
         updated_at: new Date().toISOString(),
-        reviewed_at: new Date().toISOString()
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user.id,
       })
       .eq('id', id);
 
@@ -107,6 +133,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, status: 'Confirmed', gameId: game.id });
   } catch (err: any) {
+    console.error('PATCH error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 }
