@@ -70,6 +70,7 @@ public:
   void update();
   void setCourtChangeCallback(CourtChangeCallback cb) { _courtChangeCb = cb; }
   void setConfigRefreshCallback(ConfigRefreshCallback cb) { _configRefreshCb = cb; }
+  void setPollCallback(void (*cb)()) { _pollCb = cb; }
 
   bool wifiOk()   { return WiFi.status() == WL_CONNECTED; }
   bool mqttOk()   { return _mqtt.connected(); }
@@ -95,6 +96,7 @@ private:
   bool          _wasOnline = false;
   CourtChangeCallback _courtChangeCb = nullptr;
   ConfigRefreshCallback _configRefreshCb = nullptr;
+  void (*_pollCb)() = nullptr;
   unsigned long _lastConfigRefresh = 0;
   uint8_t       _failedMqttAttempts = 0;
   String   _mac;

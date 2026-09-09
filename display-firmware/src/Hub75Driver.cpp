@@ -162,7 +162,10 @@ void Hub75Driver::clear() {
   for (int i = 0; i < MAX_ZONES; i++) _zones[i].hasData = false;
   _fallbackText = "";
   _fallbackScrollX = 0;
-  if (_matrix) _matrix->clearScreen();
+  if (_matrix) {
+    _matrix->clearScreen();
+    _matrix->flipDMABuffer();
+  }
 }
 
 void Hub75Driver::showRow(uint8_t row, const char* text) {
@@ -222,8 +225,45 @@ void Hub75Driver::setAnimationMode(const char* mode) {
   _animMode = String(mode);
 }
 
+bool Hub75Driver::zonesEqual(const ZoneState& dst, const ZoneRenderInfo& src, MatrixPanel_I2S_DMA* matrix) {
+  if (dst.panelStart != src.panelStart || dst.panelEnd != src.panelEnd) return false;
+  if (dst.lineCount != src.lineCount) return false;
+  if (dst.borderCount != src.borderCount) return false;
+  for (uint8_t bi = 0; bi < src.borderCount && bi < 4; bi++) {
+    if (dst.borderRanges[bi].start != src.borderRanges[bi].start ||
+        dst.borderRanges[bi].end != src.borderRanges[bi].end) return false;
+  }
+  if (dst.scaleX != src.scaleX || dst.scaleY != src.scaleY) return false;
+  if (dst.valign != src.valign) return false;
+  for (int li = 0; li < src.lineCount && li < 2; li++) {
+    const auto& a = dst.lines[li];
+    const auto& b = src.lines[li];
+    uint16_t color = matrix ? matrix->color565(b.r, b.g, b.b) : 0;
+    if (a.color != color) return false;
+    if (a.text != b.text || a.effect != b.effect || a.align != b.align) return false;
+    if (a.scrollSpeed != b.scrollSpeed) return false;
+    if (a.marginTop != b.marginTop || a.marginBottom != b.marginBottom) return false;
+    if (a.hasBgColor != b.hasBgColor || a.bgR != b.bgR || a.bgG != b.bgG || a.bgB != b.bgB) return false;
+    if (a.font != b.font || a.bold != b.bold) return false;
+    if (a.scaleX != b.scaleX || a.scaleY != b.scaleY || a.spacing != b.spacing) return false;
+    if (a.ruleCount != b.ruleCount) return false;
+  }
+  return true;
+}
+
 void Hub75Driver::setZones(const ZoneRenderInfo* zones, uint8_t count) {
   if (count > MAX_ZONES) count = MAX_ZONES;
+
+  // Identical snapshots (e.g. periodic retained publishes) need no work:
+  // skip the String copies and keep existing scroll positions.
+  if (count == _zoneCount) {
+    bool same = true;
+    for (int zi = 0; zi < count && same; zi++) {
+      if (!_zones[zi].hasData || !zonesEqual(_zones[zi], zones[zi], _matrix)) same = false;
+    }
+    if (same) return;
+  }
+
   _zoneCount = count;
 
   for (int zi = 0; zi < count; zi++) {
@@ -418,7 +458,14 @@ void Hub75Driver::update() {
 
 String Hub75Driver::substituteTimer(const String& text) const {
   // M1 fix: use _timerActive flag so remainingMs=0 still formats as "0:00"
-  if (!_timerActive) return text;
+  // With no active timer there is nothing to substitute, so strip the
+  // tokens instead of rendering them literally.
+  if (!_timerActive) {
+    String result = text;
+    result.replace("{timer}", "");
+    result.replace("{elapsed}", "");
+    return result;
+  }
   unsigned long now = millis();
   long remainingMs = (long)_timerRemainingAtBaseMs - (long)(now - _timerBaseMs);
   if (remainingMs < 0) remainingMs = 0;
@@ -1136,6 +1183,7 @@ void Hub75Driver::playBootAnimation(unsigned long durationMs) {
     // }
 
     _matrix->flipDMABuffer();
+    if (_pollCb) _pollCb();
     delay(16);
   }
   

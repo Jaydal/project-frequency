@@ -44,6 +44,7 @@ void TelnetLogger::update() {
   if (!_client || !_client.connected()) {
     _client = _server.accept();
     if (_client) {
+      _authed = false;
       _client.printf("\r\n=== Freq Court Display ===\r\n");
       _client.printf("IP: %s | RSSI: %d dBm\r\n",
         WiFi.localIP().toString().c_str(), WiFi.RSSI());
@@ -66,8 +67,11 @@ void TelnetLogger::update() {
         _client.printf("\b \b");
       }
     } else {
-      _lineBuf += c;
-      _client.printf("%c", c);
+      // Cap the line buffer so a client streaming without newlines can't OOM us.
+      if (_lineBuf.length() < 128) {
+        _lineBuf += c;
+        _client.printf("%c", c);
+      }
     }
   }
 }
@@ -92,11 +96,23 @@ void TelnetLogger::handleLine(const String& line) {
   if (cmd == "help") {
     _client.printf("Available commands:\r\n");
     _client.printf("  help                     - this list\r\n");
+    _client.printf("  auth <password>          - authenticate for set.*/reboot\r\n");
     _client.printf("  set.court <id>           - change court ID (saves + reboots)\r\n");
     _client.printf("  set.brightness <0-255>   - set display brightness\r\n");
     _client.printf("  set.color #RRGGBB        - set accent color\r\n");
     _client.printf("  reboot                   - restart the device\r\n");
     _client.printf("  status                   - show current config\r\n");
+    return;
+  }
+
+  if (cmd == "auth") {
+    if (_password.length() > 0 && args == _password) {
+      _authed = true;
+      _client.printf("Authenticated\r\n");
+    } else {
+      _authed = false;
+      _client.printf("Authentication failed\r\n");
+    }
     return;
   }
 

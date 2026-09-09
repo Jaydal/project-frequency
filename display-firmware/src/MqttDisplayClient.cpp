@@ -69,7 +69,9 @@ void MqttDisplayClient::begin(const char* ssid, const char* password,
 
   _mqtt.setServer(broker, port);
   _mqtt.setCallback(onMessage);
-  _mqtt.setBufferSize(4096);
+  // Full playlist payloads (blocks/pages/zones/subpages/rules) can exceed
+  // 4KB. Size the buffer with headroom so large snapshots parse whole.
+  _mqtt.setBufferSize(8192);
   _mac = WiFi.macAddress();
   _mac.toLowerCase();
   _mac.replace(":", "");
@@ -415,6 +417,7 @@ void MqttDisplayClient::connectWiFi() {
       _driver.update();
       lastUpdate = millis();
     }
+    if (_pollCb) _pollCb();
     yield();
   }
 
@@ -634,8 +637,6 @@ void MqttDisplayClient::handleMessage(uint8_t* payload, unsigned int len) {
     log_i("[mqtt] JSON parse failed: %s", error.c_str());
     return;
   }
-
-  _playlist.clear();
 
   if (doc["brightness"].is<uint8_t>()) {
     _driver.setBrightness(doc["brightness"].as<uint8_t>());

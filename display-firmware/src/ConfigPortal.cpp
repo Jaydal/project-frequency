@@ -89,6 +89,7 @@ bool ConfigPortal::loadFields() {
   _serverUrl = _prefs.getString("server_url", "");
   _apiKey = _prefs.getString("api_key", "");
   _courtId = _prefs.getString("court_id", "");
+  _otaPass = _prefs.getString("ota_pass", "");
   _brightness = _prefs.getUChar("brightness", 153);
   _colorHex = _prefs.getString("color_hex", "#FF0000");
   
@@ -395,7 +396,7 @@ bool ConfigPortal::fetchMqttConfig(int* outStatusCode) {
     return false;
   }
 
-  DynamicJsonDocument doc(1024);
+  JsonDocument doc;
   DeserializationError error = deserializeJson(doc, http.getString());
   http.end();
   if (error) {
@@ -434,12 +435,20 @@ bool ConfigPortal::fetchMqttConfig(int* outStatusCode) {
     }
   }
 
-  bool ok = saveField("mqtt_broker", brokerHost);
-  ok = saveField("mqtt_port", brokerPort) && ok;
-  ok = saveField("mqtt_user", user) && ok;
-  ok = saveField("mqtt_pass", pass) && ok;
+  // Single NVS transaction instead of four separate saveField() calls
+  // (each of which re-opens the namespace and reloads every field).
+  // Reload first so bulk-saving can't clobber fields with unloaded members
+  // when running on compile-time-only config.
+  if (_wifiSsid.length() == 0) loadFields();
+  bool ok = saveFields(_wifiSsid, _wifiPass, brokerHost, brokerPort, user, pass,
+                       _courtId, _brightness, _colorHex);
   if (ok) log_i("[portal] MQTT configuration refreshed from API");
   return ok;
+}
+
+String ConfigPortal::getOtaPass() {
+  if (_otaPass.length() == 0) loadFields();
+  return _otaPass;
 }
 
 String ConfigPortal::getCourtId() {
@@ -522,6 +531,7 @@ void ConfigPortal::handleSave() {
   String serverUrl = _server->arg("server_url");
   String apiKey = _server->arg("api_key");
   String court  = _server->arg("court_id");
+  String otaPass = _server->arg("ota_pass");
   String brightnessStr = _server->arg("brightness");
   String colorHex = _server->arg("color_hex");
   if (colorHex.length() == 0) colorHex = "#FFFFFF";
@@ -542,6 +552,8 @@ void ConfigPortal::handleSave() {
   if (serverUrl.length() > 0) ok = saveField("server_url", serverUrl) && ok;
   // Keep the existing key when the password field is left blank.
   if (apiKey.length() > 0) ok = saveField("api_key", apiKey) && ok;
+  // Per-site OTA password; blank keeps the current value (or firmware default).
+  if (otaPass.length() > 0) ok = saveField("ota_pass", otaPass) && ok;
   log_i("[portal] Config %s: ssid=%s court=%s broker=%s",
                 ok ? "SAVED" : "WRITE FAILED",
                 ssid.c_str(), court.c_str(), broker.c_str());
@@ -723,6 +735,13 @@ void ConfigPortal::sendHtmlChunked() {
       <input type="color" name="color_hex" id="color_hex" value=")HTML");
   _server->sendContent(currentColorHex);
   _server->sendContent(R"HTML(" style="height:44px;padding:4px">
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Security</div>
+      <label>OTA / Telnet Password</label>
+      <input type="password" name="ota_pass" placeholder="leave blank to keep current">
+      <p class="hint">Used for wireless firmware updates and the telnet console.</p>
     </div>
 
     <button type="submit" class="btn">Save &amp; Reboot</button>

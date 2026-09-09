@@ -46,6 +46,38 @@ static void statusLedPortal() {
   }
 }
 
+static void showSetupMessage(const String& text, uint8_t r = 255, uint8_t g = 255, uint8_t b = 255) {
+  ZoneRenderInfo zones[1];
+  zones[0].panelStart = 0;
+  zones[0].panelEnd = 2;
+  zones[0].lineCount = 1;
+  zones[0].scaleX = 1;
+  zones[0].scaleY = 1;
+  zones[0].valign = "middle";
+  zones[0].borderCount = 0;
+  zones[0].lines[0].text = text;
+  zones[0].lines[0].effect = "SCROLL";
+  zones[0].lines[0].align = "center";
+  zones[0].lines[0].marginTop = 0;
+  zones[0].lines[0].marginBottom = 2;
+  zones[0].lines[0].r = r;
+  zones[0].lines[0].g = g;
+  zones[0].lines[0].b = b;
+  g_display->setZones(zones, 1);
+  g_display->update();
+}
+
+// Effective OTA/telnet password: per-site NVS value wins, firmware default
+// is the fallback. ArduinoOTA::setPassword copies the string internally.
+static String effectiveOtaPassword() {
+  String p = g_portal.getOtaPass();
+  if (p.length() > 0) return p;
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD "freq123"
+#endif
+  return String(OTA_PASSWORD);
+}
+
 static void statusLedNormal(MqttDisplayClient* mqtt) {
   if (mqtt->isOnline()) {
     digitalWrite(STATUS_LED, HIGH);
@@ -105,31 +137,17 @@ void setup() {
     return;
   }
   
-  // Play the premium 10-second pickleball boot animation
+  // Play the premium 10-second pickleball boot animation.
+  // Poll the reset button each frame so a 5s factory-reset press isn't lost.
+  g_display->setPollCallback(checkResetButton);
   g_display->playBootAnimation(10000);
+  g_display->setPollCallback(nullptr);
   g_display->setConnecting(true);
   // ── Boot branching: portal vs normal ──────────────────────────────────────
   if (!g_portal.isConfigured()) {
     g_portalMode = true;
     g_display->setConnecting(false);
-    ZoneRenderInfo zones[1];
-    zones[0].panelStart = 0;
-    zones[0].panelEnd = 2;
-    zones[0].lineCount = 1;
-    zones[0].scaleX = 1;
-    zones[0].scaleY = 1;
-    zones[0].valign = "middle";
-    zones[0].borderCount = 0;
-    zones[0].lines[0].text = "SETUP: " + g_portal.getPortalSSID();
-    zones[0].lines[0].effect = "SCROLL";
-    zones[0].lines[0].align = "center";
-    zones[0].lines[0].marginTop = 0;
-    zones[0].lines[0].marginBottom = 2;
-    zones[0].lines[0].r = 255;
-    zones[0].lines[0].g = 255;
-    zones[0].lines[0].b = 255;
-    g_display->setZones(zones, 1);
-    g_display->update();
+    showSetupMessage("SETUP: " + g_portal.getPortalSSID());
     g_portal.setDisplayDriver(g_display);
     g_portal.startPortal();
     return;
@@ -139,24 +157,7 @@ void setup() {
   if (!g_portal.connectSavedWiFi(3)) {
     g_portalMode = true;
     g_display->setConnecting(false);
-    ZoneRenderInfo zones[1];
-    zones[0].panelStart = 0;
-    zones[0].panelEnd = 2;
-    zones[0].lineCount = 1;
-    zones[0].scaleX = 1;
-    zones[0].scaleY = 1;
-    zones[0].valign = "middle";
-    zones[0].borderCount = 0;
-    zones[0].lines[0].text = "WIFI FAILED - " + g_portal.getPortalSSID();
-    zones[0].lines[0].effect = "SCROLL";
-    zones[0].lines[0].align = "center";
-    zones[0].lines[0].marginTop = 0;
-    zones[0].lines[0].marginBottom = 2;
-    zones[0].lines[0].r = 255;
-    zones[0].lines[0].g = 255;
-    zones[0].lines[0].b = 255;
-    g_display->setZones(zones, 1);
-    g_display->update();
+    showSetupMessage("WIFI FAILED - " + g_portal.getPortalSSID());
     g_portal.setDisplayDriver(g_display);
     g_portal.startPortal();
     return;
@@ -195,23 +196,7 @@ void setup() {
         ? ("UNAUTHORIZED (401) - MAC: " + deviceMac + " - ADD IN DASHBOARD")
         : ("CONFIG FAILED (" + String(fetchStatus) + ") - RETRYING...");
 
-      ZoneRenderInfo zones[1];
-      zones[0].panelStart = 0;
-      zones[0].panelEnd = 2;
-      zones[0].lineCount = 1;
-      zones[0].scaleX = 1;
-      zones[0].scaleY = 1;
-      zones[0].valign = "middle";
-      zones[0].borderCount = 0;
-      zones[0].lines[0].text = failMsg;
-      zones[0].lines[0].effect = "SCROLL";
-      zones[0].lines[0].align = "center";
-      zones[0].lines[0].marginTop = 0;
-      zones[0].lines[0].marginBottom = 2;
-      zones[0].lines[0].r = 255;
-      zones[0].lines[0].g = (fetchStatus == 401) ? 50 : 200;
-      zones[0].lines[0].b = 50;
-      g_display->setZones(zones, 1);
+      showSetupMessage(failMsg, 255, (fetchStatus == 401) ? 50 : 200, 50);
 
       unsigned long waitStart = millis();
       while (millis() - waitStart < 3000) {
@@ -231,26 +216,9 @@ void setup() {
   if (!bootstrapped && !hasMqttCreds) {
     log_e("[main] Could not obtain MQTT credentials - opening portal");
     g_portalMode = true;
-    ZoneRenderInfo zones[1];
-    zones[0].panelStart = 0;
-    zones[0].panelEnd = 2;
-    zones[0].lineCount = 1;
-    zones[0].scaleX = 1;
-    zones[0].scaleY = 1;
-    zones[0].valign = "middle";
-    zones[0].borderCount = 0;
-    zones[0].lines[0].text = (fetchStatus == 401)
+    showSetupMessage((fetchStatus == 401)
       ? ("UNAUTHORIZED (401) - " + g_portal.getPortalSSID())
-      : ("SETUP: " + g_portal.getPortalSSID());
-    zones[0].lines[0].effect = "SCROLL";
-    zones[0].lines[0].align = "center";
-    zones[0].lines[0].marginTop = 0;
-    zones[0].lines[0].marginBottom = 2;
-    zones[0].lines[0].r = 255;
-    zones[0].lines[0].g = 255;
-    zones[0].lines[0].b = 255;
-    g_display->setZones(zones, 1);
-    g_display->update();
+      : ("SETUP: " + g_portal.getPortalSSID()));
     g_portal.setDisplayDriver(g_display);
     g_portal.startPortal();
     return;
@@ -277,7 +245,14 @@ void setup() {
   // ── Telnet console ─────────────────────────────────────────────────────────
 #ifdef ENABLE_TELNET
   g_log.begin(23);
+  g_log.setPassword(effectiveOtaPassword());
   g_log.setCommandCallback([](const String& cmd, const String& args) {
+    bool mutating = (cmd == "set.court" || cmd == "set.brightness" ||
+                     cmd == "set.color" || cmd == "reboot");
+    if (mutating && !g_log.isAuthenticated()) {
+      LOG("[telnet] Authentication required — use 'auth <password>' first\n");
+      return;
+    }
     if (cmd == "set.court" && args.length() > 0) {
       g_portal.saveField("court_id", args);
       LOG("[telnet] Court set to '%s' — rebooting...\n", args.c_str());
@@ -309,10 +284,7 @@ void setup() {
   // ── OTA: wireless firmware updates ─────────────────────────────────────────
 #ifdef ENABLE_OTA
   ArduinoOTA.setHostname(("freq-display-" + court).c_str());
-  #ifndef OTA_PASSWORD
-  #define OTA_PASSWORD "freq123"
-  #endif
-  ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.setPassword(effectiveOtaPassword().c_str());
   ArduinoOTA.onStart([&]() {
     if (g_display) g_display->setOtaActive(true);
     LOG("[ota] Start — display paused\n");
@@ -340,6 +312,7 @@ void setup() {
     ESP.restart();
   });
 
+  g_mqtt->setPollCallback(checkResetButton);
   g_mqtt->setConfigRefreshCallback([](String& outBroker, uint16_t& outPort, String& outUser, String& outPass, String& outCourt) -> bool {
     int status = 0;
     if (g_portal.fetchMqttConfig(&status)) {

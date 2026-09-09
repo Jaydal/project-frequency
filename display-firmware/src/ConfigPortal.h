@@ -44,6 +44,7 @@ public:
   String getCourtId();
   uint8_t getBrightness();
   String getColorHex();
+  String getOtaPass();
 
   void factoryReset();
 
@@ -63,6 +64,7 @@ private:
   String _mqttPass;
   String _serverUrl;
   String _apiKey;
+  String _otaPass;
   String _courtId;
   uint8_t _brightness = 0;
   String _colorHex;

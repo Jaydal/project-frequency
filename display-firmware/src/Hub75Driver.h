@@ -26,7 +26,8 @@ public:
   void setZones(const ZoneRenderInfo* zones, uint8_t count) override;
   void runDiagnosticSequence() override;
   void playBootAnimation(unsigned long durationMs) override;
-  void setOtaActive(bool active) override { _otaActive = active; if (active && _matrix) _matrix->clearScreen(); }
+  void setOtaActive(bool active) override { _otaActive = active; if (active && _matrix) { _matrix->clearScreen(); _matrix->flipDMABuffer(); } }
+  void setPollCallback(void (*cb)()) override { _pollCb = cb; }
   void setConnecting(bool active) override { _connecting = active; if (active) _connectingStart = millis(); }
   bool isAlive() override { return _matrix != nullptr; }
 
@@ -100,7 +101,12 @@ private:
   bool _connecting = false;
   unsigned long _connectingStart = 0;
 
+  // Optional per-frame hook for blocking sequences (e.g. boot animation)
+  // so the app can still poll inputs like the factory-reset button.
+  void (*_pollCb)() = nullptr;
+
   String substituteTimer(const String& text) const;
+  static bool zonesEqual(const ZoneState& dst, const ZoneRenderInfo& src, MatrixPanel_I2S_DMA* matrix);
   void redraw();
   void drawText5x7Scaled(const char* s, int x, int y, uint16_t color, int scaleX, int scaleY, int spacing, int clipXStart, int clipXEnd, uint8_t borderCount, const BorderRange* borderRanges, bool bold);
   int  textWidth5x7Scaled(const char* s, int scaleX, int spacing, bool bold);
