@@ -5,6 +5,7 @@ on:
     paths: ["kiosk-terminal/**"]
   pull_request:
     paths: ["kiosk-terminal/**"]
+  workflow_dispatch:
 
 defaults:
   run:

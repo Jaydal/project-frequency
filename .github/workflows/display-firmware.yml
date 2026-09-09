@@ -5,6 +5,7 @@ on:
     paths: ["display-firmware/**"]
   pull_request:
     paths: ["display-firmware/**"]
+  workflow_dispatch:
 
 defaults:
   run:
