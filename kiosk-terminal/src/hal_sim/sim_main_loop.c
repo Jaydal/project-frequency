@@ -1,5 +1,6 @@
 #include "sim_main_loop.h"
 #include "sim_display.h"
+#include "../net/relay.h"
 #include "sim_input.h"
 #include "../ui/ui_app.h"
 #include "lvgl.h"
@@ -34,6 +35,7 @@ static void sim_poll_scan_keys(void) {
 void sim_hal_init(void) {
   sdl_init();
   sim_display_init();
+  relay_init();
   sim_input_init();
   printf("[sim] press keys 1-5 to simulate an RFID scan (TEST001..TEST005)\n");
 }

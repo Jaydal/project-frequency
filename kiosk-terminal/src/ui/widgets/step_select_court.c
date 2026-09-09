@@ -106,6 +106,7 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *name, const char *badge
   lv_obj_set_style_text_font(desc_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(desc_label, kiosk_theme_color_text_muted(), 0);
 
+  kiosk_theme_pin_pressed(tile);
   return tile;
 }
 
@@ -118,30 +119,42 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
   lv_obj_t *root = lv_obj_create(parent);
   lv_obj_remove_style_all(root);
   lv_obj_set_size(root, lv_pct(100), lv_pct(100));
-  lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_layout(root, 0);
   lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
 
-  booking_stepper_create(root, 0, member_name, balance, on_cancel, cancel_user_data);
+  lv_obj_t *stepper = booking_stepper_create(root, 0, member_name, balance, on_cancel, cancel_user_data);
+  lv_obj_set_pos(stepper, 0, 0);
 
   lv_obj_t *body = lv_obj_create(root);
   lv_obj_remove_style_all(body);
   lv_obj_set_width(body, lv_pct(100));
-  lv_obj_set_flex_grow(body, 1);
-  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(body, 10, 0);
-  lv_obj_set_style_pad_row(body, 8, 0);
+  lv_obj_set_height(body, 524);
+  lv_obj_set_pos(body, 0, 76);
+  lv_obj_set_layout(body, 0);
+  lv_obj_set_style_pad_all(body, 0, 0);
+  lv_obj_set_style_pad_row(body, 0, 0);
   lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *title = lv_label_create(body);
-  lv_label_set_text(title, "Choose a Court");
-  lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(title, kiosk_theme_color_text_muted(), 0);
+  lv_label_set_text(title, "Where do you want to play?");
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(title, kiosk_theme_color_text_strong(), 0);
+  lv_obj_set_size(title, lv_pct(100), 20);
+  lv_obj_set_pos(title, 10, 10);
+
+  lv_obj_t *subtitle = lv_label_create(body);
+  lv_label_set_text(subtitle, "Choose an available court to continue.");
+  lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(subtitle, kiosk_theme_color_text_muted(), 0);
+  lv_obj_set_size(subtitle, lv_pct(100), 16);
+  lv_obj_set_pos(subtitle, 10, 32);
 
   lv_obj_t *grid = lv_obj_create(body);
   lv_obj_remove_style_all(grid);
   lv_obj_set_width(grid, lv_pct(100));
-  lv_obj_set_flex_grow(grid, 1);
+  lv_obj_set_height(grid, 440);
+  lv_obj_set_pos(grid, 10, 56);
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_style_pad_column(grid, 8, 0);
   lv_obj_set_style_pad_row(grid, 8, 0);
@@ -216,6 +229,7 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
   lv_label_set_text(any_rec, "Recommended for fastest play");
   lv_obj_set_style_text_font(any_rec, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(any_rec, kiosk_theme_color_primary(), 0);
+  kiosk_theme_pin_pressed(any_tile);
   lv_obj_add_event_cb(any_tile, click_cb, LV_EVENT_CLICKED, any_closure);
   lv_obj_add_event_cb(any_tile, free_closure_cb, LV_EVENT_DELETE, any_closure);
 

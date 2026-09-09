@@ -90,7 +90,8 @@ bool board_parse(const char *json, size_t len, kiosk_board_t *out) {
       for (uint8_t i = 0; i < out->court_count; i++) {
         court_status_t *dst = &out->courts[i];
         if (dst->next_start_time != 0 || strcmp(dst->id, court_id) != 0) continue;
-        get_str(g, "matchTitle", dst->next_match_title, sizeof(dst->next_match_title));
+       get_str(g, "matchTitle", dst->next_match_title, sizeof(dst->next_match_title));
+       get_str(g, "matchType", dst->next_match_type, sizeof(dst->next_match_type));
         dst->next_start_time = (time_t)get_num(g, "startTime");
         dst->next_duration_min = (int32_t)get_num(g, "durationMin");
         dst->next_is_scheduled = true;
@@ -139,7 +140,8 @@ bool board_parse(const char *json, size_t len, kiosk_board_t *out) {
       queue_row_t *q = &out->queue[j];
       const char *assigned = q->court_name[0] ? q->court_name : q->simulated_court_name;
       if (!assigned[0] || strcmp(assigned, court->name) != 0) continue;
-      snprintf(court->next_match_title, sizeof(court->next_match_title), "%s", q->match_title);
+       snprintf(court->next_match_title, sizeof(court->next_match_title), "%s", q->match_title);
+       snprintf(court->next_match_type, sizeof(court->next_match_type), "%s", q->match_type);
       court->next_start_time = q->estimated_start_time;
       court->next_duration_min = q->duration_min;
       court->next_is_scheduled = false;

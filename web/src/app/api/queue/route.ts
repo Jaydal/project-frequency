@@ -171,6 +171,10 @@ export async function POST(request: Request) {
       matchTitle: result.data.matchTitle,
     });
 
+    /* Publish the authoritative board snapshot immediately so physical
+     * kiosks do not keep rendering the pre-booking queue/court state. */
+    await publishBoardOnce();
+
     if ((entry.status === 'completed' || entry.status === 'scheduled') && entry.court_id) {
       const supabase = auth.supabase;
       const { data: court } = await supabase.from('courts').select('name').eq('id', entry.court_id).single();

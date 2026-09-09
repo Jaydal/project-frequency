@@ -39,18 +39,20 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
   lv_obj_t *root = lv_obj_create(parent);
   lv_obj_remove_style_all(root);
   lv_obj_set_size(root, lv_pct(100), lv_pct(100));
-  lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_layout(root, 0);
   lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
 
-  booking_stepper_create(root, 2, member_name, balance, on_cancel, cancel_user_data);
+  lv_obj_t *stepper = booking_stepper_create(root, 2, member_name, balance, on_cancel, cancel_user_data);
+  lv_obj_set_pos(stepper, 0, 0);
 
   lv_obj_t *body = lv_obj_create(root);
   lv_obj_remove_style_all(body);
   lv_obj_set_width(body, lv_pct(100));
-  lv_obj_set_flex_grow(body, 1);
-  lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_all(body, 10, 0);
-  lv_obj_set_style_pad_row(body, 8, 0);
+  lv_obj_set_height(body, 524);
+  lv_obj_set_pos(body, 0, 76);
+  lv_obj_set_layout(body, 0);
+  lv_obj_set_style_pad_all(body, 0, 0);
+  lv_obj_set_style_pad_row(body, 0, 0);
   lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_set_scrollbar_mode(body, LV_SCROLLBAR_MODE_OFF);
 
@@ -61,12 +63,23 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_label_set_text(title, "Choose Match Duration");
   }
   lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(title, kiosk_theme_color_text_muted(), 0);
+  lv_obj_set_style_text_color(title, kiosk_theme_color_text_strong(), 0);
+  lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+  lv_obj_set_size(title, lv_pct(100), 24);
+  lv_obj_set_pos(title, 10, 10);
+
+  lv_obj_t *subtitle = lv_label_create(body);
+  lv_label_set_text(subtitle, "Pick a duration and review the credit requirement.");
+  lv_obj_set_style_text_font(subtitle, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(subtitle, kiosk_theme_color_text_muted(), 0);
+  lv_obj_set_size(subtitle, lv_pct(100), 16);
+  lv_obj_set_pos(subtitle, 10, 34);
 
   lv_obj_t *grid = lv_obj_create(body);
   lv_obj_remove_style_all(grid);
   lv_obj_set_width(grid, lv_pct(100));
-  lv_obj_set_flex_grow(grid, 1);
+  lv_obj_set_height(grid, 360);
+  lv_obj_set_pos(grid, 10, 56);
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_style_pad_column(grid, 8, 0);
   lv_obj_set_style_pad_row(grid, 8, 0);
@@ -158,6 +171,8 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_obj_set_style_text_font(price_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(price_label, kiosk_theme_color_primary(), 0);
 
+    kiosk_theme_pin_pressed(tile);
+
     duration_closure_t *closure = malloc(sizeof(duration_closure_t));
     closure->duration_min = d;
     closure->cb = on_select;
@@ -171,10 +186,12 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
   lv_obj_add_style(back_btn, &kiosk_style_btn_secondary, LV_STATE_PRESSED);
   lv_obj_set_width(back_btn, lv_pct(100));
   lv_obj_set_height(back_btn, 44);
+  lv_obj_set_pos(back_btn, 10, 420);
   lv_obj_clear_flag(back_btn, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_t *back_label = lv_label_create(back_btn);
   lv_label_set_text(back_label, LV_SYMBOL_LEFT " Back to Game Format");
   lv_obj_center(back_label);
+  kiosk_theme_pin_pressed(back_btn);
 
   back_closure_t *exit_cl = malloc(sizeof(back_closure_t));
   exit_cl->cb = on_back;

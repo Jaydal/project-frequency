@@ -37,6 +37,49 @@ static bool boards_equal_for_layout(const kiosk_board_t *a, const kiosk_board_t 
   return true;
 }
 
+static bool reconcile_board_clock(kiosk_board_t *board) {
+  bool changed = false;
+  time_t now = time(NULL);
+  for (uint8_t i = 0; i < board->court_count; i++) {
+    court_status_t *court = &board->courts[i];
+    if (court->start_time != 0) {
+      int32_t prep_sec = kiosk_effective_prep_sec(court->duration_min, court->prep_time_sec);
+      time_t active_end = court->start_time + prep_sec + court->duration_min * 60;
+      if (court->duration_min > 0 && now >= active_end) {
+        court->start_time = 0;
+        court->duration_min = 0;
+        court->match_type[0] = '\0';
+        court->match_title[0] = '\0';
+        court->player_count = 0;
+        memset(court->players, 0, sizeof(court->players));
+        changed = true;
+      } else {
+        continue;
+      }
+    }
+
+    if (!court->next_is_scheduled || court->next_start_time == 0) continue;
+    int32_t next_prep_sec = kiosk_effective_prep_sec(court->next_duration_min,
+                                                     board->config.prep_time_sec);
+    time_t end = court->next_start_time + next_prep_sec + court->next_duration_min * 60;
+    if (now >= court->next_start_time && now < end) {
+      char next_title[KIOSK_MAX_NAME_LEN];
+      snprintf(next_title, sizeof(next_title), "%s", court->next_match_title);
+      memcpy(court->match_title, next_title, sizeof(court->match_title));
+      court->start_time = court->next_start_time;
+      court->duration_min = court->next_duration_min;
+      char next_type[sizeof(court->match_type)];
+      snprintf(next_type, sizeof(next_type), "%s", court->next_match_type);
+      memcpy(court->match_type, next_type, sizeof(court->match_type));
+      court->prep_time_sec = board->config.prep_time_sec;
+      memcpy(court->players, court->next_players, sizeof(court->players));
+      court->player_count = court->next_player_count;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 #ifdef ESP_PLATFORM
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -99,46 +142,15 @@ static void on_mqtt_message(const char *topic, const char *payload,
 
 static void get_board(kiosk_board_t *out) {
   LOCK_BOARD();
-  if (s_have_board) *out = s_board;
-  else memset(out, 0, sizeof(*out));
-  UNLOCK_BOARD();
-
-  /* Project scheduled games locally between MQTT snapshots. A client that
-   * received a schedule before its start time must still show it as active at
-   * 09:40 when its 09:30-09:50 window is in progress. Queue estimates are
-   * explicitly excluded; they become active only after server promotion. */
-  time_t now = time(NULL);
-  for (uint8_t i = 0; i < out->court_count; i++) {
-    court_status_t *court = &out->courts[i];
-    /* A client may not receive another MQTT message at the exact end of a
-     * scheduled game. Expire the locally displayed active game from its
-     * schedule window instead of leaving a lapsed booking on screen. */
-    if (court->start_time != 0) {
-      time_t active_end = court->start_time + court->duration_min * 60;
-      if (court->duration_min > 0 && now >= active_end) {
-        court->start_time = 0;
-        court->duration_min = 0;
-        court->match_type[0] = '\0';
-        court->match_title[0] = '\0';
-        court->player_count = 0;
-        memset(court->players, 0, sizeof(court->players));
-      } else {
-        continue;
-      }
-    }
-
-    if (!court->next_is_scheduled || court->next_start_time == 0) continue;
-    time_t end = court->next_start_time + court->next_duration_min * 60;
-    if (now >= court->next_start_time && now < end) {
-      char title[KIOSK_MAX_NAME_LEN];
-      snprintf(title, sizeof(title), "%s", court->next_match_title);
-      memcpy(court->match_title, title, sizeof(court->match_title));
-      court->start_time = court->next_start_time;
-      court->duration_min = court->next_duration_min;
-      memcpy(court->players, court->next_players, sizeof(court->players));
-      court->player_count = court->next_player_count;
-    }
+  if (!s_have_board) {
+    memset(out, 0, sizeof(*out));
+    UNLOCK_BOARD();
+    return;
   }
+
+  if (reconcile_board_clock(&s_board)) s_board_version++;
+  *out = s_board;
+  UNLOCK_BOARD();
 }
 
 static void get_court_options(court_option_t *out, uint8_t *count) {

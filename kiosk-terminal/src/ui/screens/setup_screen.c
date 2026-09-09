@@ -504,6 +504,7 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
   lv_label_set_text(scan_label, "Scan");
   lv_obj_center(scan_label);
   lv_obj_add_event_cb(scan_btn, scan_btn_cb, LV_EVENT_CLICKED, ctx);
+  kiosk_theme_pin_pressed(scan_btn);
 
   /* Buttons column */
   lv_obj_t *btn_col = lv_obj_create(form);
@@ -536,6 +537,7 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
   lv_obj_set_style_text_font(reset_label, &lv_font_montserrat_14, 0);
   lv_obj_center(reset_label);
   lv_obj_add_event_cb(reset_btn, reset_cb, LV_EVENT_CLICKED, ctx);
+  kiosk_theme_pin_pressed(reset_btn);
 
   lv_obj_t *save_btn = lv_btn_create(btn_row);
   lv_obj_add_style(save_btn, &kiosk_style_btn_primary, 0);
@@ -548,6 +550,7 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
   lv_obj_set_style_text_font(save_label, &lv_font_montserrat_14, 0);
   lv_obj_center(save_label);
   lv_obj_add_event_cb(save_btn, save_cb, LV_EVENT_CLICKED, ctx);
+  kiosk_theme_pin_pressed(save_btn);
 
   return root;
 }

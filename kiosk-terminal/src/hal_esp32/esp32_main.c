@@ -36,6 +36,7 @@
 #include "hal_esp32/esp32_display.h"
 #include "hal_esp32/esp32_ota_server.h"
 #include "net/mqtt_transport.h"
+#include "net/relay.h"
 #include "ui/ui_app.h"
 #include "data/kiosk_config.h"
 
@@ -200,11 +201,11 @@ static void prv_lvgl_task(void *arg)
     for (;;) {
         /*
          * The display uses one panel-owned PSRAM framebuffer in LVGL direct
-         * mode.  Rendering while the RGB peripheral is scanning that same
-         * buffer causes visible tearing (most obvious on keyboard presses).
-         * The RGB VSYNC callback signals this task, so begin each redraw at a
-         * frame boundary.  A bounded timeout avoids deadlocking during panel
-         * startup or recovery when no VSYNC has arrived yet.
+         * mode. LVGL updates only invalidated regions, so the static main page
+         * does not get redrawn whenever a timer label changes. Pacing the
+         * handler to VSYNC keeps those small redraws aligned with frame starts.
+         * A bounded timeout avoids deadlocking during panel startup or recovery
+         * when no VSYNC has arrived yet.
          */
         (void)ulTaskNotifyTake(pdTRUE,
                                pdMS_TO_TICKS(LVGL_VSYNC_WAIT_TIMEOUT_MS));
@@ -233,6 +234,10 @@ void app_main(void)
      * for LVGL before the Wi-Fi driver fractures the heap. */
     esp32_display_init();
     ESP_LOGI(TAG, "Display initialised");
+
+    /* Initialise the physical court-lights relay before the queue screen
+     * reads its state or allows the operator to toggle it. */
+    relay_init();
 
     /* 4. WiFi subsystem (STA, no connection) */
     prv_wifi_init_sta();

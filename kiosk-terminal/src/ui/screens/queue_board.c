@@ -7,15 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../net/nfc_reader.h"
-#include "../../net/relay.h"
-#include "../ui_app.h"
-
-static void theme_switch_cb(lv_event_t *e) {
-    lv_obj_t *sw = lv_event_get_target(e);
-    bool is_dark = lv_obj_has_state(sw, LV_STATE_CHECKED);
-    kiosk_theme_set_mode(is_dark);
-    ui_app_force_render();
-}
 
 lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
                               queue_board_scan_cb_t on_scan, void *user_data) {
@@ -29,49 +20,39 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
    * column causes the top controls to consume/recalculate height whenever a
    * live label changes, which is visible as a full-screen flicker. */
 
-  /* Top-right controls: lights status + theme toggle */
+  /* Top-right status: NFC only. Theme and relay controls are intentionally
+   * not exposed on the kiosk screen. */
   lv_obj_t *top_right = lv_obj_create(root);
   lv_obj_remove_style_all(top_right);
-  lv_obj_set_size(top_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_size(top_right, 32, 32);
   lv_obj_set_flex_flow(top_right, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(top_right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(top_right, 16, 0);
   lv_obj_align(top_right, LV_ALIGN_TOP_RIGHT, 0, 0);
 
-  /* Light status indicator */
-  lv_obj_t *lights_status = lv_label_create(top_right);
-  if (relay_is_on()) {
-      lv_label_set_text(lights_status, LV_SYMBOL_EYE_OPEN " LIGHTS: ON");
-      lv_obj_set_style_text_color(lights_status, kiosk_theme_color_success(), 0);
-  } else {
-      lv_label_set_text(lights_status, LV_SYMBOL_EYE_CLOSE " LIGHTS: OFF");
-      lv_obj_set_style_text_color(lights_status, kiosk_theme_color_text_muted(), 0);
-  }
-  lv_obj_set_style_text_font(lights_status, &lv_font_montserrat_14, 0);
-
-  lv_obj_t *theme_sw = lv_switch_create(top_right);
-  kiosk_theme_disable_transitions(theme_sw);
-  if (kiosk_theme_is_dark()) {
-      lv_obj_add_state(theme_sw, LV_STATE_CHECKED);
-  }
-  lv_obj_add_event_cb(theme_sw, theme_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-  lv_obj_t *nfc_status = lv_label_create(top_right);
-  if (nfc_reader_is_online()) {
-      lv_label_set_text(nfc_status, "NFC: OK");
-      lv_obj_set_style_text_color(nfc_status, kiosk_theme_color_success(), 0);
-  } else {
-      lv_label_set_text(nfc_status, "NFC: OFFLINE");
-      lv_obj_set_style_text_color(nfc_status, kiosk_theme_color_danger(), 0);
-  }
-  lv_obj_set_style_text_font(nfc_status, &lv_font_montserrat_14, 0);
-  lv_obj_clear_flag(nfc_status, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_t *nfc_status = lv_obj_create(top_right);
+  lv_obj_remove_style_all(nfc_status);
+  lv_obj_set_size(nfc_status, 12, 12);
+  lv_obj_set_style_bg_color(nfc_status,
+                            nfc_reader_is_online() ? kiosk_theme_color_success()
+                                                   : kiosk_theme_color_danger(), 0);
+  lv_obj_set_style_bg_opa(nfc_status, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(nfc_status, LV_RADIUS_CIRCLE, 0);
+  lv_obj_clear_flag(nfc_status, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *brand = lv_label_create(root);
-  lv_label_set_text(brand, "Paddle Point Queueing Terminal");
+  lv_label_set_text(brand, "Courts");
   lv_obj_set_style_text_font(brand, &lv_font_montserrat_16, 0);
-  lv_obj_set_style_text_color(brand, kiosk_theme_color_primary(), 0);
+  lv_obj_set_style_text_color(brand, kiosk_theme_color_text_muted(), 0);
+  lv_obj_set_size(brand, 240, 22);
   lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  lv_obj_t *brand_subtitle = lv_label_create(root);
+  lv_label_set_text(brand_subtitle, "Tap your RFID card to book as a member");
+  lv_obj_set_style_text_font(brand_subtitle, &lv_font_montserrat_12, 0);
+  lv_obj_set_style_text_color(brand_subtitle, kiosk_theme_color_text_muted(), 0);
+  lv_obj_set_size(brand_subtitle, 360, 18);
+  lv_obj_align(brand_subtitle, LV_ALIGN_TOP_LEFT, 0, 22);
 
   /* Bottom brand overlay: takes no layout space so court/queue columns can
    * grow over it when bookings become active. */
@@ -87,17 +68,16 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_remove_style_all(columns);
   kiosk_theme_disable_transitions(columns);
   lv_obj_set_width(columns, lv_pct(100));
-  lv_obj_set_height(columns, lv_pct(100));
-  lv_obj_align(columns, LV_ALIGN_TOP_LEFT, 0, 0);
+  lv_obj_set_height(columns, 520);
+  lv_obj_set_pos(columns, 0, 48);
   lv_obj_set_flex_flow(columns, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_column(columns, 16, 0);
-  lv_obj_set_style_pad_top(columns, 48, 0);
 
   lv_obj_t *left = lv_obj_create(columns);
   lv_obj_remove_style_all(left);
   kiosk_theme_disable_transitions(left);
-  lv_obj_set_width(left, lv_pct(58));
-  lv_obj_set_height(left, lv_pct(100));
+  lv_obj_set_width(left, lv_pct(56));
+  lv_obj_set_height(left, 520);
   /* Keep the courts in the familiar single vertical stack. Each card has a
    * compact fixed footprint so up to three courts fit without scrolling. */
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
@@ -120,7 +100,7 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_remove_style_all(right);
   kiosk_theme_disable_transitions(right);
   lv_obj_set_flex_grow(right, 1);
-  lv_obj_set_height(right, lv_pct(100));
+  lv_obj_set_height(right, 520);
   lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(right, 12, 0);
 
@@ -136,10 +116,13 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
 
   char queue_title[24];
   snprintf(queue_title, sizeof(queue_title), "QUEUE (%d)", board->queue_count);
-  lv_obj_t *queue_title_label = lv_label_create(queue_panel);
-  lv_label_set_text(queue_title_label, queue_title);
-  lv_obj_set_style_text_font(queue_title_label, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(queue_title_label, kiosk_theme_color_text_muted(), 0);
+   lv_obj_t *queue_title_label = lv_label_create(queue_panel);
+   lv_label_set_text(queue_title_label, queue_title);
+   lv_obj_set_style_text_font(queue_title_label, &lv_font_montserrat_14, 0);
+   lv_obj_set_style_text_color(queue_title_label, kiosk_theme_color_text_muted(), 0);
+   lv_obj_set_width(queue_title_label, lv_pct(100));
+   lv_obj_set_height(queue_title_label, 20);
+   lv_label_set_long_mode(queue_title_label, LV_LABEL_LONG_CLIP);
 
   queue_list_create(queue_panel, board->queue, board->queue_count);
 

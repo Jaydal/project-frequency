@@ -42,6 +42,12 @@ describe('GET /api/controller/member/[rfid]', () => {
     const response = await GET(new Request('http://localhost/api/controller/member/aabbccddeeff', { headers: { 'x-device-id': 'aabbccddeeff' } }), { params: Promise.resolve({ rfid: 'aabbccddeeff' }) });
 
     expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.decision.type).toBe('play now');
+    expect(body.decision.gameId).toBeUndefined();
+    expect(body.decision.entryId).toBeUndefined();
+    expect(body.activeGame).toBeNull();
+    expect(body.activeQueue).toBeNull();
   });
 
   it('rejects unknown devices before looking up an RFID card', async () => {

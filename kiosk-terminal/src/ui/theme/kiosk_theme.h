@@ -66,6 +66,11 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb);
 void kiosk_theme_style_modal_ta(lv_obj_t *ta);
 void kiosk_theme_disable_transitions(lv_obj_t *obj);
 
+/* Pin a button/tile's PRESSED state to match its normal state, so pressing
+ * it changes no pixels. In single-buffer direct mode any pixel change on
+ * press is redrawn on the live framebuffer mid-scan and tears. */
+void kiosk_theme_pin_pressed(lv_obj_t *obj);
+
 /* Card left-border-accent variants (mirrors CourtStatusCard's 3 states). */
 extern lv_style_t kiosk_style_card_available;
 extern lv_style_t kiosk_style_card_preparing;

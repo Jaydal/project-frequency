@@ -41,6 +41,7 @@ typedef struct {
   /* Next scheduled game on this court, kept in a reserved fixed slot so
    * displaying it never changes the card's layout during timer ticks. */
   char next_match_title[KIOSK_MAX_NAME_LEN];
+  char next_match_type[8];
   time_t next_start_time;
   int32_t next_duration_min;
   bool next_is_scheduled;

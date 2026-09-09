@@ -239,7 +239,13 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb) {
   lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_border_color(kb, kiosk_theme_color_border(), LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_border_opa(kb, LV_OPA_COVER, LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_color_filter_opa(kb, LV_OPA_TRANSP, LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_transition(kb, &kb_trans_dsc, LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_anim_time(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_pad_row(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_pad_column(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
   
   /* OVERRIDE LVGL DEFAULT THEME TRANSFORMATIONS (prevent height/size animating on press) */
   lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
@@ -252,6 +258,10 @@ void kiosk_theme_style_keyboard(lv_obj_t *kb) {
   lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_FOCUSED);
   lv_obj_set_style_translate_y(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
   lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_color_filter_opa(kb, LV_OPA_TRANSP, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_transition(kb, &kb_trans_dsc, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_anim_time(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
 }
 
 void kiosk_theme_style_modal_ta(lv_obj_t *ta) {
@@ -284,14 +294,10 @@ void kiosk_theme_style_modal_ta(lv_obj_t *ta) {
 }
 
 void kiosk_theme_disable_transitions(lv_obj_t *obj) {
-  if (!kb_trans_init) {
-    static const lv_style_prop_t props[] = {0};
-    lv_style_transition_dsc_init(&kb_trans_dsc, props, lv_anim_path_linear, 0, 0, NULL);
-    kb_trans_init = true;
-  }
-  
-  /* Apply to main part */
-  lv_obj_set_style_transition(obj, &kb_trans_dsc, 0);
+  /* The project and hardware sdkconfig set the default transition duration to
+   * zero. Do not register per-object transition descriptors here: creating
+   * those descriptors while constructing a booking page can block the LVGL
+   * task long enough to trip the ESP32 task watchdog. */
   lv_obj_set_style_anim_time(obj, 0, 0);
   lv_obj_set_style_transform_width(obj, 0, LV_STATE_PRESSED);
   lv_obj_set_style_transform_height(obj, 0, LV_STATE_PRESSED);
@@ -301,8 +307,6 @@ void kiosk_theme_disable_transitions(lv_obj_t *obj) {
   lv_obj_set_style_shadow_width(obj, 0, LV_STATE_PRESSED);
   lv_obj_set_style_outline_width(obj, 0, LV_STATE_PRESSED);
 
-  /* Apply to items part (for keyboards and lists) */
-  lv_obj_set_style_transition(obj, &kb_trans_dsc, LV_PART_ITEMS);
   lv_obj_set_style_anim_time(obj, 0, LV_PART_ITEMS);
   lv_obj_set_style_transform_width(obj, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_transform_height(obj, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
@@ -321,4 +325,71 @@ void kiosk_theme_disable_transitions(lv_obj_t *obj) {
   lv_obj_set_style_translate_x(obj, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
   lv_obj_set_style_shadow_width(obj, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
   lv_obj_set_style_outline_width(obj, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
+
+  /* Neutralize the default theme's state effects on ordinary interactive
+   * widgets too. The keyboard has explicit item styling above, but switches,
+   * buttons, text fields, and containers can still inherit a pressed/focused
+   * transition or color filter from the default theme. */
+  const lv_style_selector_t states[] = {
+    LV_STATE_PRESSED,
+    LV_STATE_FOCUSED,
+    LV_STATE_CHECKED,
+  };
+  for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); i++) {
+    lv_style_selector_t selector = states[i];
+    lv_obj_set_style_anim_time(obj, 0, selector);
+    lv_obj_set_style_color_filter_opa(obj, LV_OPA_TRANSP, selector);
+    lv_obj_set_style_transform_width(obj, 0, selector);
+    lv_obj_set_style_transform_height(obj, 0, selector);
+    lv_obj_set_style_transform_zoom(obj, 256, selector);
+    lv_obj_set_style_translate_x(obj, 0, selector);
+    lv_obj_set_style_translate_y(obj, 0, selector);
+    lv_obj_set_style_shadow_width(obj, 0, selector);
+    lv_obj_set_style_outline_width(obj, 0, selector);
+
+    lv_obj_set_style_anim_time(obj, 0, LV_PART_KNOB | selector);
+    lv_obj_set_style_color_filter_opa(obj, LV_OPA_TRANSP, LV_PART_KNOB | selector);
+    lv_obj_set_style_transform_width(obj, 0, LV_PART_KNOB | selector);
+    lv_obj_set_style_transform_height(obj, 0, LV_PART_KNOB | selector);
+    lv_obj_set_style_transform_zoom(obj, 256, LV_PART_KNOB | selector);
+    lv_obj_set_style_translate_x(obj, 0, LV_PART_KNOB | selector);
+    lv_obj_set_style_translate_y(obj, 0, LV_PART_KNOB | selector);
+
+    lv_obj_set_style_anim_time(obj, 0, LV_PART_INDICATOR | selector);
+    lv_obj_set_style_color_filter_opa(obj, LV_OPA_TRANSP, LV_PART_INDICATOR | selector);
+  }
+}
+
+void kiosk_theme_pin_pressed(lv_obj_t *obj) {
+  /* Pin the PRESSED state to be pixel-identical to the normal state.
+   * In single-buffer direct mode the panel scans the one live framebuffer
+   * that LVGL also redraws in place. If pressing a button changes any pixel,
+   * that region is redrawn mid-scan and tears. Making the pressed state
+   * visually identical means the press redraw writes the same pixels, so
+   * there is nothing visible to tear. */
+  lv_color_t bg = lv_obj_get_style_bg_color(obj, 0);
+  lv_color_t text = lv_obj_get_style_text_color(obj, 0);
+  lv_opa_t bg_opa = lv_obj_get_style_bg_opa(obj, 0);
+  lv_border_side_t border_side = lv_obj_get_style_border_side(obj, 0);
+  lv_coord_t border_width = lv_obj_get_style_border_width(obj, 0);
+  lv_opa_t border_opa = lv_obj_get_style_border_opa(obj, 0);
+  lv_obj_set_style_bg_color(obj, bg, LV_STATE_PRESSED);
+  lv_obj_set_style_bg_opa(obj, bg_opa, LV_STATE_PRESSED);
+  lv_obj_set_style_text_color(obj, text, LV_STATE_PRESSED);
+  lv_obj_set_style_border_side(obj, border_side, LV_STATE_PRESSED);
+  lv_obj_set_style_border_width(obj, border_width, LV_STATE_PRESSED);
+  lv_obj_set_style_border_opa(obj, border_opa, LV_STATE_PRESSED);
+  lv_obj_set_style_border_color(obj, lv_obj_get_style_border_color(obj, 0), LV_STATE_PRESSED);
+  lv_obj_set_style_color_filter_opa(obj, LV_OPA_TRANSP, LV_STATE_PRESSED);
+  lv_obj_set_style_anim_time(obj, 0, LV_STATE_PRESSED);
+  /* LVGL's default button theme darkens pressed buttons with a color filter.
+   * Disable it so touch changes no pixels or apparent component size. */
+  lv_obj_set_style_color_filter_opa(obj, LV_OPA_TRANSP, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_width(obj, 0, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_height(obj, 0, LV_STATE_PRESSED);
+  lv_obj_set_style_transform_zoom(obj, 256, LV_STATE_PRESSED);
+  lv_obj_set_style_translate_x(obj, 0, LV_STATE_PRESSED);
+  lv_obj_set_style_translate_y(obj, 0, LV_STATE_PRESSED);
+  lv_obj_set_style_shadow_width(obj, 0, LV_STATE_PRESSED);
+  lv_obj_set_style_outline_width(obj, 0, LV_STATE_PRESSED);
 }

@@ -190,7 +190,10 @@ static void lcd_panel_init(void) {
           .flags.pclk_active_neg = 1,
       },
       .data_width = 16,  /* RGB565 */
-      .num_fbs    = 1,   /* Single-buffered to prevent strobe/tearing in direct mode */
+      .num_fbs    = 1,   /* Keep one panel-owned framebuffer so LVGL can update
+                            only the invalidated timer/widget region. A full
+                            double-buffer swap made every timer tick redraw the
+                            whole screen on this RGB panel. */
       .bounce_buffer_size_px = LCD_H_RES * 10,
       .in_color_format = LCD_COLOR_FMT_RGB565,
       .out_color_format = LCD_COLOR_FMT_RGB565,
@@ -237,8 +240,9 @@ static void disp_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area,
                             lv_color_t *color_p) {
   (void)area;
   (void)color_p;
-  /* LVGL draws directly into the panel-owned PSRAM framebuffer. No second
-   * full-screen copy is needed, which avoids competing with RGB scanout. */
+  /* LVGL draws directly into the single panel-owned framebuffer. With
+   * full_refresh disabled, timer changes invalidate only their fixed label
+   * rectangles instead of animating the entire main page. */
   lv_disp_flush_ready(drv);
 }
 
@@ -246,8 +250,6 @@ static void lvgl_display_init(void) {
   void *fb0 = NULL;
   ESP_ERROR_CHECK(esp_lcd_rgb_panel_get_frame_buffer(s_panel, 1, &fb0));
 
-  /* Keep exactly one PSRAM framebuffer. The RGB driver scans it through its
-   * internal-RAM bounce buffers while LVGL updates invalidated regions. */
   lv_disp_draw_buf_init(&s_draw_buf, fb0, NULL, LCD_H_RES * LCD_V_RES);
 
   lv_disp_drv_init(&s_disp_drv);
@@ -267,7 +269,7 @@ static void lvgl_display_init(void) {
   ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(
       s_panel, &rgb_cbs, &s_disp_drv));
 
-  ESP_LOGI(TAG, "LVGL display driver registered (full refresh, VSYNC-synced)");
+  ESP_LOGI(TAG, "LVGL display driver registered (partial refresh, VSYNC-synced)");
 }
 
 /* ── Touch input ───────────────────────────────────────────────────────── */

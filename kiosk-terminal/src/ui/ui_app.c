@@ -34,6 +34,7 @@ typedef enum {
   KIOSK_STEP_CONFIRM,
   KIOSK_STEP_SUCCESS,
   KIOSK_STEP_ERROR,
+  KIOSK_STEP_COUNT,
 
 } kiosk_step_t;
 
@@ -172,7 +173,39 @@ static void idle_long_press_cb(lv_event_t *e) {
 #ifdef ESP_PLATFORM
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/task.h"
 static QueueHandle_t s_rfid_queue = NULL;
+
+typedef struct {
+  const kiosk_data_provider_t *provider;
+  char member_id[KIOSK_MAX_ID_LEN];
+  char court_id[KIOSK_MAX_ID_LEN];
+  game_type_t game_type;
+  int32_t duration_min;
+  char match_title[KIOSK_MAX_NAME_LEN];
+} confirm_task_context_t;
+
+static volatile bool s_confirm_task_running = false;
+static volatile bool s_confirm_task_done = false;
+static bool s_confirm_task_ok = false;
+static booking_result_t s_confirm_task_result;
+static kiosk_error_t s_confirm_task_error;
+
+static void confirm_task(void *arg) {
+  confirm_task_context_t *ctx = arg;
+  booking_result_t result = {0};
+  kiosk_error_t error = {0};
+  bool ok = ctx->provider->join_queue(ctx->member_id, ctx->court_id,
+                                      ctx->game_type, ctx->duration_min,
+                                      ctx->match_title, &result, &error);
+  s_confirm_task_result = result;
+  s_confirm_task_error = error;
+  s_confirm_task_ok = ok;
+  s_confirm_task_done = true;
+  s_confirm_task_running = false;
+  free(ctx);
+  vTaskDelete(NULL);
+}
 #endif
 
 #ifndef ESP_PLATFORM
@@ -298,32 +331,63 @@ static void handle_select_duration(void *user_data, int32_t duration_min) {
   render_current();
 }
 
+static void finish_confirm_ui(bool ok, const booking_result_t *result, const kiosk_error_t *error) {
+  if (!ok) {
+    s_app.error = *error;
+    s_app.step = KIOSK_STEP_ERROR;
+  } else {
+    s_app.result = *result;
+    kiosk_products_config_t cfg;
+    s_app.provider->get_products_config(&cfg);
+    int32_t party_size = (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2;
+    s_app.result.credits_used = s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED
+      ? 0
+      : kiosk_get_cost(&cfg, s_app.duration_min, party_size);
+    s_app.result.credits_remaining = s_app.member.balance - s_app.result.credits_used;
+    s_app.step = KIOSK_STEP_SUCCESS;
+    s_app.success_entered_at = time(NULL);
+  }
+  render_current();
+}
+
 static void handle_confirm(void *user_data) {
   (void)user_data;
   s_app.step = KIOSK_STEP_LOADING;
   render_current();
   lv_refr_now(NULL);
 
+#ifdef ESP_PLATFORM
+  if (s_confirm_task_running) return;
+  confirm_task_context_t *ctx = calloc(1, sizeof(*ctx));
+  if (!ctx) {
+    snprintf(s_app.error.title, sizeof(s_app.error.title), "Booking Failed");
+    snprintf(s_app.error.message, sizeof(s_app.error.message), "Not enough memory to start booking.");
+    s_app.step = KIOSK_STEP_ERROR;
+    render_current();
+    return;
+  }
+  ctx->provider = s_app.provider;
+  snprintf(ctx->member_id, sizeof(ctx->member_id), "%s", s_app.member.id);
+  snprintf(ctx->court_id, sizeof(ctx->court_id), "%s", s_app.selected_court.id);
+  ctx->game_type = s_app.game_type;
+  ctx->duration_min = s_app.duration_min;
+  snprintf(ctx->match_title, sizeof(ctx->match_title), "%s", s_app.match_title);
+  s_confirm_task_done = false;
+  s_confirm_task_running = true;
+  if (xTaskCreate(confirm_task, "booking", 8192, ctx, 4, NULL) != pdPASS) {
+    s_confirm_task_running = false;
+    free(ctx);
+    snprintf(s_app.error.title, sizeof(s_app.error.title), "Booking Failed");
+    snprintf(s_app.error.message, sizeof(s_app.error.message), "Unable to start booking request.");
+    s_app.step = KIOSK_STEP_ERROR;
+    render_current();
+  }
+  return;
+#else
   bool ok = s_app.provider->join_queue(s_app.member.id, s_app.selected_court.id, s_app.game_type,
                                         s_app.duration_min, s_app.match_title, &s_app.result, &s_app.error);
-  if (!ok) {
-    s_app.step = KIOSK_STEP_ERROR;
-  } else {
-    kiosk_products_config_t cfg;
-    s_app.provider->get_products_config(&cfg);
-    int32_t party_size = (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2;
-    
-    if (s_app.member.decision.type == RFID_DECISION_CHECK_IN_SCHEDULED) {
-      s_app.result.credits_used = 0; // Check-in doesn't cost extra
-    } else {
-      s_app.result.credits_used = kiosk_get_cost(&cfg, s_app.duration_min, party_size);
-    }
-    
-    s_app.result.credits_remaining = s_app.member.balance - s_app.result.credits_used;
-    s_app.step = KIOSK_STEP_SUCCESS;
-    s_app.success_entered_at = time(NULL);
-  }
-  render_current();
+  finish_confirm_ui(ok, &s_app.result, &s_app.error);
+#endif
 }
 
 static void handle_cancel_existing(void *user_data) {
@@ -499,6 +563,7 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
     lv_label_set_text(end_label, LV_SYMBOL_STOP " End Game Early");
     lv_obj_set_style_text_color(end_label, KIOSK_COLOR_RED_500, 0);
     lv_obj_add_event_cb(end_btn, end_game_click_cb, LV_EVENT_CLICKED, NULL);
+    kiosk_theme_pin_pressed(end_btn);
   }
 
   /* Card for queue ticket */
@@ -534,6 +599,7 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
     lv_label_set_text(cancel_label, LV_SYMBOL_TRASH " Cancel Queue");
     lv_obj_set_style_text_color(cancel_label, KIOSK_COLOR_RED_500, 0);
     lv_obj_add_event_cb(cancel_btn, cancel_existing_click_cb, LV_EVENT_CLICKED, NULL);
+    kiosk_theme_pin_pressed(cancel_btn);
   }
 
   /* Booking or Notice */
@@ -562,6 +628,7 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
     lv_label_set_text(another_label, LV_SYMBOL_PLUS " Book Another Match");
     lv_obj_center(another_label);
     lv_obj_add_event_cb(another_btn, book_another_click_cb, LV_EVENT_CLICKED, NULL);
+    kiosk_theme_pin_pressed(another_btn);
   }
 
   lv_obj_t *close_btn = lv_btn_create(root);
@@ -572,6 +639,7 @@ static lv_obj_t *build_existing_queue_screen(lv_obj_t *parent) {
   lv_label_set_text(close_label, "Done");
   lv_obj_center(close_label);
   lv_obj_add_event_cb(close_btn, close_idle_click_cb, LV_EVENT_CLICKED, NULL);
+  kiosk_theme_pin_pressed(close_btn);
 
   return root;
 }
@@ -622,6 +690,10 @@ static void ensure_screen_root(void) {
 }
 
 static void render_current(void) {
+  /* Page changes rebuild fixed booking regions in place. Cancel any residual
+   * theme/widget animation before deleting the old tree so an earlier touch
+   * state cannot continue while the next page is being constructed. */
+  lv_anim_del_all();
   lv_timer_pause(_lv_disp_get_refr_timer(NULL));
   static kiosk_board_t board;
 
@@ -694,19 +766,19 @@ static void render_current(void) {
       uint8_t count = 0;
       s_app.provider->get_court_options(options, &count);
       format_member_name(member_name, sizeof(member_name));
-      step_select_court_create(s_app.terminal_layout.content,
-                                member_name, s_app.member.balance,
-                                options, count,
-                                handle_select_court,
-                                close_to_idle, NULL, NULL);
-      s_app.provider->get_board(&board);
-      court_overview_create(s_app.terminal_layout.sidebar, board.courts, board.court_count);
+       step_select_court_create(s_app.terminal_layout.content,
+                                 member_name, s_app.member.balance,
+                                 options, count,
+                                 handle_select_court,
+                                 close_to_idle, NULL, NULL);
+       s_app.provider->get_board(&board);
+       court_overview_create(s_app.terminal_layout.sidebar, board.courts, board.court_count);
       break;
     }
     case KIOSK_STEP_SELECT_GAME: {
       terminal_layout_set_sidebar(&s_app.terminal_layout, true);
       format_member_name(member_name, sizeof(member_name));
-      step_select_game_type_create(s_app.terminal_layout.content,
+       step_select_game_type_create(s_app.terminal_layout.content,
                                     member_name, s_app.member.balance,
                                     handle_select_game_type,
                                     close_to_idle, NULL,
@@ -774,11 +846,13 @@ static void render_current(void) {
       step_error_create(s_app.terminal_layout.content, &s_app.error, handle_error_retry, NULL);
       break;
     }
+    case KIOSK_STEP_COUNT:
+      /* Sentinel only; never assigned as an active UI step. */
+      break;
   }
-  
+
   lv_timer_resume(_lv_disp_get_refr_timer(NULL));
 }
-
 /* ---- periodic refresh ---- */
 
 static void send_refresh_recursive(lv_obj_t *obj) {
@@ -829,6 +903,14 @@ static void on_tick(lv_timer_t *timer) {
       s_has_pending_rfid = false;
       lv_disp_trig_activity(NULL);
       handle_scan(NULL, s_pending_rfid);
+  }
+#endif
+
+#ifdef ESP_PLATFORM
+  if (s_app.step == KIOSK_STEP_LOADING && s_confirm_task_done) {
+    s_confirm_task_done = false;
+    finish_confirm_ui(s_confirm_task_ok, &s_confirm_task_result, &s_confirm_task_error);
+    return;
   }
 #endif
 

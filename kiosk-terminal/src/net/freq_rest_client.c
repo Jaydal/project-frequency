@@ -206,8 +206,11 @@ freq_rest_result_t freq_rest_lookup_member(const char *rfid, kiosk_member_t *out
         if (cJSON_IsBool(cap)) out->decision.capped = cJSON_IsTrue(cap);
         copy_json_string(decision, "cutoffTime", out->decision.cutoff_time, sizeof(out->decision.cutoff_time));
 
-        out->decision.has_active_game = (out->decision.type == RFID_DECISION_ALREADY_ACTIVE || out->decision.game_id[0] != '\0');
-        out->decision.has_active_queue = (out->decision.type == RFID_DECISION_ALREADY_QUEUED || out->decision.entry_id[0] != '\0');
+        /* The decision type is authoritative. IDs may also be present on
+         * scheduled/check-in responses for other server operations, but they
+         * must not make the kiosk show the existing-booking screen. */
+        out->decision.has_active_game = (out->decision.type == RFID_DECISION_ALREADY_ACTIVE);
+        out->decision.has_active_queue = (out->decision.type == RFID_DECISION_ALREADY_QUEUED);
 
         const cJSON *ag = cJSON_GetObjectItemCaseSensitive(json, "activeGame");
         if (ag && !cJSON_IsNull(ag)) {

@@ -27,7 +27,7 @@ lv_obj_t *booking_stepper_create(lv_obj_t *parent, int current_step,
   lv_obj_remove_style_all(root);
   lv_obj_set_width(root, lv_pct(100));
   lv_obj_set_height(root, 76);
-  lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_layout(root, 0);
   lv_obj_set_style_pad_all(root, 0, 0);
   lv_obj_set_style_pad_bottom(root, 8, 0);
   lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
@@ -38,6 +38,7 @@ lv_obj_t *booking_stepper_create(lv_obj_t *parent, int current_step,
   lv_obj_remove_style_all(header);
   lv_obj_set_width(header, lv_pct(100));
   lv_obj_set_height(header, 42);
+  lv_obj_set_pos(header, 0, 0);
   lv_obj_set_style_bg_color(header, kiosk_theme_color_panel(), 0);
   lv_obj_set_style_bg_opa(header, LV_OPA_COVER, 0);
   lv_obj_set_style_border_color(header, kiosk_theme_color_border(), 0);
@@ -118,6 +119,7 @@ lv_obj_t *booking_stepper_create(lv_obj_t *parent, int current_step,
     cl->user_data = cancel_user_data;
     lv_obj_add_event_cb(cancel_btn, cancel_click_cb, LV_EVENT_CLICKED, cl);
     lv_obj_add_event_cb(cancel_btn, free_closure_cb, LV_EVENT_DELETE, cl);
+    kiosk_theme_pin_pressed(cancel_btn);
   }
 
   /* Step progress row */
@@ -125,6 +127,7 @@ lv_obj_t *booking_stepper_create(lv_obj_t *parent, int current_step,
   lv_obj_remove_style_all(steps_row);
   lv_obj_set_width(steps_row, lv_pct(100));
   lv_obj_set_height(steps_row, 26);
+  lv_obj_set_pos(steps_row, 0, 50);
   lv_obj_set_flex_flow(steps_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(steps_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_top(steps_row, 6, 0);

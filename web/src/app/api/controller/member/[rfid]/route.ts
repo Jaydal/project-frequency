@@ -180,8 +180,12 @@ export async function GET(
     status: member.status,
     decision: {
       ...decision,
-      entryId: decision.type === 'already queued' ? (decision as any).entryId : (activeQueueRecord?.id ?? undefined),
-      gameId: decision.type === 'already active' ? (decision as any).gameId : (activeGameRecord?.id ?? undefined),
+      /* Keep decision IDs scoped to the decision that produced them. The
+       * kiosk uses these fields to determine whether it should show the
+       * existing-booking screen; attaching unrelated active records here
+       * makes scheduled/check-in responses look already booked. */
+      entryId: decision.type === 'already queued' ? (decision as any).entryId : undefined,
+      gameId: decision.type === 'already active' ? (decision as any).gameId : undefined,
     },
     activeGame: activeGameRecord ? {
       id: activeGameRecord.id,

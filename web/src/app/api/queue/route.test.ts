@@ -5,6 +5,7 @@ const mockGetQueuePosition = vi.hoisted(() => vi.fn());
 const mockGetEstimatedWait = vi.hoisted(() => vi.fn());
 const mockFinalizeBooking = vi.hoisted(() => vi.fn());
 const mockDeclineOffer = vi.hoisted(() => vi.fn());
+const mockPublishBoardOnce = vi.hoisted(() => vi.fn());
 const mockAuthenticateControllerDevice = vi.hoisted(() => vi.fn());
 const mockSupabaseResults = vi.hoisted(() => [] as Array<{ data: any; error: any }>);
 
@@ -24,7 +25,7 @@ vi.mock('@/lib/controller-device-auth', () => ({
 }));
 
 vi.mock('@/lib/queue/board-publisher', () => ({
-  publishBoardOnce: vi.fn(),
+  publishBoardOnce: mockPublishBoardOnce,
 }));
 
 vi.mock('@/lib/rate-limit', () => ({
@@ -101,6 +102,7 @@ describe('POST /api/queue', () => {
     vi.clearAllMocks();
     mockSupabaseResults.length = 0;
     mockAuthenticateControllerDevice.mockResolvedValue(null);
+    mockPublishBoardOnce.mockResolvedValue(undefined);
   });
 
   const makeReq = (body: unknown, authorized = true) =>
@@ -169,6 +171,7 @@ describe('POST /api/queue', () => {
     const data = await res.json();
     expect(data.status).toBe('completed');
     expect(data.court_name).toBe('Court 1');
+    expect(mockPublishBoardOnce).toHaveBeenCalledTimes(1);
   });
 
   it('rejects with 409 if member already has an active queue entry', async () => {
