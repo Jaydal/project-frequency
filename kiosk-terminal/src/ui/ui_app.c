@@ -6,6 +6,7 @@
 
 #include "../data/kiosk_data_provider.h"
 #include "../data/kiosk_config.h"
+#include "../net/relay.h"
 #include "../data/live/live_data_provider.h"
 #include "../net/freq_rest_client.h"
 #include "theme/kiosk_theme.h"
@@ -904,6 +905,27 @@ static void on_tick(lv_timer_t *timer) {
       handle_scan(NULL, s_pending_rfid);
   }
 #endif
+
+  /* Court lights follow the live board: ON while any court has an active
+   * game window, OFF otherwise. Edge-triggered so the relay only switches
+   * on real transitions. Runs on every tick in every step. */
+  if (s_app.provider) {
+    static kiosk_board_t lights_board;
+    static bool lights_on = false;
+    static bool lights_known = false;
+    s_app.provider->get_board(&lights_board);
+    bool any_active = false;
+    for (uint8_t i = 0; i < lights_board.court_count; i++) {
+      if (court_is_active(&lights_board.courts[i])) { any_active = true; break; }
+    }
+    if (!lights_known || any_active != lights_on) {
+      lights_known = true;
+      lights_on = any_active;
+      relay_set(any_active);
+      printf("[lights] courts active: %s -> relay %s\n",
+             any_active ? "yes" : "no", any_active ? "ON" : "OFF");
+    }
+  }
 
 #ifdef ESP_PLATFORM
   if (s_app.step == KIOSK_STEP_LOADING && s_confirm_task_done) {
