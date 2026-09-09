@@ -652,9 +652,8 @@ static lv_obj_t *build_booting_screen(lv_obj_t *parent) {
   lv_obj_set_flex_flow(root, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(root, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  lv_obj_t *logo = lv_img_create(root);
-  lv_img_set_src(logo, &img_logo_secondary);
-
+  /* Boot logo temporarily disabled for the same image-decode watchdog
+   * isolation as the board logo. */
   lv_obj_t *title = lv_label_create(root);
   lv_label_set_text(title, "Starting Kiosk Terminal...");
   lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);

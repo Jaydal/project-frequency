@@ -54,14 +54,14 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_set_size(brand_subtitle, 360, 18);
   lv_obj_align(brand_subtitle, LV_ALIGN_TOP_LEFT, 0, 22);
 
-  /* Bottom brand overlay: takes no layout space so court/queue columns can
-   * grow over it when bookings become active. */
+  /* Bottom brand overlay, drawn in the foreground so the opaque court/queue
+   * columns cannot cover it. Uses the chroma-keyed compact logo (no alpha
+   * blending, no decode buffer). */
   lv_obj_t *logo = lv_img_create(root);
-  lv_img_set_src(logo, &img_logo_hero);
-  lv_obj_align(logo, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_img_set_src(logo, &img_logo_secondary);
+  lv_obj_align(logo, LV_ALIGN_BOTTOM_LEFT, 8, -6);
   lv_obj_add_flag(logo, LV_OBJ_FLAG_IGNORE_LAYOUT);
   lv_obj_clear_flag(logo, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_move_background(logo);
 
   /* Court + Queue columns fill remaining space */
   lv_obj_t *columns = lv_obj_create(root);

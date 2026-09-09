@@ -5,10 +5,10 @@
 #include "../../data/kiosk_data_provider.h"
 
 #define COURT_CARD_HEIGHT 160
-#define COURT_TITLE_SLOT_HEIGHT 32
-#define COURT_NEXT_SLOT_HEIGHT 24
-#define COURT_TIMER_SLOT_HEIGHT 46
-#define COURT_PLAYERS_SLOT_HEIGHT 22
+#define COURT_TITLE_SLOT_HEIGHT 30
+#define COURT_NEXT_SLOT_HEIGHT 26
+#define COURT_TIMER_SLOT_HEIGHT 42
+#define COURT_PLAYERS_SLOT_HEIGHT 18
 
 static char s_timer_value_text[KIOSK_MAX_COURTS][8];
 static char s_timer_phase_text[KIOSK_MAX_COURTS][8];
@@ -85,9 +85,10 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
   lv_obj_set_height(card, COURT_CARD_HEIGHT);
   lv_obj_set_style_min_height(card, COURT_CARD_HEIGHT, 0);
   lv_obj_set_style_max_height(card, COURT_CARD_HEIGHT, 0);
-   /* Child positions are explicit; keep the full card height available so the
-    * fixed player/booker row is not clipped by parent padding. */
-   lv_obj_set_style_pad_all(card, 0, 0);
+   /* Fixed inset so no text touches the card border. LVGL positions manual
+    * children relative to the padded content area, and each slot below adds
+    * its own horizontal inset as well. */
+   lv_obj_set_style_pad_all(card, 8, 0);
   lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC |
                            LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
@@ -110,8 +111,9 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
   lv_obj_t *header = lv_obj_create(card);
   lv_obj_remove_style_all(header);
   lv_obj_set_width(header, lv_pct(100));
-   lv_obj_set_height(header, 20);
+   lv_obj_set_height(header, 18);
   lv_obj_set_pos(header, 0, 0);
+  lv_obj_set_style_pad_hor(header, 4, 0);
   lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -132,7 +134,8 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
   lv_obj_remove_style_all(title_slot);
   lv_obj_set_width(title_slot, lv_pct(100));
   lv_obj_set_height(title_slot, COURT_TITLE_SLOT_HEIGHT);
-   lv_obj_set_pos(title_slot, 0, 22);
+  lv_obj_set_pos(title_slot, 0, 20);
+  lv_obj_set_style_pad_hor(title_slot, 4, 0);
   if (court_is_active(court) && court->match_title[0] != '\0') {
     lv_obj_t *title_label = set_label(title_slot, court->match_title,
                                        &lv_font_montserrat_12,
@@ -160,7 +163,8 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
   lv_obj_remove_style_all(next_box);
   lv_obj_set_width(next_box, lv_pct(100));
   lv_obj_set_height(next_box, COURT_NEXT_SLOT_HEIGHT);
-  lv_obj_set_pos(next_box, 0, 56);
+  lv_obj_set_pos(next_box, 0, 52);
+  lv_obj_set_style_pad_hor(next_box, 4, 0);
   lv_obj_set_flex_flow(next_box, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(next_box, 0, 0);
   if (court->next_start_time != 0) {
@@ -198,7 +202,7 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
   lv_obj_set_width(timer_box, 280);
   /* Keep this slot present for available courts as well. */
   lv_obj_set_height(timer_box, COURT_TIMER_SLOT_HEIGHT);
-  lv_obj_align(timer_box, LV_ALIGN_TOP_MID, 0, 82);
+  lv_obj_align(timer_box, LV_ALIGN_TOP_MID, 0, 80);
   lv_obj_set_layout(timer_box, 0);
   if (court_is_active(court)) {
     lv_obj_set_style_bg_color(timer_box, kiosk_theme_color_primary(), 0);
@@ -271,8 +275,9 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
   lv_obj_set_width(chips, lv_pct(100));
   /* Keep the player area present for every state and prevent long names from
    * changing the card's measured height. */
-   lv_obj_set_height(chips, COURT_PLAYERS_SLOT_HEIGHT);
-   lv_obj_set_pos(chips, 0, 132);
+  lv_obj_set_height(chips, COURT_PLAYERS_SLOT_HEIGHT);
+  lv_obj_set_pos(chips, 0, 124);
+  lv_obj_set_style_pad_hor(chips, 4, 0);
    lv_obj_set_flex_flow(chips, LV_FLEX_FLOW_ROW_WRAP);
    lv_obj_set_style_pad_hor(chips, 6, 0);
    lv_obj_set_style_pad_ver(chips, 1, 0);
