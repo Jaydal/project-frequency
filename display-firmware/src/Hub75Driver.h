@@ -26,6 +26,8 @@ public:
   void setZones(const ZoneRenderInfo* zones, uint8_t count) override;
   void runDiagnosticSequence() override;
   void playBootAnimation(unsigned long durationMs) override;
+  void playBootTextAnimation(unsigned long durationMs);
+  void showBrandLogo(unsigned long durationMs);
   void setOtaActive(bool active) override { _otaActive = active; if (active && _matrix) { _matrix->clearScreen(); _matrix->flipDMABuffer(); } }
   void setPollCallback(void (*cb)()) override { _pollCb = cb; }
   void setConnecting(bool active) override { _connecting = active; if (active) _connectingStart = millis(); }

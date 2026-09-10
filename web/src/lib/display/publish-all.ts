@@ -56,6 +56,7 @@ export async function publishAllDisplays(): Promise<PublishAllResult> {
           durationMinutes: c.durationMin,
           matchTitle: c.matchTitle,
           matchType: c.matchType,
+          players: (c.players ?? []).map(p => `${p.firstName} ${p.lastName}`.trim()).filter(Boolean).join(' & '),
         };
       }
 

@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include "esp_attr.h"
+#include "esp_system.h"
 #include "IDisplayDriver.h"
 #include "Hub75Driver.h"
 #include "MqttDisplayClient.h"
@@ -21,6 +23,14 @@ static bool g_portalMode = false;
 // ── Button (factory reset) ───────────────────────────────────────────────────
 static unsigned long g_btnPressStart = 0;
 static bool g_btnHandled = false;
+
+// ── Reboot-loop guard ────────────────────────────────────────────────────────
+// Survives software resets (not power loss). If court reassignments reboot us
+// repeatedly, stop rebooting and stay on the current assignment so the device
+// doesn't loop forever on a mismatched server courtId.
+RTC_NOINIT_ATTR static uint32_t s_courtReboots;
+RTC_NOINIT_ATTR static uint32_t s_rebootGuardArmed;
+static unsigned long s_bootMillis = 0;
 
 static void checkResetButton() {
   bool pressed = (digitalRead(RESET_BUTTON) == LOW);  // active-low
@@ -117,6 +127,13 @@ void setup() {
 
   LOG("BOOTING UP! If you see this, the chip is NOT frozen!\n");
   LOG("\n=== Freq Court Display — HD-WF2 ===\n");
+  s_bootMillis = millis();
+  if (s_rebootGuardArmed != 0xC0FFEE) {
+    s_rebootGuardArmed = 0xC0FFEE;
+    s_courtReboots = 0;
+  }
+  LOG("[main] reset reason: %d, court-reboot count: %u\n",
+      (int)esp_reset_reason(), (unsigned)s_courtReboots);
 
   pinMode(STATUS_LED, OUTPUT);
   pinMode(RESET_BUTTON, INPUT_PULLUP);
@@ -137,10 +154,14 @@ void setup() {
     return;
   }
   
-  // Play the premium 10-second pickleball boot animation.
+  // Boot reel (~18s): original 10s ball scene, 5s "PADDLE POINT" text
+  // intro, then the 3s logo end-card.
   // Poll the reset button each frame so a 5s factory-reset press isn't lost.
   g_display->setPollCallback(checkResetButton);
   g_display->playBootAnimation(10000);
+  if (auto* hub = static_cast<Hub75Driver*>(g_display)) hub->playBootTextAnimation(5000);
+  // Static brand end-card so the boot always lands on the Paddle Point logo
+  if (auto* hub = static_cast<Hub75Driver*>(g_display)) hub->showBrandLogo(3000);
   g_display->setPollCallback(nullptr);
   g_display->setConnecting(true);
   // ── Boot branching: portal vs normal ──────────────────────────────────────
@@ -305,9 +326,15 @@ void setup() {
                 ssid.c_str(), broker.c_str(), port, court.c_str(), user.c_str(), brightness, colorHex.c_str());
 
   g_mqtt->setCourtChangeCallback([](const char* newCourtId) {
+    if (s_courtReboots >= 3) {
+      LOG("[mqtt] IGNORING court reassign to '%s' — %u recent reboots, possible server mismatch. Fix the dashboard assignment.\n",
+          newCourtId, (unsigned)s_courtReboots);
+      return;
+    }
     LOG("[mqtt] Reassigning court: '%s' -> '%s' — saving and rebooting...\n",
         g_portal.getCourtId().c_str(), newCourtId);
     g_portal.saveField("court_id", String(newCourtId));
+    s_courtReboots++;
     delay(500);
     ESP.restart();
   });
@@ -357,5 +384,10 @@ void loop() {
 #endif
   g_mqtt->update();
   statusLedNormal(g_mqtt);
+  // Stable for 5 minutes: the reboot guard was a false alarm, reset it.
+  if (s_courtReboots > 0 && millis() - s_bootMillis > 300000) {
+    s_courtReboots = 0;
+    LOG("[main] reboot guard cleared after stable uptime\n");
+  }
   yield();
 }

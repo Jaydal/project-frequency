@@ -1,5 +1,6 @@
 #if defined(USE_HUB75) && defined(HD_WF2)
 #include "Hub75Driver.h"
+#include "LogoEmblem.h"
 
 static constexpr HUB75_I2S_CFG::i2s_pins WF2_PINS = {
   .r1 =  2, .g1 =  6, .b1 = 10,
@@ -886,6 +887,57 @@ void Hub75Driver::drawPixelMapped(int x, int y, uint16_t color) {
   _matrix->drawPixel(x, y, color);
 }
 
+void Hub75Driver::playBootTextAnimation(unsigned long durationMs) {
+  if (!_matrix) return;
+
+  // "PADDLE POINT" scale 1: 12 chars -> 71px wide, rows 4..10 when at y=4
+  static const char kTitle[] = "PADDLE POINT";
+  static const int kTitleLen = 12;
+  const int titleX = (WF2_RES_X - 71) / 2;
+  const int titleY = 4;
+  const uint16_t ballCol = _matrix->color565(255, 255, 0);
+
+  unsigned long start = millis();
+  unsigned long typeMs = durationMs / 4;  // typewriter phase
+  if (typeMs < 1200) typeMs = 1200;
+  if (typeMs > 3000) typeMs = 3000;
+
+  while (millis() - start < durationMs) {
+    if (_otaActive) break;
+    if (_pollCb) _pollCb();
+    unsigned long elapsed = millis() - start;
+
+    _matrix->clearScreen();
+
+    // Typewriter reveal: one letter every ~150ms, anchored so the full
+    // string ends up centered
+    int shown = 1 + (int)(elapsed / 150);
+    if (shown > kTitleLen) shown = kTitleLen;
+    char buf[13];
+    memcpy(buf, kTitle, shown);
+    buf[shown] = '\0';
+
+    // Gentle brightness pulse once the full title is up
+    float pulse = 0.7f + 0.3f * sinf(elapsed * 0.006f);
+    if (elapsed < typeMs) pulse = 1.0f;
+    uint8_t v = (uint8_t)(255.0f * pulse);
+    drawText5x7Scaled(buf, titleX, titleY, _matrix->color565(v, v, v),
+                      1, 1, 1, 0, WF2_RES_X, 0, nullptr, false);
+
+    // Accent ball bouncing along the bottom row after the reveal starts
+    if (elapsed > typeMs / 2) {
+      float t = (elapsed - typeMs / 2) / 1000.0f;
+      float span = (float)(WF2_RES_X - 8);
+      float phase = fmodf(t * 40.0f / span, 2.0f);
+      float bx = 4.0f + (phase < 1.0f ? phase : 2.0f - phase) * span;
+      _matrix->fillCircle((int)bx, 13, 2, ballCol);
+    }
+
+    _matrix->flipDMABuffer();
+    delay(30);
+  }
+}
+
 void Hub75Driver::playBootAnimation(unsigned long durationMs) {
   if (!_matrix) return;
   
@@ -957,14 +1009,17 @@ void Hub75Driver::playBootAnimation(unsigned long durationMs) {
   uint16_t colorBlack = _matrix->color565(0, 0, 0);
   uint16_t colorDark = _matrix->color565(50, 50, 50);
   
+  // Compact paddle for the 16px-tall finale: 5x8 silhouette parked low so it
+  // never reaches the title text at the top rows
   auto drawPaddle = [&](float px, float py, float hue) {
-    // Face (white inside)
-    _matrix->fillRect((int)px - 2, (int)py - 6, 5, 10, colorWhite);
-    // Handle
-    _matrix->fillRect((int)px - 1, (int)py + 4, 3, 4, colorDark);
-    // Face border
+    int ix = (int)px, iy = (int)py;
     uint16_t edgeCol = hsv2rgb(hue, 1.0f, 1.0f);
-    _matrix->drawRect((int)px - 3, (int)py - 7, 7, 12, edgeCol);
+    // Face border
+    _matrix->drawRect(ix - 2, iy - 4, 5, 8, edgeCol);
+    // Face (white inside)
+    _matrix->fillRect(ix - 1, iy - 3, 3, 6, colorWhite);
+    // Handle stub
+    _matrix->fillRect(ix - 1, iy + 3, 3, 2, colorDark);
   };
 
   while (millis() - start < durationMs) {
@@ -1068,8 +1123,8 @@ void Hub75Driver::playBootAnimation(unsigned long durationMs) {
       padLeftX = -20.0f + ease * 50.0f; 
       padRightX = 116.0f - ease * 50.0f;
       
-      drawPaddle(padLeftX, 8.0f, globalHue);
-      drawPaddle(padRightX, 8.0f, globalHue + 180.0f);
+      drawPaddle(padLeftX, 11.0f, globalHue);
+      drawPaddle(padRightX, 11.0f, globalHue + 180.0f);
       drawBall = true;
     }
     // -- Phase 5: 8-9s --
@@ -1093,15 +1148,15 @@ void Hub75Driver::playBootAnimation(unsigned long durationMs) {
         padRightX += (71.0f - padRightX) * 5.0f * dt;
       }
       
-      drawPaddle(padLeftX, 8.0f, globalHue);
-      drawPaddle(padRightX, 8.0f, globalHue + 180.0f);
+      drawPaddle(padLeftX, 11.0f, globalHue);
+      drawPaddle(padRightX, 11.0f, globalHue + 180.0f);
       drawBall = true;
     }
     // -- Phase 6: 9-10s --
     else {
       ballAngle += 5.0f * dt;
-      drawPaddle(padLeftX, 8.0f, globalHue);
-      drawPaddle(padRightX, 8.0f, globalHue + 180.0f);
+      drawPaddle(padLeftX, 11.0f, globalHue);
+      drawPaddle(padRightX, 11.0f, globalHue + 180.0f);
       drawBall = true;
       
       float progress = (elapsed - 9000) / 1000.0f;
@@ -1110,7 +1165,7 @@ void Hub75Driver::playBootAnimation(unsigned long durationMs) {
       
       if (alpha > 50) {
         int textWidth = 12 * 6; // "PADDLE POINT" is 12 chars, 6px each
-        _matrix->setCursor(48 - (textWidth / 2), 1); // Put at top to avoid paddles
+        _matrix->setCursor(48 - (textWidth / 2), 0); // Top rows; paddles stay low
         _matrix->setTextColor(_matrix->color565(alpha, alpha, alpha));
         _matrix->print("PADDLE POINT");
       }
@@ -1188,6 +1243,31 @@ void Hub75Driver::playBootAnimation(unsigned long durationMs) {
   }
   
   delete[] particles;
+}
+
+void Hub75Driver::showBrandLogo(unsigned long durationMs) {
+  if (!_matrix) return;
+  // Emblem (15x16) + "PADDLE POINT" (12 chars x 6px = 71px) centered as one row
+  const int totalW = LOGO_EMBLEM_W + 3 + 71;
+  const int baseX = (WF2_RES_X - totalW) / 2;
+  const uint16_t textCol = _matrix->color565(255, 255, 255);
+
+  _matrix->clearScreen();
+  for (int y = 0; y < LOGO_EMBLEM_H; y++) {
+    for (int x = 0; x < LOGO_EMBLEM_W; x++) {
+      drawPixelMapped(baseX + x, y, LOGO_EMBLEM[y * LOGO_EMBLEM_W + x]);
+    }
+  }
+  drawText5x7Scaled("PADDLE POINT", baseX + LOGO_EMBLEM_W + 3, 4, textCol,
+                    1, 1, 1, 0, WF2_RES_X, 0, nullptr, false);
+  _matrix->flipDMABuffer();
+
+  unsigned long start = millis();
+  while (millis() - start < durationMs) {
+    if (_otaActive) break;
+    if (_pollCb) _pollCb();
+    delay(50);
+  }
 }
 
 #endif

@@ -83,11 +83,13 @@ function renderZoneDots(
   const availH = avail.bottom - avail.top + 1;
 
   const lineScaleXs = zone.lines.map((line) => {
-    // Mirror firmware fallback: line.scaleX → line.scaleY → zone.scaleX → zone.scaleY → auto
+    // Mirror firmware fallback exactly: line.scaleX → line.scaleY →
+    // zone.scaleX → zone.scaleY → 2-line zones render at 1 → auto-fit
     if (line.scaleX != null && line.scaleX > 0) return line.scaleX;
     if (line.scaleY != null && line.scaleY > 0) return line.scaleY;
-    if (zone.lines.length === 2) return 1;
     if (zone.scaleX) return zone.scaleX;
+    if (zone.scaleY) return zone.scaleY;
+    if (zone.lines.length === 2) return 1;
     const sp = (line as any).subpages?.[0];
     if (sp && sp.effect === 'SCROLL') return 2;
     if (!sp) {
@@ -101,11 +103,14 @@ function renderZoneDots(
     return tw2x <= zoneWidth ? 2 : 1;
   });
   const lineScaleYs = zone.lines.map((line, i) => {
-    // Mirror firmware fallback: line.scaleY → line.scaleX → zone.scaleY → zone.scaleX → auto
+    // Mirror firmware: explicit line values win, then zone values apply to
+    // both axes, then 2-line zones render at 1, else match X scale
     if (line.scaleY != null && line.scaleY > 0) return line.scaleY;
     if (line.scaleX != null && line.scaleX > 0) return line.scaleX;
-    if (zone.lines.length === 2) return 1;
+    if (zone.scaleX && zone.scaleY) return zone.scaleY;
+    if (zone.scaleX) return zone.scaleX;
     if (zone.scaleY) return zone.scaleY;
+    if (zone.lines.length === 2) return 1;
     return lineScaleXs[i]; // default: match X scale
   });
 
@@ -182,13 +187,19 @@ function renderZoneDots(
     const displayW = textWidthPx(displayText, scale, displayFont, line.spacing ?? 1, displayBold);
     const textW = displayW;
 
-    if (displayEffect === 'BLINK') {
-      const show = Math.floor(tick / 10) % 2 === 0;
-      if (!show) return;
+    // Mirror firmware blink timing (tick = 50ms): BLINK 1000/500,
+    // BLINK_FAST 500/250, BLINK_SLOW 2000/1000
+    if (displayEffect === 'BLINK' || displayEffect === 'BLINK_FAST' || displayEffect === 'BLINK_SLOW') {
+      const period = displayEffect === 'BLINK_FAST' ? 5 : displayEffect === 'BLINK_SLOW' ? 20 : 10;
+      if (Math.floor(tick / period) % 2 !== 0) return;
     }
 
+    // Mirror firmware: SCROLL only moves text wider than the zone; shorter
+    // text is placed by alignment exactly like a static line
+    const overflows = displayEffect === 'SCROLL' && textW > zoneWidth;
+
     let xOff: number;
-    if (displayEffect === 'SCROLL') {
+    if (overflows) {
       const speed = displayScrollSpeed;
       const loopW = textW + zoneWidth;
       const offset = zoneWidth - ((tick * speed) % loopW);
@@ -204,13 +215,21 @@ function renderZoneDots(
     const yOff = startY + lineYOffsets[li];
 
     if (displayBgColor) {
-      bgRects.push({
-        x: zoneX,
-        y: yOff,
-        w: zoneWidth,
-        h: CHAR_H * scaleY,
-        color: displayBgColor,
-      });
+      // Mirror firmware: scrolling text fills the zone; static text hugs it.
+      // Border rows are never painted.
+      const bgX = overflows ? zoneX : xOff;
+      const bgW = overflows ? zoneWidth : textW;
+      const bgH = CHAR_H * scaleY;
+      let segStart = -1;
+      for (let dy = 0; dy <= bgH; dy++) {
+        const py = yOff + dy;
+        const inBorder = isBorderRow(py, zone.borderRows);
+        if (!inBorder && segStart < 0) segStart = py;
+        if ((inBorder || dy === bgH) && segStart >= 0) {
+          bgRects.push({ x: bgX, y: segStart, w: bgW, h: py - segStart, color: displayBgColor });
+          segStart = -1;
+        }
+      }
     }
 
     const rawDots = textToDots(displayText, 0, 0, displayFont, scaleX, scaleY, line.spacing ?? 1, displayBold);

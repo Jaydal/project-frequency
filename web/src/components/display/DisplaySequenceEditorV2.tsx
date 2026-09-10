@@ -238,14 +238,26 @@ export function DisplaySequenceEditorV2({ sequence: initial }: Props) {
   const zones = page?.zones || [];
 
   const flatPages = useMemo(() => {
+    // Mirror sports-caster conditional filtering so the preview cycles only
+    // pages the firmware will actually receive (evaluated with mock values)
+    const strip = (k: string) => k.replace(/[{}]/g, '');
+    const visible = (p: ZonePage) => {
+      if (p.hideIfEmpty && p.hideIfEmpty.length > 0) {
+        if (p.hideIfEmpty.every(k => !mockValues[strip(k) as keyof MockValues])) return false;
+      }
+      if (p.showIfEmpty && p.showIfEmpty.length > 0) {
+        if (p.showIfEmpty.some(k => mockValues[strip(k) as keyof MockValues])) return false;
+      }
+      return true;
+    };
     const all: { page: ZonePage; section: string }[] = [];
     for (const key of SECTIONS) {
       for (const p of sections[key].pages) {
-        all.push({ page: p, section: key });
+        if (visible(p)) all.push({ page: p, section: key });
       }
     }
     return all;
-  }, [sections]);
+  }, [sections, mockValues]);
 
   function substituteMockVariables(text: string): string {
     let result = text;
@@ -257,7 +269,7 @@ export function DisplaySequenceEditorV2({ sequence: initial }: Props) {
 
   const previewZones = useMemo(() => {
     if (!isPreviewing || flatPages.length === 0) return zones;
-    const activePage = flatPages[previewPageIndex].page;
+    const activePage = flatPages[previewPageIndex % flatPages.length].page;
     return activePage.zones.map(zone => ({
       ...zone,
       lines: zone.lines.map(line => ({
@@ -282,7 +294,7 @@ export function DisplaySequenceEditorV2({ sequence: initial }: Props) {
 
   useEffect(() => {
     if (!isPreviewing || flatPages.length === 0) return;
-    const currentPage = flatPages[previewPageIndex].page;
+    const currentPage = flatPages[previewPageIndex % flatPages.length].page;
     const ms = (currentPage.durationSeconds || 10) * 1000;
     previewTimerRef.current = setTimeout(() => {
       setPreviewPageIndex(prev => (prev + 1) % flatPages.length);
