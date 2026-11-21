@@ -1,12 +1,14 @@
 #include "court_overview.h"
 #include "../theme/kiosk_theme.h"
 #include <stdio.h>
+#include <string.h>
 
-static void set_label(lv_obj_t *parent, const char *text, const lv_font_t *font, lv_color_t color) {
+static lv_obj_t *set_label(lv_obj_t *parent, const char *text, const lv_font_t *font, lv_color_t color) {
   lv_obj_t *label = lv_label_create(parent);
   lv_label_set_text(label, text);
   lv_obj_set_style_text_font(label, font, 0);
   lv_obj_set_style_text_color(label, color, 0);
+  return label;
 }
 
 lv_obj_t *court_overview_create(lv_obj_t *parent, const court_status_t *courts, uint8_t count) {
@@ -23,10 +25,6 @@ lv_obj_t *court_overview_create(lv_obj_t *parent, const court_status_t *courts, 
 
   for (uint8_t i = 0; i < count; i++) {
     const court_status_t *c = &courts[i];
-    int32_t elapsed = court_elapsed_sec(c);
-    int32_t prep_sec = kiosk_effective_prep_sec(c->duration_min, c->prep_time_sec);
-    court_phase_t phase = court_is_active(c) ? kiosk_phase_for_elapsed(elapsed, prep_sec) : COURT_PHASE_AVAILABLE;
-
     lv_obj_t *row = lv_obj_create(panel);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_set_width(row, lv_pct(100));
@@ -52,19 +50,33 @@ lv_obj_t *court_overview_create(lv_obj_t *parent, const court_status_t *courts, 
     lv_obj_set_size(dot, 6, 6);
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(dot, 0, 0);
-    lv_color_t dot_color = !court_is_active(c) ? kiosk_theme_color_text_muted()
-                          : (phase == COURT_PHASE_PREPARING ? kiosk_theme_color_warning() : kiosk_theme_color_success());
-    lv_obj_set_style_bg_color(dot, dot_color, 0);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
 
     set_label(left, c->name, &lv_font_montserrat_14, kiosk_theme_color_text());
 
-    if (court_is_active(c)) {
-      char time_buf[8];
-      kiosk_format_time(time_buf, sizeof(time_buf), elapsed);
-      set_label(row, time_buf, &lv_font_montserrat_14, kiosk_theme_color_text_muted());
-    }
+    lv_obj_t *clock = set_label(row, "", &lv_font_montserrat_14, kiosk_theme_color_text_muted());
+    lv_obj_set_width(clock, 64);
+    lv_obj_set_style_text_align(clock, LV_TEXT_ALIGN_RIGHT, 0);
   }
-
+  court_overview_tick(panel, courts, count);
   return panel;
+}
+
+void court_overview_tick(lv_obj_t *panel, const court_status_t *courts, uint8_t count) {
+  for (uint8_t i = 0; i < count; i++) {
+    const court_status_t *court = &courts[i];
+    lv_obj_t *row = lv_obj_get_child(panel, i + 1);
+    lv_obj_t *clock = lv_obj_get_child(row, 1);
+    lv_obj_t *dot = lv_obj_get_child(lv_obj_get_child(row, 0), 0);
+    char time_buf[8] = "";
+    lv_color_t color = kiosk_theme_color_text_muted();
+    if (court_is_active(court)) {
+      int32_t elapsed = court_elapsed_sec(court);
+      int32_t prep = kiosk_effective_prep_sec(court->duration_min, court->prep_time_sec);
+      kiosk_format_time(time_buf, sizeof(time_buf), elapsed);
+      color = elapsed < prep ? kiosk_theme_color_warning() : kiosk_theme_color_success();
+    }
+    if (strcmp(time_buf, lv_label_get_text(clock)) != 0) lv_label_set_text(clock, time_buf);
+    if (lv_obj_get_style_bg_color(dot, 0).full != color.full) lv_obj_set_style_bg_color(dot, color, 0);
+  }
 }

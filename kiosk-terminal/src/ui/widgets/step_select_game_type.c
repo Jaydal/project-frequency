@@ -22,7 +22,6 @@ static void back_cb(lv_event_t *e) {
 static lv_obj_t *make_tile(lv_obj_t *parent, const char *big, const char *sub, const char *desc) {
   lv_obj_t *tile = lv_btn_create(parent);
   lv_obj_add_style(tile, &kiosk_style_tile, 0);
-  lv_obj_add_style(tile, &kiosk_style_tile, LV_STATE_PRESSED);
   lv_obj_set_width(tile, lv_pct(48));
   lv_obj_set_height(tile, 140);
   lv_obj_set_style_pad_all(tile, 12, 0);
@@ -36,7 +35,7 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *big, const char *sub, c
   lv_obj_set_height(top, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(top, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(top, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *big_label = lv_label_create(top);
   lv_label_set_text(big_label, big);

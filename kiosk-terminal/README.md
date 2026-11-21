@@ -25,17 +25,26 @@ cmake --build build -j
 ```
 
 - A 1024×600 window will open.
-- The simulator provides simulated RFID tap buttons (**T1–T5**) in test mode to simulate different member scenarios (sufficient credits, low balance, active offers, etc.).
+- Press keys **1–5** in the simulator window to inject RFID scans for `TEST001` through `TEST005`.
 - Long-press the top-left corner on the idle screen to access WiFi and connection settings.
+
+To check touch behavior without a board, run the headless LVGL regression from `kiosk-terminal/` after configuring the simulator.
+
+```sh
+cmake --build build --target kiosk_keyboard_test -j 2
+./build/kiosk_keyboard_test
+```
+
+The test drives the booking flow with simulated RFID, board updates and Wi-Fi scan results. It checks navigation, queue and countdown redraws, dialog dismissal, overflow scrolling, keyboard input and button positions. The pixel counts measure the area LVGL requests to redraw on its 1024×600 framebuffer.
 
 ---
 
 ## 2. ESP32-S3 Hardware Target
 
 ### Hardware Specifications
-- **Board:** Waveshare ESP32-S3-Touch-LCD-7 (800×480 RGB LCD with capacitive touch)
+- **Board:** Waveshare ESP32-S3-Touch-LCD-7B (1024×600 RGB LCD with capacitive touch)
 - **NFC Reader:** PN532 NFC/RFID module
-- **Display Configuration:** Single PSRAM framebuffer (`num_fbs = 1`) with LVGL direct mode (`direct_mode = 1`) to eliminate screen tearing and prevent Wi-Fi DMA buffer starvation.
+- **Display Configuration:** Single PSRAM framebuffer (`num_fbs = 1`) with LVGL direct mode (`direct_mode = 1`) to limit PSRAM traffic. LVGL redraws dirty regions while the panel scans the same buffer. Check visible tearing on the physical panel with Wi-Fi and MQTT active.
 - **Button Animations:** `LV_THEME_DEFAULT_GROW` is disabled in `lv_conf.h` to ensure smooth rendering on single-buffered displays.
 
 ### I2C / NFC Hardware Conflict & Wiring

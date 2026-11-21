@@ -4,7 +4,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static const char *TAG = "wifi_scanner";
 
@@ -33,36 +34,28 @@ static void scan_task(void *pvParameters) {
     // Perform blocking scan
     esp_err_t err = esp_wifi_scan_start(&scan_config, true);
     
-    if (err == ESP_OK) {
-        uint16_t ap_count = 0;
-        esp_wifi_scan_get_ap_num(&ap_count);
-        
-        wifi_ap_record_t *ap_info = malloc(sizeof(wifi_ap_record_t) * ap_count);
-        if (ap_info) {
-            esp_wifi_scan_get_ap_records(&ap_count, ap_info);
-            
-            kiosk_wifi_ap_t *results = malloc(sizeof(kiosk_wifi_ap_t) * ap_count);
+    uint16_t ap_count = 0;
+    kiosk_wifi_ap_t *results = NULL;
+    if (err == ESP_OK && esp_wifi_scan_get_ap_num(&ap_count) == ESP_OK && ap_count) {
+        wifi_ap_record_t *records = calloc(ap_count, sizeof(*records));
+        if (records && esp_wifi_scan_get_ap_records(&ap_count, records) == ESP_OK) {
+            results = calloc(ap_count, sizeof(*results));
             if (results) {
-                for (int i = 0; i < ap_count; i++) {
-                    strncpy(results[i].ssid, (char *)ap_info[i].ssid, sizeof(results[i].ssid) - 1);
-                    results[i].ssid[sizeof(results[i].ssid) - 1] = '\0';
-                    results[i].rssi = ap_info[i].rssi;
+                for (uint16_t i = 0; i < ap_count; ++i) {
+                    snprintf(results[i].ssid, sizeof(results[i].ssid), "%.32s", (char *)records[i].ssid);
+                    results[i].rssi = records[i].rssi;
                 }
-                
-                if (args->cb) {
-                    args->cb(results, ap_count, args->user_data);
-                }
-                free(results);
             }
-            free(ap_info);
+        } else {
+            esp_wifi_clear_ap_list();
         }
-    } else {
+        free(records);
+    } else if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_wifi_scan_start failed: %s", esp_err_to_name(err));
-        if (args->cb) {
-            args->cb(NULL, 0, args->user_data);
-        }
     }
-    
+    if (args->cb) args->cb(results, results ? ap_count : 0, args->user_data);
+    free(results);
+
     g_wifi_scan_active = false;
     esp_wifi_connect();
     
@@ -72,11 +65,17 @@ static void scan_task(void *pvParameters) {
 
 void kiosk_wifi_scan_start(kiosk_wifi_scan_cb_t cb, void *user_data) {
     scan_task_args_t *args = malloc(sizeof(scan_task_args_t));
-    if (!args) return;
+    if (!args) {
+        if (cb) cb(NULL, 0, user_data);
+        return;
+    }
     args->cb = cb;
     args->user_data = user_data;
     
-    xTaskCreate(scan_task, "wifi_scan", 4096, args, 5, NULL);
+    if (xTaskCreate(scan_task, "wifi_scan", 4096, args, 5, NULL) != pdPASS) {
+        free(args);
+        if (cb) cb(NULL, 0, user_data);
+    }
 }
 
 void kiosk_wifi_get_ip(char *out_ip, size_t max_len) {

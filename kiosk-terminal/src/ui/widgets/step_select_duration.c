@@ -83,8 +83,7 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_style_pad_column(grid, 8, 0);
   lv_obj_set_style_pad_row(grid, 8, 0);
-  lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-  lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
+  kiosk_theme_vertical_list(grid);
 
   for (uint8_t i = 0; i < config->duration_count; i++) {
     int32_t d = config->durations_min[i];
@@ -97,7 +96,6 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
 
     lv_obj_t *tile = lv_btn_create(grid);
     lv_obj_add_style(tile, &kiosk_style_tile, 0);
-    lv_obj_add_style(tile, &kiosk_style_tile, LV_STATE_PRESSED);
     lv_obj_set_width(tile, lv_pct(48));
     lv_obj_set_height(tile, 105);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
@@ -112,7 +110,7 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_obj_set_height(top_row, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(top_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(top_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(top_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(top_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t *left_group = lv_obj_create(top_row);
     lv_obj_remove_style_all(left_group);
@@ -120,7 +118,7 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_obj_set_flex_flow(left_group, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(left_group, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(left_group, 4, 0);
-    lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(left_group, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     char dur_buf[8];
     snprintf(dur_buf, sizeof(dur_buf), "%d", (int)d);
@@ -157,7 +155,7 @@ lv_obj_t *step_select_duration_create(lv_obj_t *parent,
     lv_obj_set_flex_flow(bot_row, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(bot_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_row(bot_row, 2, 0);
-    lv_obj_clear_flag(bot_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(bot_row, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
     lv_obj_t *desc_label = lv_label_create(bot_row);
     lv_label_set_text(desc_label, label);

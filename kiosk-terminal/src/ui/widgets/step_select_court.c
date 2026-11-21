@@ -47,7 +47,6 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *name, const char *badge
                             bool disabled) {
   lv_obj_t *tile = lv_btn_create(parent);
   lv_obj_add_style(tile, &kiosk_style_tile, 0);
-  lv_obj_add_style(tile, &kiosk_style_tile, LV_STATE_PRESSED);
   lv_obj_set_width(tile, lv_pct(48));
   lv_obj_set_height(tile, 130);
   lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
@@ -67,7 +66,7 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *name, const char *badge
   lv_obj_set_height(top, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(top, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(top, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *left = lv_obj_create(top);
   lv_obj_remove_style_all(left);
@@ -76,7 +75,7 @@ static lv_obj_t *make_tile(lv_obj_t *parent, const char *name, const char *badge
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(left, 6, 0);
-  lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *icon_label = lv_label_create(left);
   lv_label_set_text(icon_label, icon);
@@ -158,8 +157,7 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
   lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
   lv_obj_set_style_pad_column(grid, 8, 0);
   lv_obj_set_style_pad_row(grid, 8, 0);
-  lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-  lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
+  kiosk_theme_vertical_list(grid);
 
   /* Any Court tile */
   court_btn_closure_t *any_closure = malloc(sizeof(court_btn_closure_t));
@@ -171,7 +169,6 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
 
   lv_obj_t *any_tile = lv_btn_create(grid);
   lv_obj_add_style(any_tile, &kiosk_style_tile, 0);
-  lv_obj_add_style(any_tile, &kiosk_style_tile, LV_STATE_PRESSED);
   lv_obj_set_width(any_tile, lv_pct(48));
   lv_obj_set_height(any_tile, 130);
   lv_obj_clear_flag(any_tile, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
@@ -190,14 +187,14 @@ lv_obj_t *step_select_court_create(lv_obj_t *parent,
   lv_obj_set_height(any_top, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(any_top, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(any_top, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_clear_flag(any_top, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(any_top, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
   lv_obj_t *any_left = lv_obj_create(any_top);
   lv_obj_remove_style_all(any_left);
   lv_obj_set_height(any_left, LV_SIZE_CONTENT);
   lv_obj_set_flex_flow(any_left, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(any_left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(any_left, 6, 0);
-  lv_obj_clear_flag(any_left, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(any_left, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
   lv_obj_t *any_icon = lv_label_create(any_left);
   lv_label_set_text(any_icon, LV_SYMBOL_PLAY);
   lv_obj_set_style_text_font(any_icon, &lv_font_montserrat_16, 0);

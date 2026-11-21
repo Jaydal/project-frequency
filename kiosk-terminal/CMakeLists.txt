@@ -113,3 +113,29 @@ target_link_libraries(kiosk_sim PRIVATE
 
 target_compile_options(kiosk_sim PRIVATE ${SDL2_CFLAGS_OTHER} ${CURL_CFLAGS_OTHER} ${MOSQUITTO_CFLAGS_OTHER})
 target_link_directories(kiosk_sim PRIVATE ${SDL2_LIBRARY_DIRS} ${CURL_LIBRARY_DIRS} ${MOSQUITTO_LIBRARY_DIRS})
+
+# Headless pointer, paint and navigation tests with in-memory device data.
+add_executable(kiosk_keyboard_test EXCLUDE_FROM_ALL
+  tests/keyboard_pointer_test.c
+  tests/navigation_fixture.c
+  src/ui/ui_app.c
+  src/ui/screens/queue_board.c
+  src/ui/screens/terminal_layout.c
+  src/ui/widgets/queue_list.c
+  src/ui/widgets/court_status_card.c
+  src/ui/widgets/court_overview.c
+  src/ui/widgets/step_error.c
+  src/ui/widgets/step_booking_success.c
+  src/ui/assets/img_logo_hero.c
+  src/hal_sim/sim_relay.c
+  src/ui/screens/setup_screen.c
+  src/ui/widgets/step_booking_confirm.c
+  src/ui/widgets/step_select_court.c
+  src/ui/widgets/step_select_game_type.c
+  src/ui/widgets/step_select_duration.c
+  src/ui/widgets/booking_stepper.c
+  src/ui/theme/kiosk_theme.c
+  src/ui/assets/img_logo_secondary.c
+)
+target_include_directories(kiosk_keyboard_test PRIVATE src src/net src/ui/assets)
+target_link_libraries(kiosk_keyboard_test PRIVATE lvgl)

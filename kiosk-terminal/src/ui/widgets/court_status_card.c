@@ -2,7 +2,7 @@
 #include "../theme/kiosk_theme.h"
 #include <stdio.h>
 #include <string.h>
-#include "../../data/kiosk_data_provider.h"
+
 
 #define COURT_CARD_HEIGHT 160
 #define COURT_TITLE_SLOT_HEIGHT 30
@@ -11,7 +11,7 @@
 #define COURT_PLAYERS_SLOT_HEIGHT 18
 
 static char s_timer_value_text[KIOSK_MAX_COURTS][8];
-static char s_timer_phase_text[KIOSK_MAX_COURTS][8];
+
 
 static lv_color_t timer_color_for_remaining(int32_t remaining_sec) {
   if (remaining_sec <= 60) return kiosk_theme_color_danger();
@@ -27,44 +27,22 @@ static lv_obj_t *set_label(lv_obj_t *parent, const char *text, const lv_font_t *
   return label;
 }
 
-static void big_timer_refresh_cb(lv_event_t *e) {
-  lv_obj_t *label = lv_event_get_target(e);
-  uint8_t court_idx = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
-  
-  kiosk_board_t board;
-  kiosk_data_provider_get()->get_board(&board);
-  if (court_idx >= board.court_count) return;
-  const court_status_t *court = &board.courts[court_idx];
-  
-  if (!court_is_active(court)) return;
-  
+void court_status_card_tick(lv_obj_t *value_label, const court_status_t *court, uint8_t court_idx) {
+  if (!value_label) return;
   int32_t elapsed = court_elapsed_sec(court);
   int32_t prep_sec = kiosk_effective_prep_sec(court->duration_min, court->prep_time_sec);
-  court_phase_t phase = kiosk_phase_for_elapsed(elapsed, prep_sec);
-  
   int32_t total_sec = court->duration_min * 60 + prep_sec;
   int32_t remaining = total_sec - elapsed;
   if (remaining < 0) remaining = 0;
   
   char time_buf[8];
   kiosk_format_time(time_buf, sizeof(time_buf), remaining);
-  const char *phase_text = "LEFT";
   if (strcmp(s_timer_value_text[court_idx], time_buf) != 0) {
     snprintf(s_timer_value_text[court_idx], sizeof(s_timer_value_text[court_idx]), "%s", time_buf);
-    lv_obj_t *timer_box = lv_obj_get_parent(label);
-    lv_obj_t *value_label = lv_obj_get_child(timer_box, 0);
     lv_label_set_text_static(value_label, s_timer_value_text[court_idx]);
   }
-  if (strcmp(s_timer_phase_text[court_idx], phase_text) != 0) {
-    snprintf(s_timer_phase_text[court_idx], sizeof(s_timer_phase_text[court_idx]), "%s", phase_text);
-    lv_obj_t *timer_box = lv_obj_get_parent(label);
-    lv_obj_t *phase_label = lv_obj_get_child(timer_box, 1);
-    lv_label_set_text_static(phase_label, s_timer_phase_text[court_idx]);
-  }
   lv_color_t phase_color = timer_color_for_remaining(remaining);
-  lv_obj_t *timer_box = lv_obj_get_parent(label);
-  lv_obj_t *value_label = lv_obj_get_child(timer_box, 0);
-  lv_obj_t *phase_label = lv_obj_get_child(timer_box, 1);
+  lv_obj_t *phase_label = lv_obj_get_child(lv_obj_get_parent(value_label), 1);
   lv_color_t value_color = lv_obj_get_style_text_color(value_label, 0);
   lv_color_t current_color = lv_obj_get_style_text_color(phase_label, 0);
   if (value_color.full != phase_color.full) {
@@ -75,7 +53,8 @@ static void big_timer_refresh_cb(lv_event_t *e) {
   }
 }
 
-lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court, uint8_t court_idx) {
+lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court, uint8_t court_idx, lv_obj_t **timer) {
+  *timer = NULL;
   lv_obj_t *card = lv_obj_create(parent);
   kiosk_theme_disable_transitions(card);
   lv_obj_set_width(card, lv_pct(100));
@@ -221,7 +200,6 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
     char time_buf[8];
     kiosk_format_time(time_buf, sizeof(time_buf), remaining);
      snprintf(s_timer_value_text[court_idx], sizeof(s_timer_value_text[court_idx]), "%s", time_buf);
-      snprintf(s_timer_phase_text[court_idx], sizeof(s_timer_phase_text[court_idx]), "LEFT");
      lv_obj_t *lbl_big = lv_label_create(timer_box);
      lv_label_set_text_static(lbl_big, s_timer_value_text[court_idx]);
        lv_obj_set_style_text_font(lbl_big, &lv_font_montserrat_32, 0);
@@ -235,11 +213,10 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
      /* The label rectangle is fixed. Left alignment keeps the text origin
       * constant when proportional digits change width on each tick. */
      lv_obj_set_style_text_align(lbl_big, LV_TEXT_ALIGN_LEFT, 0);
-     lv_obj_add_flag(lbl_big, LV_OBJ_FLAG_USER_1);
-     lv_obj_add_event_cb(lbl_big, big_timer_refresh_cb, LV_EVENT_REFRESH, (void *)(uintptr_t)court_idx);
+     *timer = lbl_big;
 
      lv_obj_t *lbl_phase = lv_label_create(timer_box);
-     lv_label_set_text_static(lbl_phase, s_timer_phase_text[court_idx]);
+     lv_label_set_text_static(lbl_phase, "LEFT");
       lv_obj_set_style_text_font(lbl_phase, &lv_font_montserrat_16, 0);
       lv_obj_set_style_text_color(lbl_phase, timer_color, 0);
      kiosk_theme_disable_transitions(lbl_phase);
@@ -248,8 +225,6 @@ lv_obj_t *court_status_card_create(lv_obj_t *parent, const court_status_t *court
        lv_obj_set_pos(lbl_phase, 165, 13);
      lv_label_set_long_mode(lbl_phase, LV_LABEL_LONG_CLIP);
      lv_obj_set_style_text_align(lbl_phase, LV_TEXT_ALIGN_LEFT, 0);
-     lv_obj_add_flag(lbl_phase, LV_OBJ_FLAG_USER_1);
-     lv_obj_add_event_cb(lbl_phase, big_timer_refresh_cb, LV_EVENT_REFRESH, (void *)(uintptr_t)court_idx);
 
   } else if (court->next_start_time == 0) {
     /* Use the reserved timer space for a useful, stable empty state instead

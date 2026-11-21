@@ -177,7 +177,10 @@ static void ta_event_cb(lv_event_t * e) {
       sync_match_title(ctx);
   }
 
-  if (code == LV_EVENT_FOCUSED) {
+  if (code == LV_EVENT_CLICKED || code == LV_EVENT_FOCUSED) {
+      lv_indev_t *input = lv_indev_get_act();
+      if (code == LV_EVENT_FOCUSED && input &&
+          lv_indev_get_type(input) == LV_INDEV_TYPE_POINTER) return;
       if (ctx->input_modal) return;
       
       lv_obj_add_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
@@ -244,6 +247,7 @@ static void ta_event_cb(lv_event_t * e) {
       /* Keyboard — fixed at bottom, not managed by flex */
       lv_obj_t *kb = lv_btnmatrix_create(ctx->input_modal);
       lv_btnmatrix_set_map(kb, KEYS_LOWER);
+      kiosk_theme_style_keyboard(kb);
       lv_obj_set_size(kb, 1024, 360);
       lv_obj_set_style_min_height(kb, 360, 0);
       lv_obj_set_style_max_height(kb, 360, 0);
@@ -251,7 +255,6 @@ static void ta_event_cb(lv_event_t * e) {
       lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
       lv_obj_add_flag(kb, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
-      kiosk_theme_style_keyboard(kb);
 
       lv_obj_add_event_cb(kb, static_keyboard_event_cb, LV_EVENT_VALUE_CHANGED, ctx);
 
@@ -498,6 +501,7 @@ lv_obj_t *step_booking_confirm_create(lv_obj_t *parent,
 
   lv_obj_t *ta = lv_textarea_create(match_title_col);
   lv_textarea_set_one_line(ta, true);
+  lv_textarea_set_cursor_click_pos(ta, false);
   lv_textarea_set_max_length(ta, 64);
   lv_obj_set_height(ta, 38);
   lv_obj_clear_flag(ta, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);

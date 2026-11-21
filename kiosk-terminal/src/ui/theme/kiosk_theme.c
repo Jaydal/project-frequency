@@ -174,94 +174,27 @@ void kiosk_format_time(char *buf, size_t buf_size, int32_t seconds) {
   snprintf(buf, buf_size, "%02d:%02d", (int)m, (int)s);
 }
 
-static lv_style_transition_dsc_t kb_trans_dsc;
-static bool kb_trans_init = false;
-
 void kiosk_theme_style_keyboard(lv_obj_t *kb) {
-  if (!kb_trans_init) {
-    static const lv_style_prop_t props[] = {0};
-    lv_style_transition_dsc_init(&kb_trans_dsc, props, lv_anim_path_linear, 0, 0, NULL);
-    kb_trans_init = true;
-  }
-  
-  /* Disable transitions entirely on the keyboard parts to prevent state-change flickering */
-  lv_obj_set_style_transition(kb, &kb_trans_dsc, LV_PART_MAIN);
-  lv_obj_set_style_transition(kb, &kb_trans_dsc, LV_PART_ITEMS);
-
-  /* Disable animations */
-  lv_obj_set_style_anim_time(kb, 0, LV_PART_MAIN);
-  lv_obj_set_style_anim_time(kb, 0, LV_PART_ITEMS);
-
-  /* Main background (must match key background to hide lv_btnmatrix virtual overdraw flicker) */
+  /* Remove inherited state styles before the caller sets coordinates.
+   * A single style per part keeps press/focus out of layout. */
+  lv_obj_remove_style_all(kb);
+  lv_obj_clear_flag(kb, LV_OBJ_FLAG_CLICK_FOCUSABLE | LV_OBJ_FLAG_SCROLL_CHAIN);
   lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_MAIN);
-  lv_obj_set_style_border_width(kb, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(kb, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(kb, 4, LV_PART_MAIN);
+  lv_obj_set_style_pad_row(kb, 4, LV_PART_MAIN);
+  lv_obj_set_style_pad_column(kb, 4, LV_PART_MAIN);
 
-  /* Individual keys (background matches main to hide tearing) */
   lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_ITEMS);
   lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS);
   lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS);
   lv_obj_set_style_border_color(kb, kiosk_theme_color_border(), LV_PART_ITEMS);
   lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS);
-  /* Set radius to 0 so LVGL can fully cull the background drawing underneath the opaque keys */
   lv_obj_set_style_radius(kb, 4, LV_PART_ITEMS);
-  lv_obj_set_style_shadow_width(kb, 0, LV_PART_ITEMS);
-  lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS);
-  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS);
-  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  /* Constant gutters improve key readability without changing the keyboard's
-   * fixed outer rectangle or introducing press-time reflow. */
-  lv_obj_set_style_pad_row(kb, 4, LV_PART_MAIN);
-  lv_obj_set_style_pad_column(kb, 4, LV_PART_MAIN);
-  lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_translate_y(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_pad_top(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_pad_bottom(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  /* Never let focus/check/pressed state alter key geometry or paint. */
-  lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_CHECKED);
-  lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_CHECKED);
-  lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_CHECKED);
-  lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_ANY);
-  lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_ANY);
 
-  /* Pressed state for keys (keep border width 1 to prevent layout shift!) */
-  /* Keep the pressed state visually identical to the normal state. This
-   * avoids a second full key redraw on every touch event. */
-  lv_obj_set_style_bg_color(kb, kiosk_theme_color_bg(), LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_text_color(kb, kiosk_theme_color_text_strong(), LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_border_width(kb, 1, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_border_color(kb, kiosk_theme_color_border(), LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_border_opa(kb, LV_OPA_COVER, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_color_filter_opa(kb, LV_OPA_TRANSP, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_transition(kb, &kb_trans_dsc, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_anim_time(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_pad_row(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_pad_column(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  
-  /* OVERRIDE LVGL DEFAULT THEME TRANSFORMATIONS (prevent height/size animating on press) */
-  lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_translate_y(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-  lv_obj_set_style_transform_width(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_transform_height(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_transform_zoom(kb, 256, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_translate_y(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_color_filter_opa(kb, LV_OPA_TRANSP, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_transition(kb, &kb_trans_dsc, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_anim_time(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
-  lv_obj_set_style_pad_all(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
+  /* Commit the final key on release, including mode keys, OK and Cancel.
+   * All three maps have the same button count, so LVGL 8 keeps these flags. */
+  lv_btnmatrix_set_btn_ctrl_all(kb, LV_BTNMATRIX_CTRL_CLICK_TRIG | LV_BTNMATRIX_CTRL_NO_REPEAT);
 }
 
 void kiosk_theme_style_modal_ta(lv_obj_t *ta) {
@@ -291,6 +224,15 @@ void kiosk_theme_style_modal_ta(lv_obj_t *ta) {
   /* Focused state */
   lv_obj_set_style_border_color(ta, kiosk_theme_color_primary(), LV_STATE_FOCUSED);
   lv_obj_set_style_border_width(ta, 2, LV_STATE_FOCUSED);
+}
+
+/* A drag moves only overflowing content and stops at finger release. */
+void kiosk_theme_vertical_list(lv_obj_t *list) {
+  lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(list, LV_DIR_VER);
+  lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM |
+                          LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
 }
 
 void kiosk_theme_disable_transitions(lv_obj_t *obj) {

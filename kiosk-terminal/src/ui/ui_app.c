@@ -66,6 +66,10 @@ typedef struct {
 
 static ui_app_state_t s_app;
 static lv_obj_t *s_screen_root = NULL;
+static queue_board_view_t s_idle_view;
+/* Keep the current and last displayed snapshots off the ESP32 UI task stack. */
+static kiosk_board_t s_tick_board;
+static kiosk_board_t s_displayed_board;
 
 const kiosk_data_provider_t *kiosk_data_provider_get(void) {
   return s_app.provider;
@@ -689,13 +693,25 @@ static void ensure_screen_root(void) {
   }
 }
 
+static void update_overview(void) {
+  lv_obj_t *sidebar = s_app.terminal_layout.sidebar;
+  if (!lv_obj_get_child_cnt(sidebar) || s_tick_board.court_count != s_displayed_board.court_count ||
+      memcmp(s_tick_board.courts, s_displayed_board.courts,
+             s_tick_board.court_count * sizeof(court_status_t)) != 0) {
+    lv_obj_clean(sidebar);
+    court_overview_create(sidebar, s_tick_board.courts, s_tick_board.court_count);
+    s_displayed_board = s_tick_board;
+    return;
+  }
+  court_overview_tick(lv_obj_get_child(sidebar, 0), s_tick_board.courts, s_tick_board.court_count);
+}
+
 static void render_current(void) {
   /* Page changes rebuild fixed booking regions in place. Cancel any residual
    * theme/widget animation before deleting the old tree so an earlier touch
    * state cannot continue while the next page is being constructed. */
   lv_anim_del_all();
   lv_timer_pause(_lv_disp_get_refr_timer(NULL));
-  static kiosk_board_t board;
 
   ensure_screen_root();
   char member_name[64];
@@ -719,7 +735,6 @@ static void render_current(void) {
       s_app.has_terminal_layout = true;
     } else {
       lv_obj_clean(s_app.terminal_layout.content);
-      lv_obj_clean(s_app.terminal_layout.sidebar);
     }
   } else {
     if (s_app.has_terminal_layout) {
@@ -729,6 +744,16 @@ static void render_current(void) {
     } else if (s_app.current_root) {
       lv_obj_clean(s_screen_root);
       s_app.current_root = NULL;
+    }
+  }
+
+  if (needs_terminal) {
+    bool show_overview = s_app.step == KIOSK_STEP_EXISTING_QUEUE || s_app.step == KIOSK_STEP_SELECT_COURT ||
+                         s_app.step == KIOSK_STEP_SELECT_GAME || s_app.step == KIOSK_STEP_SELECT_DURATION;
+    terminal_layout_set_sidebar(&s_app.terminal_layout, show_overview);
+    if (show_overview) {
+      s_app.provider->get_board(&s_tick_board);
+      update_overview();
     }
   }
 
@@ -742,8 +767,8 @@ static void render_current(void) {
       break;
     }
     case KIOSK_STEP_IDLE: {
-      s_app.provider->get_board(&board);
-      s_app.current_root = queue_board_create(s_screen_root, &board, handle_scan, NULL);
+      s_app.provider->get_board(&s_displayed_board);
+      s_app.current_root = queue_board_create(s_screen_root, &s_displayed_board, &s_idle_view);
       lv_obj_t *corner = lv_obj_create(s_app.current_root);
       lv_obj_remove_style_all(corner);
       lv_obj_set_size(corner, 60, 60);
@@ -754,14 +779,10 @@ static void render_current(void) {
     }
 
     case KIOSK_STEP_EXISTING_QUEUE: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, true);
       build_existing_queue_screen(s_app.terminal_layout.content);
-      s_app.provider->get_board(&board);
-      court_overview_create(s_app.terminal_layout.sidebar, board.courts, board.court_count);
       break;
     }
     case KIOSK_STEP_SELECT_COURT: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, true);
       court_option_t options[KIOSK_MAX_COURTS];
       uint8_t count = 0;
       s_app.provider->get_court_options(options, &count);
@@ -771,24 +792,18 @@ static void render_current(void) {
                                  options, count,
                                  handle_select_court,
                                  close_to_idle, NULL, NULL);
-       s_app.provider->get_board(&board);
-       court_overview_create(s_app.terminal_layout.sidebar, board.courts, board.court_count);
       break;
     }
     case KIOSK_STEP_SELECT_GAME: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, true);
       format_member_name(member_name, sizeof(member_name));
        step_select_game_type_create(s_app.terminal_layout.content,
                                     member_name, s_app.member.balance,
                                     handle_select_game_type,
                                     close_to_idle, NULL,
                                     handle_back_step, NULL, NULL);
-      s_app.provider->get_board(&board);
-      court_overview_create(s_app.terminal_layout.sidebar, board.courts, board.court_count);
       break;
     }
     case KIOSK_STEP_SELECT_DURATION: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, true);
       kiosk_products_config_t cfg;
       s_app.provider->get_products_config(&cfg);
       format_member_name(member_name, sizeof(member_name));
@@ -800,12 +815,9 @@ static void render_current(void) {
                                    handle_select_duration,
                                    close_to_idle, NULL,
                                    handle_back_step, NULL, NULL);
-      s_app.provider->get_board(&board);
-      court_overview_create(s_app.terminal_layout.sidebar, board.courts, board.court_count);
       break;
     }
     case KIOSK_STEP_CONFIRM: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, false);
       kiosk_products_config_t cfg;
       s_app.provider->get_products_config(&cfg);
       int32_t party_size = (s_app.game_type == GAME_TYPE_2V2) ? 4 : 2;
@@ -828,7 +840,6 @@ static void render_current(void) {
       break;
     }
     case KIOSK_STEP_LOADING: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, false);
       lv_obj_t *lbl = lv_label_create(s_app.terminal_layout.content);
       lv_label_set_text(lbl, "Loading...");
       lv_obj_set_style_text_font(lbl, &lv_font_montserrat_32, 0);
@@ -837,12 +848,10 @@ static void render_current(void) {
       break;
     }
     case KIOSK_STEP_SUCCESS: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, false);
       step_booking_success_create(s_app.terminal_layout.content, &s_app.result);
       break;
     }
     case KIOSK_STEP_ERROR: {
-      terminal_layout_set_sidebar(&s_app.terminal_layout, false);
       step_error_create(s_app.terminal_layout.content, &s_app.error, handle_error_retry, NULL);
       break;
     }
@@ -855,23 +864,6 @@ static void render_current(void) {
 }
 /* ---- periodic refresh ---- */
 
-static void send_refresh_recursive(lv_obj_t *obj) {
-    if (!obj) return;
-    /* Only timer labels need a one-second refresh. Sending LV_EVENT_REFRESH
-     * to every object causes unnecessary invalidation/layout work and flashes
-     * the single direct-mode framebuffer when multiple courts are active. */
-    if (lv_obj_has_flag(obj, LV_OBJ_FLAG_USER_1)) {
-        lv_event_send(obj, LV_EVENT_REFRESH, NULL);
-    }
-    uint32_t count = lv_obj_get_child_cnt(obj);
-    for(uint32_t i = 0; i < count; i++) {
-        send_refresh_recursive(lv_obj_get_child(obj, i));
-    }
-}
-
-static uint32_t s_last_board_version = 0;
-static bool s_last_court_active[KIOSK_MAX_COURTS];
-static bool s_have_court_activity = false;
 #ifdef ESP_PLATFORM
 static volatile bool s_queue_advance_running = false;
 static uint32_t s_last_queue_advance_tick = 0;
@@ -910,13 +902,12 @@ static void on_tick(lv_timer_t *timer) {
    * game window, OFF otherwise. Edge-triggered so the relay only switches
    * on real transitions. Runs on every tick in every step. */
   if (s_app.provider) {
-    static kiosk_board_t lights_board;
     static bool lights_on = false;
     static bool lights_known = false;
-    s_app.provider->get_board(&lights_board);
+    s_app.provider->get_board(&s_tick_board);
     bool any_active = false;
-    for (uint8_t i = 0; i < lights_board.court_count; i++) {
-      if (court_is_active(&lights_board.courts[i])) { any_active = true; break; }
+    for (uint8_t i = 0; i < s_tick_board.court_count; i++) {
+      if (court_is_active(&s_tick_board.courts[i])) { any_active = true; break; }
     }
     if (!lights_known || any_active != lights_on) {
       lights_known = true;
@@ -980,50 +971,30 @@ static void on_tick(lv_timer_t *timer) {
       return;
     }
   } else if (s_app.step == KIOSK_STEP_IDLE) {
-    uint32_t current_ver = s_app.provider->get_board_version();
-    bool board_changed = (current_ver != s_last_board_version);
-    s_last_board_version = current_ver;
-
-    // The server remains authoritative, but the kiosk can safely update its
-    // local presentation when a scheduled game window expires. This avoids
-    // leaving a court card at 00:00 until the next MQTT publication.
-    kiosk_board_t board;
-    s_app.provider->get_board(&board);
-    bool local_activity_changed = !s_have_court_activity;
+    queue_board_update(&s_idle_view, &s_displayed_board, &s_tick_board);
+    s_displayed_board = s_tick_board;
+#ifdef ESP_PLATFORM
     bool has_expired_game_on_server = false;
     bool has_available_court = false;
-    for (uint8_t i = 0; i < board.court_count && i < KIOSK_MAX_COURTS; i++) {
-        bool active = court_is_active(&board.courts[i]);
-        if (!active) {
-            has_available_court = true;
-            if (board.courts[i].start_time > 0) {
-                has_expired_game_on_server = true;
-            }
-        }
-        if (s_have_court_activity && active != s_last_court_active[i]) {
-            local_activity_changed = true;
-        }
-        s_last_court_active[i] = active;
+    for (uint8_t i = 0; i < s_tick_board.court_count; i++) {
+      if (!court_is_active(&s_tick_board.courts[i])) {
+        has_available_court = true;
+        if (s_tick_board.courts[i].start_time > 0) has_expired_game_on_server = true;
+      }
     }
-    s_have_court_activity = true;
-
-    if (board_changed || local_activity_changed) {
-        render_current();
-    } else {
-        send_refresh_recursive(s_app.current_root);
-    }
-#ifdef ESP_PLATFORM
     /* A transition can be missed while booting or offline. Reconcile whenever
      * an expired game is stuck on the server, or a queued player exists. */
     uint32_t now_tick = lv_tick_get();
     bool advance_cooldown_elapsed = (now_tick - s_last_queue_advance_tick) >= 10000;
-    if ((has_expired_game_on_server || (board.queue_count > 0 && has_available_court)) &&
+    if ((has_expired_game_on_server || (s_tick_board.queue_count > 0 && has_available_court)) &&
         advance_cooldown_elapsed && !s_queue_advance_running) {
         s_last_queue_advance_tick = now_tick;
         s_queue_advance_running = true;
         xTaskCreate(queue_advance_task, "queue_advance", 6144, NULL, 4, NULL);
     }
 #endif
+  } else if (s_app.has_terminal_layout && !lv_obj_has_flag(s_app.terminal_layout.sidebar, LV_OBJ_FLAG_HIDDEN)) {
+    update_overview();
   } else if (s_app.step == KIOSK_STEP_SUCCESS) {
     if (time(NULL) - s_app.success_entered_at >= 4) {
       reset_to_idle();

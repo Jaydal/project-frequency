@@ -8,8 +8,14 @@
 #include <string.h>
 #include "../../net/nfc_reader.h"
 
+static court_phase_t current_phase(const court_status_t *court) {
+  if (!court_is_active(court)) return COURT_PHASE_AVAILABLE;
+  return kiosk_phase_for_elapsed(court_elapsed_sec(court),
+      kiosk_effective_prep_sec(court->duration_min, court->prep_time_sec));
+}
+
 lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
-                              queue_board_scan_cb_t on_scan, void *user_data) {
+                              queue_board_view_t *view) {
   lv_obj_t *root = lv_obj_create(parent);
   lv_obj_remove_style_all(root);
   lv_obj_add_style(root, &kiosk_style_screen_bg, 0);
@@ -32,6 +38,7 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
 
   lv_obj_t *nfc_status = lv_obj_create(top_right);
   lv_obj_remove_style_all(nfc_status);
+  view->nfc_status = nfc_status;
   lv_obj_set_size(nfc_status, 12, 12);
   lv_obj_set_style_bg_color(nfc_status,
                             nfc_reader_is_online() ? kiosk_theme_color_success()
@@ -82,8 +89,7 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
    * compact fixed footprint so up to three courts fit without scrolling. */
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(left, 6, 0);
-  lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-  lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_OFF);
+  kiosk_theme_vertical_list(left);
 
   lv_obj_t *courts_title = lv_label_create(left);
   lv_label_set_text(courts_title, "Courts");
@@ -92,8 +98,10 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
   lv_obj_set_width(courts_title, lv_pct(100));
   lv_obj_set_height(courts_title, 22);
 
+  view->court_column = left;
   for (uint8_t i = 0; i < board->court_count; i++) {
-    court_status_card_create(left, &board->courts[i], i);
+    view->phases[i] = current_phase(&board->courts[i]);
+    view->cards[i] = court_status_card_create(left, &board->courts[i], i, &view->timers[i]);
   }
 
   lv_obj_t *right = lv_obj_create(columns);
@@ -124,7 +132,37 @@ lv_obj_t *queue_board_create(lv_obj_t *parent, const kiosk_board_t *board,
    lv_obj_set_height(queue_title_label, 20);
    lv_label_set_long_mode(queue_title_label, LV_LABEL_LONG_CLIP);
 
-  queue_list_create(queue_panel, board->queue, board->queue_count);
+  view->queue_title = queue_title_label;
+  view->queue_list = queue_list_create(queue_panel, board->queue, board->queue_count);
 
   return root;
+}
+
+void queue_board_update(queue_board_view_t *view, const kiosk_board_t *previous, const kiosk_board_t *board) {
+  lv_color_t nfc_color = nfc_reader_is_online() ? kiosk_theme_color_success() : kiosk_theme_color_danger();
+  if (lv_obj_get_style_bg_color(view->nfc_status, 0).full != nfc_color.full) {
+    lv_obj_set_style_bg_color(view->nfc_status, nfc_color, 0);
+  }
+  for (uint8_t i = board->court_count; i < previous->court_count; i++) {
+    lv_obj_del(view->cards[i]);
+    view->cards[i] = NULL;
+    view->timers[i] = NULL;
+  }
+  for (uint8_t i = 0; i < board->court_count; i++) {
+    const court_status_t *court = &board->courts[i];
+    court_phase_t phase = current_phase(court);
+    if (i >= previous->court_count || view->phases[i] != phase ||
+        memcmp(court, &previous->courts[i], sizeof(*court)) != 0) {
+      if (i < previous->court_count) lv_obj_del(view->cards[i]);
+      view->cards[i] = court_status_card_create(view->court_column, court, i, &view->timers[i]);
+      lv_obj_move_to_index(view->cards[i], i + 1); /* First child is the heading. */
+      view->phases[i] = phase;
+    } else {
+      court_status_card_tick(view->timers[i], court, i);
+    }
+  }
+  if (previous->queue_count != board->queue_count) {
+    lv_label_set_text_fmt(view->queue_title, "QUEUE (%u)", (unsigned)board->queue_count);
+  }
+  queue_list_update(view->queue_list, previous->queue, previous->queue_count, board->queue, board->queue_count);
 }

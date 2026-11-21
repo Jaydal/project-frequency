@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include "../../net/wifi_scanner.h"
 #include "../../net/nfc_reader.h"
 #include "../../net/freq_rest_client.h"
@@ -52,7 +53,6 @@ typedef struct {
   lv_obj_t *root;
   setup_done_cb_t on_done;
   void *user_data;
-  uint32_t instance_id;
 } setup_ctx_t;
 
 static void free_ctx_cb(lv_event_t *e) {
@@ -87,29 +87,23 @@ static const char *KEYS_SYMBOLS[] = {
   "ABC", "SPACE", "BKSP", "abc", "CANCEL", "OK", ""
 };
 
-static void repaint_input_preview(setup_ctx_t *ctx) {
-  if (!ctx->input_modal) return;
-  size_t len = strlen(ctx->input_text);
-  
-  if (len >= ctx->input_page_start + INPUT_CELL_COUNT) {
-    ctx->input_page_start = len - INPUT_CELL_COUNT + 1;
-  } else if (len < ctx->input_page_start) {
-    ctx->input_page_start = 0;
-  }
+static size_t input_page_for_length(size_t length) {
+  return length ? ((length - 1) / INPUT_CELL_COUNT) * INPUT_CELL_COUNT : 0;
+}
 
-  for (size_t i = 0; i < INPUT_CELL_COUNT; i++) {
-    size_t char_idx = ctx->input_page_start + i;
-    if (char_idx < len) {
-      if (ctx->input_password) {
-        ctx->input_cell_text[i][0] = '*';
-      } else {
-        ctx->input_cell_text[i][0] = ctx->input_text[char_idx];
-      }
-      ctx->input_cell_text[i][1] = '\0';
-    } else {
-      ctx->input_cell_text[i][0] = '\0';
-    }
-    lv_label_set_text_static(ctx->input_cells[i], ctx->input_cell_text[i]);
+static void refresh_input_cells(setup_ctx_t *ctx) {
+  if (!ctx->input_modal) return;
+  const size_t length = strlen(ctx->input_text);
+  ctx->input_page_start = input_page_for_length(length);
+
+  for (size_t slot = 0; slot < INPUT_CELL_COUNT; slot++) {
+    const size_t index = ctx->input_page_start + slot;
+    char visible = '\0';
+    if (index < length) visible = ctx->input_password ? '*' : ctx->input_text[index];
+    if (ctx->input_cell_text[slot][0] == visible) continue;
+    ctx->input_cell_text[slot][0] = visible;
+    lv_obj_t *cell = ctx->input_cells[slot];
+    lv_label_set_text_static(cell, ctx->input_cell_text[slot]);
   }
 }
 
@@ -161,7 +155,7 @@ static void static_keyboard_event_cb(lv_event_t *e) {
     }
   }
 
-  repaint_input_preview(ctx);
+  refresh_input_cells(ctx);
 }
 
 static void field_focus_cb(lv_event_t *e) {
@@ -169,6 +163,9 @@ static void field_focus_cb(lv_event_t *e) {
   lv_obj_t *target_ta = lv_event_get_target(e);
 
   if (ctx->input_modal) return;
+  lv_indev_t *input = lv_indev_get_act();
+  if (lv_event_get_code(e) == LV_EVENT_FOCUSED && input &&
+      lv_indev_get_type(input) == LV_INDEV_TYPE_POINTER) return;
 
   lv_obj_add_flag(ctx->root, LV_OBJ_FLAG_HIDDEN);
 
@@ -233,10 +230,10 @@ static void field_focus_cb(lv_event_t *e) {
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text_static(cell, ctx->input_cell_text[i]);
   }
-  /* Do not repaint the preview for each key; commit the buffered text on OK. */
 
   lv_obj_t *kb = lv_btnmatrix_create(ctx->input_modal);
   lv_btnmatrix_set_map(kb, KEYS_LOWER);
+  kiosk_theme_style_keyboard(kb);
   /* The target panel is 1024x600. Use a hard geometry rectangle so no flex,
    * percentage, or pressed-state recalculation can move the matrix. */
   lv_obj_set_size(kb, 1024, 360);
@@ -246,10 +243,9 @@ static void field_focus_cb(lv_event_t *e) {
   lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
   lv_obj_add_flag(kb, LV_OBJ_FLAG_IGNORE_LAYOUT);
   
-  kiosk_theme_style_keyboard(kb);
 
   lv_obj_add_event_cb(kb, static_keyboard_event_cb, LV_EVENT_VALUE_CHANGED, ctx);
-  repaint_input_preview(ctx);
+  refresh_input_cells(ctx);
 }
 
 static void wifi_list_btn_cb(lv_event_t *e) {
@@ -264,78 +260,99 @@ static void wifi_list_btn_cb(lv_event_t *e) {
   ctx->scan_list = NULL;
 }
 
+/* The radio task only writes the result. LVGL's timer consumes it on the UI
+ * thread. If setup closes, the scan can finish without touching that screen. */
 typedef struct {
-  setup_ctx_t *ctx;
+  setup_ctx_t *owner;
   kiosk_wifi_ap_t *results;
   uint16_t count;
-  uint32_t instance_id;
-} scan_result_data_t;
+  atomic_bool ready;
+} scan_request_t;
 
-static uint32_t s_setup_instance_id = 0;
+static scan_request_t *pending_scan;
 
-static void async_scan_result_cb(void *arg) {
-  scan_result_data_t *data = arg;
-  setup_ctx_t *ctx = data->ctx;
+static void scan_modal_deleted(lv_event_t *event) {
+  setup_ctx_t *ctx = lv_event_get_user_data(event);
+  if (pending_scan && pending_scan->owner == ctx) pending_scan->owner = NULL;
+  ctx->scan_msgbox = NULL;
+  ctx->scan_list = NULL;
+}
 
-  if (data->instance_id != s_setup_instance_id) {
-     if (data->results) free(data->results);
-     free(data);
-     return;
-  }
-
-  if (!ctx->scan_msgbox || !ctx->scan_list) {
-     if (data->results) free(data->results);
-     free(data);
-     return;
-  }
-
-  lv_obj_clean(ctx->scan_list);
-
-  if (data->count == 0) {
-    lv_obj_t *label = lv_label_create(ctx->scan_list);
-    lv_label_set_text(label, "No networks found.");
-  } else {
-    for (int i = 0; i < data->count; i++) {
-      lv_obj_t *btn = lv_list_add_btn(ctx->scan_list, LV_SYMBOL_WIFI, data->results[i].ssid);
+static void show_scan_results(lv_timer_t *timer) {
+  scan_request_t *request = timer->user_data;
+  if (!atomic_load(&request->ready)) return;
+  setup_ctx_t *ctx = request->owner;
+  if (ctx) {
+    lv_obj_clean(ctx->scan_list);
+    if (!request->count) {
+      lv_obj_t *label = lv_label_create(ctx->scan_list);
+      lv_label_set_text(label, "No networks found.");
+    }
+    for (uint16_t i = 0; i < request->count; ++i) {
+      lv_obj_t *btn = lv_list_add_btn(ctx->scan_list, LV_SYMBOL_WIFI, request->results[i].ssid);
       kiosk_theme_disable_transitions(btn);
+      for (uint32_t j = 0; j < lv_obj_get_child_cnt(btn); ++j) {
+        lv_obj_t *child = lv_obj_get_child(btn, j);
+        if (lv_obj_check_type(child, &lv_label_class)) lv_label_set_long_mode(child, LV_LABEL_LONG_CLIP);
+      }
       lv_obj_add_event_cb(btn, wifi_list_btn_cb, LV_EVENT_CLICKED, ctx);
     }
   }
-
-  if (data->results) free(data->results);
-  free(data);
+  free(request->results);
+  free(request);
+  pending_scan = NULL;
+  lv_timer_del(timer);
 }
 
 static void wifi_scan_result_cb(kiosk_wifi_ap_t *results, uint16_t count, void *user_data) {
-  scan_result_data_t *data = malloc(sizeof(scan_result_data_t));
-  setup_ctx_t *ctx = user_data;
-  data->ctx = ctx;
-  data->instance_id = ctx->instance_id;
-  data->count = count;
-  if (count > 0 && results) {
-     data->results = malloc(sizeof(kiosk_wifi_ap_t) * count);
-     memcpy(data->results, results, sizeof(kiosk_wifi_ap_t) * count);
-  } else {
-     data->results = NULL;
+  scan_request_t *request = user_data;
+  if (count && results) {
+    request->results = malloc(sizeof(*results) * count);
+    if (request->results) {
+      memcpy(request->results, results, sizeof(*results) * count);
+      request->count = count;
+    }
   }
-  lv_async_call(async_scan_result_cb, data);
+  atomic_store(&request->ready, true);
 }
 
 static void scan_btn_cb(lv_event_t *e) {
   setup_ctx_t *ctx = lv_event_get_user_data(e);
 
   ctx->scan_msgbox = lv_msgbox_create(NULL, "Available Networks", "", NULL, true);
+  lv_obj_set_width(ctx->scan_msgbox, 360);
+  lv_obj_clear_flag(ctx->scan_msgbox, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(lv_obj_get_parent(ctx->scan_msgbox), LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_event_cb(ctx->scan_msgbox, scan_modal_deleted, LV_EVENT_DELETE, ctx);
+  lv_label_set_long_mode(lv_msgbox_get_title(ctx->scan_msgbox), LV_LABEL_LONG_CLIP);
   kiosk_theme_disable_transitions(lv_msgbox_get_close_btn(ctx->scan_msgbox));
   lv_obj_center(ctx->scan_msgbox);
 
   ctx->scan_list = lv_list_create(ctx->scan_msgbox);
-  lv_obj_set_scrollbar_mode(ctx->scan_list, LV_SCROLLBAR_MODE_OFF);
+  kiosk_theme_vertical_list(ctx->scan_list);
   lv_obj_set_size(ctx->scan_list, 300, 200);
 
   lv_obj_t *label = lv_label_create(ctx->scan_list);
   lv_label_set_text(label, "Scanning...");
 
-  kiosk_wifi_scan_start(wifi_scan_result_cb, ctx);
+  if (pending_scan) {
+    pending_scan->owner = ctx;
+    return;
+  }
+  pending_scan = calloc(1, sizeof(*pending_scan));
+  if (!pending_scan) {
+    lv_label_set_text(label, "Unable to start scan.");
+    return;
+  }
+  pending_scan->owner = ctx;
+  atomic_init(&pending_scan->ready, false);
+  if (!lv_timer_create(show_scan_results, 80, pending_scan)) {
+    free(pending_scan);
+    pending_scan = NULL;
+    lv_label_set_text(label, "Unable to start scan.");
+    return;
+  }
+  kiosk_wifi_scan_start(wifi_scan_result_cb, pending_scan);
 }
 
 static void save_cb(lv_event_t *e) {
@@ -364,12 +381,10 @@ static void reset_cb(lv_event_t *e) {
 }
 
 lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *user_data) {
-  s_setup_instance_id++;
   setup_ctx_t *ctx = malloc(sizeof(setup_ctx_t));
   memset(ctx, 0, sizeof(*ctx));
   ctx->on_done = on_done;
   ctx->user_data = user_data;
-  ctx->instance_id = s_setup_instance_id;
 
   kiosk_config_t existing;
   if (!kiosk_config_load(&existing)) kiosk_config_defaults(&existing);
@@ -457,6 +472,7 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
 
     lv_obj_t *ta = lv_textarea_create(field_col);
     lv_textarea_set_one_line(ta, true);
+    lv_textarea_set_cursor_click_pos(ta, false);
     lv_textarea_set_password_mode(ta, FIELDS[i].password);
     lv_obj_set_width(ta, lv_pct(100));
     lv_obj_set_height(ta, 44);
@@ -497,7 +513,6 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
 
   lv_obj_t *scan_btn = lv_btn_create(ssid_row);
   lv_obj_add_style(scan_btn, &kiosk_style_btn_secondary, 0);
-  lv_obj_add_style(scan_btn, &kiosk_style_btn_secondary, LV_STATE_PRESSED);
   lv_obj_set_width(scan_btn, 80);
   lv_obj_set_style_min_height(scan_btn, 40, 0);
   lv_obj_t *scan_label = lv_label_create(scan_btn);
@@ -541,7 +556,6 @@ lv_obj_t *setup_screen_create(lv_obj_t *parent, setup_done_cb_t on_done, void *u
 
   lv_obj_t *save_btn = lv_btn_create(btn_row);
   lv_obj_add_style(save_btn, &kiosk_style_btn_primary, 0);
-  lv_obj_add_style(save_btn, &kiosk_style_btn_primary, LV_STATE_PRESSED);
   lv_obj_set_flex_grow(save_btn, 1);
   lv_obj_set_style_min_height(save_btn, KIOSK_MIN_TOUCH_PX, 0);
 

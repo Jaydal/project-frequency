@@ -62,8 +62,10 @@ lv_color_t kiosk_theme_color_warning(void);
 lv_color_t kiosk_theme_color_danger(void);
 
 /* Helpers for complex widgets to prevent flickering and apply dynamic colors */
+/* Apply after setting the initial key map and before setting matrix geometry. */
 void kiosk_theme_style_keyboard(lv_obj_t *kb);
 void kiosk_theme_style_modal_ta(lv_obj_t *ta);
+void kiosk_theme_vertical_list(lv_obj_t *list);
 void kiosk_theme_disable_transitions(lv_obj_t *obj);
 
 /* Pin a button/tile's PRESSED state to match its normal state, so pressing
